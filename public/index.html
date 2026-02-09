@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Chat WebSocket Pro</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+html,body{
+    height:100%;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+}
+
+/* ====== MARCO DECORATIVO ALREDEDOR ====== */
+body::before{
+    content:"";
+    position:fixed;
+    inset:15px;
+    border-radius:30px;
+    border:4px solid rgba(255,255,255,0.25);
+    pointer-events:none;
+}
+
+/* ================= LAYOUT PRINCIPAL ================= */
+
+.container{
+    width:calc(100% - 60px);
+    height:calc(100vh - 60px);
+    margin:30px;
+    display:grid;
+    grid-template-columns:320px 1fr;
+    grid-template-rows:60px 1fr 60px;
+    grid-template-areas:
+        "header header"
+        "users chat"
+        "users input";
+    background:white;
+    border-radius:22px;
+    overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+
+/* ================= HEADER ================= */
+
+h1{
+    grid-area:header;
+    display:flex;
+    align-items:center;
+    padding:0 20px;
+    font-size:18px;
+    color:white;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+}
+
+h2{ display:none; }
+
+/* ================= LOGIN MINIMIZADO ================= */
+
+#username{
+    position:absolute;
+    top:18px;
+    right:170px;
+    width:120px;
+    height:32px;
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:10px;
+    border:none;
+}
+
+.container > button:first-of-type{
+    position:absolute;
+    top:18px;
+    right:35px;
+    height:32px;
+    padding:0 15px;
+    font-size:12px;
+    border:none;
+    border-radius:10px;
+    background:#ffffff;
+    font-weight:bold;
+}
+
+/* ================= USUARIOS ================= */
+
+#users{
+    grid-area:users;
+    border-right:1px solid #ddd;
+    overflow-y:auto;
+    background:#fafbff;
+    list-style:none;
+}
+
+#users li{
+    padding:12px 14px;
+    border-bottom:1px solid #eee;
+    cursor:pointer;
+    font-size:14px;
+    transition:.2s;
+}
+
+#users li:hover{
+    background:#e9edff;
+}
+
+/* ================= CHAT ================= */
+
+#chat{
+    grid-area:chat;
+    padding:20px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+
+    /* fondo decorado */
+    background:
+        url('https://www.transparenttextures.com/patterns/cubes.png'),
+        linear-gradient(#f7f9ff,#eef2ff);
+}
+
+/* ================= MENSAJES ================= */
+
+.mio{
+    align-self:flex-end;
+    background:linear-gradient(135deg,#0084ff,#0066cc);
+    color:white;
+    border-radius:8px;
+    padding:8px 12px;
+    max-width:60%;
+    margin:6px 0;
+    font-size:14px;
+}
+
+.otro{
+    align-self:flex-start;
+    background:white;
+    color:#333;
+    border-radius:8px;
+    padding:8px 12px;
+    max-width:60%;
+    margin:6px 0;
+    border:1px solid #ddd;
+    font-size:14px;
+}
+
+.mio::after,
+.otro::after{
+    display:none;
+}
+
+.info{
+    text-align:center;
+    font-size:12px;
+    color:#777;
+    margin:10px 0;
+}
+
+.hora{
+    font-size:10px;
+    margin-left:6px;
+    opacity:.7;
+}
+
+.estado{
+    font-size:10px;
+    margin-left:6px;
+}
+
+/* ================= INPUT ================= */
+
+#mensaje{
+    grid-area:input;
+    border:none;
+    border-top:1px solid #ddd;
+    border-radius:0;
+    margin:0;
+    padding:15px;
+    font-size:15px;
+    width:calc(100% - 80px);
+    outline:none;
+}
+
+#btnEnviar{
+    grid-area:input;
+    position:absolute;
+    right:25px;
+    bottom:20px;
+    border-radius:50%;
+    width:45px;
+    height:45px;
+    padding:0;
+    border:none;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+/* ================= TYPING ================= */
+
+#typing{
+    position:absolute;
+    bottom:80px;
+    left:360px;
+    font-size:12px;
+    color:#667eea;
+}
+
+/* ================= SCROLL ================= */
+
+::-webkit-scrollbar{
+    width:6px;
+}
+
+::-webkit-scrollbar-thumb{
+    background:#764ba2;
+    border-radius:10px;
+}
+
+/* ================= RESPONSIVE MÓVIL ================= */
+
+@media (max-width:768px){
+
+    body::before{ display:none; }
+
+    .container{
+        width:100%;
+        height:100vh;
+        margin:0;
+        border-radius:0;
+        grid-template-columns:1fr;
+        grid-template-rows:60px 1fr 60px;
+        grid-template-areas:
+            "header"
+            "chat"
+            "input";
+    }
+
+    #users{
+        position:absolute;
+        left:-100%;
+        top:60px;
+        width:75%;
+        height:calc(100% - 60px);
+        z-index:1000;
+        transition:left .3s ease;
+        box-shadow:2px 0 10px rgba(0,0,0,.1);
+    }
+
+    #users.visible{
+        left:0;
+    }
+
+    #typing{
+        left:20px;
+    }
+
+    #username,
+    .container > button:first-of-type{
+        display:none;
+    }
+}
+
+@media (max-width:480px){
+
+    .mio,.otro{
+        max-width:80%;
+        font-size:13px;
+    }
+
+    #mensaje{
+        font-size:14px;
+        padding:12px;
+    }
+
+    #btnEnviar{
+        width:40px;
+        height:40px;
+    }
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Chat en tiempo real</h1>
+<h2>*Prohíbido poner un nombre que no sea el propio*</h2>
+
+
+<input type="text" id="username" placeholder="Tu nombre">
+<button onclick="entrar()">Entrar</button>
+
+<hr>
+
+<ul id="users"></ul>
+<ul id="chat"></ul>
+<div id="typing" class="info"></div>
+
+<input type="text" id="mensaje" disabled>
+<button id="btnEnviar" onclick="enviar()" disabled>Enviar</button>
+</div>
+<script>
+
+let socket;
+let currentChat = null;
+let username;
+let conectado = false;
+const conversations = {};
+let typing = false;
+let typingTimer = null;
+let typingUsers = new Set();
+let unreadCounts = {};
+let lastMessages = {};
+let autoScroll = true;
+
+const chat = document.getElementById('chat');
+const input = document.getElementById('mensaje');
+const usersUl = document.getElementById('users');
+const typingDiv = document.getElementById('typing');
+const btnEnviar = document.getElementById('btnEnviar');
+
+function horaActual(date = new Date()) {
+    return new Date(date).toLocaleTimeString();
+}
+
+function obtenerDia(date) {
+    const d = new Date(date);
+    const hoy = new Date();
+
+    if (d.toDateString() === hoy.toDateString())
+        return "Hoy";
+
+    return d.toLocaleDateString();
+}
+
+function scrollChat() {
+    chat.scrollTop = chat.scrollHeight;
+}
+
+chat.addEventListener('scroll', () => {
+    const diff =
+        chat.scrollHeight -
+        chat.scrollTop -
+        chat.clientHeight;
+
+    autoScroll = diff < 50;
+});
+
+function entrar() {
+
+     if (conectado) {
+        alert("Ya estás dentro del chat");
+        return;
+    }
+
+    username = document.getElementById('username').value.trim();
+    if (!username) return alert("Pon un nombre");
+    username = document.getElementById('username').value.trim();
+    if (!username) return alert("Pon un nombre");
+
+    socket = new WebSocket("wss://brutal-cacogenic-asa.ngrok-free.dev/");
+
+    socket.onopen = () => {
+        conectado = true;
+
+        socket.send(JSON.stringify({ type: 'join', username }));
+        input.disabled = false;
+        input.focus();
+    };
+
+    socket.onmessage = (event) => {
+
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'history') {
+
+            conversations[currentChat] = data.messages;
+
+            chat.innerHTML = "";
+            let lastDay = "";
+
+            data.messages.forEach(msg => {
+                const day = obtenerDia(msg.time);
+
+                if (day !== lastDay) {
+                    const li = document.createElement("li");
+                    li.className = "info";
+                    li.textContent = `--- ${day} ---`;
+                    chat.appendChild(li);
+                    lastDay = day;
+                }
+
+                addMessage(msg);
+            });
+
+        }
+
+        if (data.type === 'message') {
+
+            // determinar con quién es la conversación REAL
+            let otherUser = null;
+
+            if (data.from === username) {
+                otherUser = data.to;
+            } else if (data.to === username) {
+                otherUser = data.from;
+            } else {
+                return; // ❌ mensaje que no pertenece a este usuario
+            }
+
+            // crear conversación si no existe
+            if (!conversations[otherUser]) {
+                conversations[otherUser] = [];
+            }
+
+            // evitar duplicados
+            if (!conversations[otherUser].some(m => m.id === data.id)) {
+                conversations[otherUser].push(data);
+            }
+            lastMessages[otherUser] = data.message;
+
+            // pintar solo si es el chat abierto
+            if (currentChat === otherUser) {
+                addMessage(data);
+            }
+
+            if (currentChat !== otherUser) {
+                unreadCounts[otherUser] =
+                    (unreadCounts[otherUser] || 0) + 1;
+            }
+
+        }
+
+        if (data.type === 'users') {
+            usersUl.innerHTML =
+                data.online
+                    .filter(u => u !== username)
+                    .map(u =>
+                        `<li onclick="seleccionarUsuario('${u}')">
+                            <div style="display:flex;justify-content:space-between">
+                                <span>${u}</span>
+                                ${
+                                    unreadCounts[u]
+                                    ? `<span style="
+                                        background:red;
+                                        color:white;
+                                        border-radius:50%;
+                                        padding:2px 6px;
+                                        font-size:12px;
+                                    ">${unreadCounts[u]}</span>`
+                                    : ""
+                                }
+                            </div>
+                            <div style="font-size:12px;color:#888">
+                                ${lastMessages[u] || ""}
+                            </div>
+                        </li>`
+                    ).join('');
+        }
+
+        if (data.type === 'typing') {
+                    
+                
+            if (data.username === username) return;
+            if (currentChat !== data.username) return;
+
+            if (data.username === currentChat) {
+                typingDiv.textContent =
+                    data.username + " está escribiendo...";
+            }
+
+            if (data.status === "stop") {
+                typingDiv.textContent = "";
+            }
+        }
+
+        if (data.type === 'delivered')
+            updateEstado(data.id, "✔✔");
+
+        if (data.type === 'read')
+            updateEstado(data.id, "✔✔ leído");
+
+        if (data.type === 'info')
+            addInfo(data.message);
+    };
+}
+
+function seleccionarUsuario(user) {
+
+    if (currentChat === user) return;
+
+    currentChat = user;
+    unreadCounts[user] = 0;
+
+    chat.innerHTML = "";
+
+    if (conversations[user]) {
+        conversations[user].forEach(addMessage);
+    } else {
+        socket.send(JSON.stringify({
+            type: 'loadConversation',
+            with: user
+        }));
+    }
+}
+
+function enviar() {
+
+    const text = input.value.trim();
+    if (!text || !currentChat) return;
+
+    socket.send(JSON.stringify({
+        type: 'message',
+        to: currentChat,
+        message: text
+    }));
+
+    input.value = "";
+    btnEnviar.disabled = true;
+}
+
+input.addEventListener('input', () => {
+
+    btnEnviar.disabled = input.value.trim() === "";
+
+     if (!socket || !currentChat) return;
+
+    socket.send(JSON.stringify({
+        type: 'typing',
+        to: currentChat,
+        status: 'start'
+    }));
+
+    // reiniciar temporizador
+    clearTimeout(typingTimer);
+
+    typingTimer = setTimeout(() => {
+        typing = false;
+
+        socket.send(JSON.stringify({
+            type: 'typing',
+            to: currentChat,
+            status: 'stop'
+        }));
+
+    }, 1500); // tiempo sin escribir
+});
+
+input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        enviar();
+    }
+});
+
+function addMessage(msg) {
+
+    const li = document.createElement('li');
+    li.id = msg.id;
+    li.className = msg.from === username ? "mio" : "otro";
+
+    li.innerHTML = `
+    <img src="${msg.avatar}" class="avatar"
+         style="width:30px;height:30px;border-radius:50%;margin-right:8px">
+
+    <span>${msg.from}: ${msg.message}</span>
+
+    <span class="hora">${horaActual(msg.time)}</span>
+
+    <span class="estado">
+        ${msg.read ? "✔✔ leído" :
+          msg.delivered ? "✔✔" : "✔"}
+    </span>
+`;
+
+    chat.appendChild(li);
+    if (autoScroll) scrollChat();
+
+
+    
+    if (msg.from !== username) {
+        socket.send(JSON.stringify({
+            type: 'read',
+            id: msg.id
+        }));
+    }
+}
+
+function updateEstado(id, estado) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.querySelector('.estado').textContent = estado;
+}
+
+function addInfo(text) {
+    const li = document.createElement('li');
+    li.className = "info";
+    li.textContent = text;
+    chat.appendChild(li);
+}
+
+
+</script>
+</body>
+</html>
