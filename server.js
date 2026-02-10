@@ -40,7 +40,7 @@ wss.on('connection', (ws) => {
 
                 broadcastUsers();
 
-                // ❌ NO cargar historial aquí
+              
 
                 broadcast({
                     type: 'info',
