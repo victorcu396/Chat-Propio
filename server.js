@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const Message = require('./models/Message');
 
 mongoose.connect(
-    'mongodb+srv://vmenendezmata_db_user:EZvyK3Na5uOUzJJY@cluster0.njpkfgg.mongodb.net/chat'
+    'mongodb+srv://vmenendezmata_db_user:TU-KEY-MONGODB@cluster0.njpkfgg.mongodb.net/chat'
 ).then(() => console.log("MongoDB conectado"))
  .catch(err => console.error(err));
 
