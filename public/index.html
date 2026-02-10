@@ -51,13 +51,42 @@ h1{
     grid-area:header;
     display:flex;
     align-items:center;
+    gap:15px;
     padding:0 20px;
     font-size:18px;
     color:white;
     background:linear-gradient(135deg,#667eea,#764ba2);
+    position:relative;
 }
 
-h2{ display:none; }
+h2{
+    display:inline;
+    font-size:12px;
+    font-weight:500;
+    color:#ffd84d;
+    margin-left:10px;
+    opacity:.95;
+}
+
+#chatHeader{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-left:20px;
+}
+#chatAvatar{
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    background:white;
+    display:block;
+}
+
+#chatName{
+    font-weight:600;
+    font-size:14px;
+}
+
 
 /* ================= LOGIN MINIMIZADO ================= */
 
@@ -292,6 +321,10 @@ h2{ display:none; }
 <div class="container">
 
 <h1>Chat en tiempo real</h1>
+<div id="chatHeader">
+    <img id="chatAvatar">
+    <div id="chatName">Selecciona un usuario</div>
+</div>
 <h2>*Prohíbido poner un nombre que no sea el propio*</h2>
 
 
@@ -510,6 +543,10 @@ function seleccionarUsuario(user) {
             with: user
         }));
     }
+    document.getElementById("chatName").textContent = user;
+
+    document.getElementById("chatAvatar").src =
+        `https://api.dicebear.com/7.x/initials/svg?seed=${user}`;
 }
 
 function enviar() {
@@ -568,10 +605,12 @@ function addMessage(msg) {
     li.className = msg.from === username ? "mio" : "otro";
 
     li.innerHTML = `
-    <img src="${msg.avatar}" class="avatar"
+    <img src="${msg.avatar || 
+        `https://api.dicebear.com/7.x/initials/svg?seed=${msg.from}`}"
+        class="avatar"
          style="width:30px;height:30px;border-radius:50%;margin-right:8px">
 
-    <span>${msg.from}: ${msg.message}</span>
+    <span>${msg.message}</span>
 
     <span class="hora">${horaActual(msg.time)}</span>
 

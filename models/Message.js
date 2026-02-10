@@ -21,7 +21,10 @@ const MessageSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    avatar: String,
+    avatar:{
+        type: String,
+        required: true
+    },
     time: {
         type: Date,
         default: Date.now

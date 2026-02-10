@@ -62,6 +62,7 @@ wss.on('connection', (ws) => {
                     from: ws.username,
                     to: data.to,
                     message: data.message,
+                    avatar: ws.avatar,
                     delivered: false,
                     read: false
                 });
