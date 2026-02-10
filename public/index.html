@@ -399,7 +399,7 @@ function entrar() {
     username = document.getElementById('username').value.trim();
     if (!username) return alert("Pon un nombre");
 
-    socket = new WebSocket("wss://brutal-cacogenic-asa.ngrok-free.dev/");
+    socket = new WebSocket("wss:la url que te da ngrok");
 
     socket.onopen = () => {
         conectado = true;
