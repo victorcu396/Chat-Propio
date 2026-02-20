@@ -6,13 +6,15 @@ const mongoose = require('mongoose');
 const Message = require('./models/Message');
 
 mongoose.connect(
-    'mongodb+srv://vmenendezmata_db_user:EZvyK3Na5uOUzJJY@cluster0.njpkfgg.mongodb.net/chat'
+    'mongodb+srv://vmenendezmata_db_user:xxx@cluster0.njpkfgg.mongodb.net/chat'
 ).then(() => console.log("MongoDB conectado"))
- .catch(err => console.error(err));
+ .catch(err => console.error("MongoDB error:", err));
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+
+// Aumentar límite para base64 de imágenes (hasta ~5 MB por imagen)
+const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
 app.use(express.static('public'));
 
@@ -24,158 +26,195 @@ const users = new Map();
 
 wss.on('connection', (ws) => {
 
-    ws.on('message', async (msg) => {
+    ws.on('message', async (rawMsg) => {
 
-        const data = JSON.parse(msg);
+        let data;
+        try {
+            data = JSON.parse(rawMsg);
+        } catch (e) {
+            console.error("Mensaje JSON inválido:", e.message);
+            return;
+        }
 
         switch (data.type) {
 
-            case 'join':
-
+            /* ──────────────────────────────────────
+               JOIN
+            ────────────────────────────────────── */
+            case 'join': {
                 ws.username = data.username;
-                ws.avatar =
-                    `https://api.dicebear.com/7.x/initials/svg?seed=${ws.username}`;
+                ws.avatar   = `https://api.dicebear.com/7.x/initials/svg?seed=${ws.username}`;
 
                 users.set(ws.username, ws);
-
                 broadcastUsers();
-
-                // ❌ NO cargar historial aquí
 
                 broadcast({
                     type: 'info',
                     message: `${ws.username} se ha unido al chat`
                 });
-
                 break;
+            }
 
-            case 'message':{
-                            
-                const usersSorted = [ws.username, data.to].sort();
-                const conversationId = usersSorted.join("_");
+            /* ──────────────────────────────────────
+               MESSAGE (texto + imagen opcional)
+            ────────────────────────────────────── */
+            case 'message': {
+                if (!data.to) break;
 
-                const id = crypto.randomUUID();
+                const usersSorted    = [ws.username, data.to].sort();
+                const conversationId = usersSorted.join('_');
+                const id             = crypto.randomUUID();
+
+                // Validar imagen base64 si viene
+                let imageData = null;
+                if (data.imageData) {
+                    // Aceptar solo imágenes base64 válidas
+                    if (/^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) {
+                        imageData = data.imageData;
+                    }
+                }
 
                 const message = new Message({
                     id,
                     conversationId,
-                    from: ws.username,
-                    to: data.to,
-                    message: data.message,
-                    avatar: ws.avatar,
+                    from:      ws.username,
+                    to:        data.to,
+                    message:   data.message || '',
+                    imageData,
+                    avatar:    ws.avatar,
                     delivered: false,
-                    read: false
+                    read:      false
                 });
 
                 await message.save();
                 sendMessage(message);
-
                 break;
             }
-            case 'typing':
+
+            /* ──────────────────────────────────────
+               TYPING
+            ────────────────────────────────────── */
+            case 'typing': {
                 if (!data.to) break;
-
-                users.forEach((client, username) => {
-
-                    if (username === data.to) {
-
-                        client.send(JSON.stringify({
-                            type: 'typing',
-                            username: ws.username,
-                            status: data.status || "start"
-                        }));
-
-                    }
-
-                });
-
+                const target = users.get(data.to);
+                if (target) {
+                    target.send(JSON.stringify({
+                        type:     'typing',
+                        username: ws.username,
+                        status:   data.status || 'start'
+                    }));
+                }
                 break;
-            case 'loadConversation':{
+            }
 
-                const usersSorted = [ws.username, data.with].sort();
-                const conversationId = usersSorted.join("_");
-                const history = await Message.find({
-                    conversationId
-                }).sort({ time: 1 });
+            /* ──────────────────────────────────────
+               CARGAR CONVERSACIÓN
+            ────────────────────────────────────── */
+            case 'loadConversation': {
+                if (!data.with) break;
+
+                const usersSorted    = [ws.username, data.with].sort();
+                const conversationId = usersSorted.join('_');
+
+                const history = await Message.find({ conversationId })
+                    .sort({ time: 1 });
 
                 ws.send(JSON.stringify({
-                    type: 'history',
+                    type:     'history',
                     messages: history
                 }));
-
                 break;
             }
 
-            case 'history':
-
-
-            case 'read':
+            /* ──────────────────────────────────────
+               READ
+            ────────────────────────────────────── */
+            case 'read': {
+                if (!data.id) break;
 
                 await Message.updateOne(
                     { id: data.id },
                     { read: true }
                 );
 
-                broadcast({
-                    type: 'read',
-                    id: data.id
-                });
-
+                // Solo notificar al remitente original
+                const msg = await Message.findOne({ id: data.id });
+                if (msg) {
+                    const senderWs = users.get(msg.from);
+                    if (senderWs) {
+                        senderWs.send(JSON.stringify({
+                            type: 'read',
+                            id:   data.id
+                        }));
+                    }
+                }
                 break;
+            }
         }
     });
 
     ws.on('close', () => {
-
-        users.delete(ws.username);
-        broadcastUsers();
-
-        broadcast({
-            type: 'info',
-            message: `${ws.username} salió del chat`
-        });
-    });
-});
-
-function sendMessage(message) {
-
-    users.forEach((client, username) => {
-
-        if (
-            username === message.from ||
-            username === message.to
-        ) {
-
-            client.send(JSON.stringify({
-                type: 'message',
-                ...message._doc
-            }));
+        if (ws.username) {
+            users.delete(ws.username);
+            broadcastUsers();
+            broadcast({
+                type:    'info',
+                message: `${ws.username} salió del chat`
+            });
         }
     });
 
-    // marcar como entregado
+    ws.on('error', (err) => {
+        console.error(`Error WebSocket (${ws.username}):`, err.message);
+    });
+});
+
+/* ──────────────────────────────────────
+   HELPERS
+────────────────────────────────────── */
+function sendMessage(message) {
+    const payload = JSON.stringify({
+        type: 'message',
+        ...message._doc
+    });
+
+    users.forEach((client, username) => {
+        if (username === message.from || username === message.to) {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(payload);
+            }
+        }
+    });
+
+    // Marcar como entregado si el destinatario está online
     if (users.has(message.to)) {
         Message.updateOne(
             { id: message.id },
             { delivered: true }
         ).exec();
 
-        broadcast({
-            type: 'delivered',
-            id: message.id
-        });
+        const senderWs = users.get(message.from);
+        if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+            senderWs.send(JSON.stringify({
+                type: 'delivered',
+                id:   message.id
+            }));
+        }
     }
 }
 
 function broadcastUsers() {
     broadcast({
-        type: 'users',
+        type:   'users',
         online: [...users.keys()]
     });
 }
 
 function broadcast(data) {
+    const payload = JSON.stringify(data);
     users.forEach(ws => {
-        ws.send(JSON.stringify(data));
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(payload);
+        }
     });
 }
