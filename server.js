@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const Message = require('./models/Message');
 
 mongoose.connect(
-    'mongodb+srv://vmenendezmata_db_user:EZvyK3Na5uOUzJJY@cluster0.njpkfgg.mongodb.net/chat'
+    'mongodb+srv://vmenendezmata_db_user:Tu-KEY-DB@cluster0.njpkfgg.mongodb.net/chat'
 ).then(() => console.log("MongoDB conectado"))
  .catch(err => console.error("MongoDB error:", err));
 
@@ -47,8 +47,6 @@ wss.on('connection', (ws) => {
 
                 users.set(ws.username, ws);
                 broadcastUsers();
-
-                // ❌ NO cargar historial aquí
 
                 broadcast({
                     type: 'info',
