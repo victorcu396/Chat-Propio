@@ -957,7 +957,7 @@ function entrar() {
 
     pedirPermisoNotificaciones();
 
-    socket = new WebSocket("wss://brutal-cacogenic-asa.ngrok-free.dev/");
+    socket = new WebSocket("wss:la url que te da ngrok");
 
     socket.onopen = () => {
         conectado = true;
@@ -995,21 +995,33 @@ function handleMessage(data) {
         return;
     }
 
-    if (data.type === 'message') {
-        let otherUser = data.from === username ? data.to : data.to === username ? data.from : null;
-        if (!otherUser) return;
+        if (data.type === 'message') {
 
-        if (!conversations[otherUser]) conversations[otherUser] = [];
-        if (!conversations[otherUser].some(m => m.id === data.id)) conversations[otherUser].push(data);
-        lastMessages[otherUser] = data.imageData ? '📷 Imagen' : data.message;
+            // determinar con quién es la conversación REAL
+            let otherUser = null;
 
-        if (currentChat === otherUser) {
-            addMessage(data);
-        } else {
-            unreadCounts[otherUser] = (unreadCounts[otherUser] || 0) + 1;
-            if (data.from !== username) {
-                playNotifSound();
-                mostrarNotificacion(data.from, lastMessages[otherUser]);
+            if (data.from === username) {
+                otherUser = data.to;
+            } else if (data.to === username) {
+                otherUser = data.from;
+            } else {
+                return; // ❌ mensaje que no pertenece a este usuario
+            }
+
+            // crear conversación si no existe
+            if (!conversations[otherUser]) {
+                conversations[otherUser] = [];
+            }
+
+            // evitar duplicados
+            if (!conversations[otherUser].some(m => m.id === data.id)) {
+                conversations[otherUser].push(data);
+            }
+            lastMessages[otherUser] = data.message;
+
+            // pintar solo si es el chat abierto
+            if (currentChat === otherUser) {
+                addMessage(data);
             }
         }
         renderUsers(lastKnownUsers);
