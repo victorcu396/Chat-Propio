@@ -1,4 +1,4 @@
-# kiVooSpace
+# kiVooSpace![alt text](image.png)
 
 Chat en tiempo real entre usuarios, con soporte de imágenes, emojis y notificaciones. Construido sobre WebSockets, Node.js y MongoDB.
 
