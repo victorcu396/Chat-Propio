@@ -4,9 +4,10 @@ const http = require('http');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Message = require('./models/Message');
+const User = require('./models/User');
 
 mongoose.connect(
-    'mongodb+srv://vmenendezmata_db_user:Tu-pass-mongoDB@cluster0.njpkfgg.mongodb.net/chat'
+    'mongodb+srv://vmenendezmata_db_user:Tu-password@cluster0.njpkfgg.mongodb.net/chat'
 ).then(() => console.log("MongoDB conectado"))
  .catch(err => console.error("MongoDB error:", err));
 
@@ -22,7 +23,11 @@ server.listen(8080, () =>
     console.log("Servidor en http://localhost:8080")
 );
 
+// Map: username → WebSocket
 const users = new Map();
+
+// Map: username → phone (para info de usuario)
+const userPhones = new Map();
 
 wss.on('connection', (ws) => {
 
@@ -39,13 +44,39 @@ wss.on('connection', (ws) => {
         switch (data.type) {
 
             /* ──────────────────────────────────────
-               JOIN
+               JOIN (con teléfono)
             ────────────────────────────────────── */
             case 'join': {
                 ws.username = data.username;
-                ws.avatar   = `https://api.dicebear.com/7.x/initials/svg?seed=${ws.username}`;
+                ws.phone    = data.phone || null;
+
+                // Usar avatar personalizado si lo manda el cliente, si no dicebear
+                const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(ws.username)}`;
+                if (data.avatar && /^data:image\//.test(data.avatar)) {
+                    ws.avatar = data.avatar;
+                } else {
+                    ws.avatar = defaultAvatar;
+                }
 
                 users.set(ws.username, ws);
+                if (ws.phone) userPhones.set(ws.username, ws.phone);
+
+                // Upsert usuario en MongoDB
+                try {
+                    await User.findOneAndUpdate(
+                        { phone: ws.phone },
+                        {
+                            phone: ws.phone,
+                            username: ws.username,
+                            avatar: ws.avatar,
+                            lastLogin: new Date()
+                        },
+                        { upsert: true, new: true }
+                    );
+                } catch(e) {
+                    // Si no hay phone (sesión legacy), ignorar
+                }
+
                 broadcastUsers();
 
                 broadcast({
@@ -68,9 +99,17 @@ wss.on('connection', (ws) => {
                 // Validar imagen base64 si viene
                 let imageData = null;
                 if (data.imageData) {
-                    // Aceptar solo imágenes base64 válidas
                     if (/^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) {
                         imageData = data.imageData;
+                    }
+                }
+
+                // Validar audio base64 si viene
+                let audioData = null;
+                if (data.audioData) {
+                    // Acepta variantes reales: audio/webm;codecs=opus, audio/ogg;codecs=opus, etc.
+                    if (/^data:audio\/[a-zA-Z0-9]+/.test(data.audioData)) {
+                        audioData = data.audioData;
                     }
                 }
 
@@ -81,6 +120,7 @@ wss.on('connection', (ws) => {
                     to:        data.to,
                     message:   data.message || '',
                     imageData,
+                    audioData,
                     avatar:    ws.avatar,
                     delivered: false,
                     read:      false
@@ -137,7 +177,6 @@ wss.on('connection', (ws) => {
                     { read: true }
                 );
 
-                // Solo notificar al remitente original
                 const msg = await Message.findOne({ id: data.id });
                 if (msg) {
                     const senderWs = users.get(msg.from);
@@ -150,12 +189,112 @@ wss.on('connection', (ws) => {
                 }
                 break;
             }
+
+            /* ──────────────────────────────────────
+               WEBRTC: OFFER
+            ────────────────────────────────────── */
+            case 'call_offer': {
+                if (!data.to) break;
+                const target = users.get(data.to);
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify({
+                        type: 'call_offer',
+                        from: ws.username,
+                        sdp:  data.sdp
+                    }));
+                } else {
+                    // Destinatario offline
+                    ws.send(JSON.stringify({
+                        type: 'info',
+                        message: `${data.to} no está disponible para llamadas ahora mismo.`
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               WEBRTC: ANSWER
+            ────────────────────────────────────── */
+            case 'call_answer': {
+                if (!data.to) break;
+                const target = users.get(data.to);
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify({
+                        type: 'call_answer',
+                        from: ws.username,
+                        sdp:  data.sdp
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               WEBRTC: ICE CANDIDATE
+            ────────────────────────────────────── */
+            case 'call_ice': {
+                if (!data.to) break;
+                const target = users.get(data.to);
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify({
+                        type:      'call_ice',
+                        from:      ws.username,
+                        candidate: data.candidate
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               WEBRTC: REJECTED
+            ────────────────────────────────────── */
+            case 'call_rejected': {
+                if (!data.to) break;
+                const target = users.get(data.to);
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify({
+                        type: 'call_rejected',
+                        from: ws.username
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               ACTUALIZAR AVATAR
+            ────────────────────────────────────── */
+            case 'updateAvatar': {
+                if (!data.avatar) break;
+                // Validar que sea un data URL de imagen
+                if (!/^data:image\//.test(data.avatar)) break;
+                ws.avatar = data.avatar;
+                // Actualizar en MongoDB
+                if (ws.phone) {
+                    User.updateOne({ phone: ws.phone }, { avatar: ws.avatar }).exec();
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               WEBRTC: CALL ENDED
+            ────────────────────────────────────── */
+            case 'call_ended': {
+                if (!data.to) break;
+                const target = users.get(data.to);
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify({
+                        type: 'call_ended',
+                        from: ws.username
+                    }));
+                }
+                break;
+            }
         }
     });
 
     ws.on('close', () => {
         if (ws.username) {
             users.delete(ws.username);
+            userPhones.delete(ws.username);
             broadcastUsers();
             broadcast({
                 type:    'info',

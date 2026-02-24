@@ -1,49 +1,65 @@
 const mongoose = require('mongoose');
 
 const MessageSchema = new mongoose.Schema({
+
     id: {
-        type:     String,
+        type: String,
         required: true,
-        index:    true
+        index: true
     },
+
     conversationId: {
-        type:     String,
+        type: String,
         required: true,
-        index:    true
+        index: true
     },
+
     from: {
-        type:     String,
+        type: String,
         required: true
     },
+
     to: {
-        type:    String,
+        type: String,
         default: null
     },
+
     message: {
-        type:    String,
+        type: String,
         default: ''
     },
-    // Imagen en base64 (opcional)
+
     imageData: {
-        type:    String,
+        type: String,
         default: null
     },
+
+    // Audio grabado desde el chat (base64 webm/ogg/mp4)
+    audioData: {
+        type: String,
+        default: null
+    },
+
     avatar: {
-        type:     String,
+        type: String,
         required: true
     },
+
     time: {
-        type:    Date,
+        type: Date,
         default: Date.now
     },
+
     delivered: {
-        type:    Boolean,
+        type: Boolean,
         default: false
     },
+
     read: {
-        type:    Boolean,
+        type: Boolean,
         default: false
     }
+
 });
 
 module.exports = mongoose.model('Message', MessageSchema);
