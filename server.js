@@ -1,3 +1,4 @@
+require('dotenv').config(); 
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
@@ -6,10 +7,12 @@ const mongoose = require('mongoose');
 const Message = require('./models/Message');
 const User = require('./models/User');
 
-mongoose.connect(
-    'mongodb+srv://vmenendezmata_db_user:Tu-password@cluster0.njpkfgg.mongodb.net/chat'
-).then(() => console.log("MongoDB conectado"))
- .catch(err => console.error("MongoDB error:", err));
+const mongoURI = process.env.MONGODB_URI;
+const port = process.env.PORT || 8080;
+
+mongoose.connect(mongoURI)
+    .then(() => console.log("MongoDB conectado"))
+    .catch(err => console.error("MongoDB error:", err));
 
 const app = express();
 const server = http.createServer(app);
@@ -19,8 +22,8 @@ const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
 app.use(express.static('public'));
 
-server.listen(8080, () =>
-    console.log("Servidor en http://localhost:8080")
+server.listen(port, () =>
+    console.log("Servidor en http://localhost:${port}")
 );
 
 // Map: username → WebSocket
