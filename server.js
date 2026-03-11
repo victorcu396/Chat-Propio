@@ -27,13 +27,27 @@ app.use(express.json());
 app.use(express.static('public'));
 
 /* REST: cargar contactos al iniciar sesion
-   GET /api/contacts?phone=+34612345678 */
+   GET /api/contacts?phone=+34612345678
+   Enriquece cada contacto con el avatar y username del User correspondiente */
 app.get('/api/contacts', async (req, res) => {
     const { phone } = req.query;
     if (!phone) return res.status(400).json({ error: 'phone requerido' });
     try {
         const contacts = await Contact.find({ ownerPhone: phone });
-        res.json(contacts);
+
+        // Para cada contacto buscamos su User en BD para obtener avatar y username
+        const enriched = await Promise.all(contacts.map(async (c) => {
+            const user = await User.findOne({ phone: c.contactPhone }).lean();
+            return {
+                ownerPhone:   c.ownerPhone,
+                contactPhone: c.contactPhone,
+                customName:   c.customName,
+                avatar:       user ? user.avatar : null,
+                username:     user ? user.username : null
+            };
+        }));
+
+        res.json(enriched);
     } catch(e) {
         res.status(500).json({ error: e.message });
     }
@@ -326,11 +340,14 @@ wss.on('connection', (ws) => {
                         { upsert: true, new: true }
                     );
 
-                    // Confirmar al cliente que lo agregó
+                    // Confirmar al cliente que lo agregó (incluye avatar si el usuario existe)
+                    const addedUser = await User.findOne({ phone: data.contactPhone }).lean();
                     ws.send(JSON.stringify({
                         type: 'contactAdded',
                         contactPhone: data.contactPhone,
-                        customName: data.customName
+                        customName: data.customName,
+                        avatar:   addedUser ? addedUser.avatar : null,
+                        username: addedUser ? addedUser.username : null
                     }));
 
                     // 2. Recíproco: si el contacto existe en BD, también guardar el contacto inverso
@@ -343,13 +360,15 @@ wss.on('connection', (ws) => {
                             { upsert: true, new: true }
                         );
 
-                        // Notificar al contacto si está online
+                        // Notificar al contacto si está online (incluye avatar del que lo agregó)
                         const contactWs = [...users.values()].find(u => u.phone === data.contactPhone);
                         if (contactWs && contactWs.readyState === WebSocket.OPEN) {
                             contactWs.send(JSON.stringify({
                                 type: 'contactAdded',
                                 contactPhone: ws.phone,
-                                customName: ws.username
+                                customName: ws.username,
+                                avatar:   ws.avatar || null,
+                                username: ws.username
                             }));
                         }
                     }
@@ -375,6 +394,40 @@ wss.on('connection', (ws) => {
                     }));
                 } catch(e) {
                     console.error('removeContact error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               RENOMBRAR CONTACTO
+               Solo actualiza el customName del dueño.
+               El contacto no se entera: cada uno ve
+               el nombre que él mismo le ha puesto.
+            ────────────────────────────────────── */
+            case 'renameContact': {
+                if (!data.contactPhone || !data.newName) break;
+                if (!ws.phone) break;
+
+                try {
+                    const updated = await Contact.findOneAndUpdate(
+                        { ownerPhone: ws.phone, contactPhone: data.contactPhone },
+                        { customName: data.newName.trim() },
+                        { new: true }
+                    );
+
+                    if (!updated) {
+                        ws.send(JSON.stringify({ type: 'contactError', message: 'Contacto no encontrado.' }));
+                        break;
+                    }
+
+                    ws.send(JSON.stringify({
+                        type: 'contactRenamed',
+                        contactPhone: data.contactPhone,
+                        newName: updated.customName
+                    }));
+                } catch(e) {
+                    console.error('renameContact error:', e.message);
+                    ws.send(JSON.stringify({ type: 'contactError', message: e.message }));
                 }
                 break;
             }

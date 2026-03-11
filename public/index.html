@@ -1809,6 +1809,63 @@ html.is-mobile .bubble-wrap { max-width: 82%; }
     color: var(--text-muted);
     font-style: italic;
 }
+
+/* Edit contact button */
+.btn-contact-edit {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 2px 5px;
+    border-radius: 5px;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+}
+.btn-contact-edit:hover { background: rgba(79,70,229,0.1); color: var(--purple-deep); }
+
+/* Modal renombrar contacto */
+#renameContactModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+#renameContactModal.visible { display: flex; }
+
+.rename-contact-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: loginIn .25s ease;
+}
+
+.rename-contact-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rename-contact-card .rename-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: -8px;
+    line-height: 1.5;
+}
 </style>
 </head>
 <body>
@@ -2037,6 +2094,29 @@ html.is-mobile .bubble-wrap { max-width: 82%; }
   </div>
 </div>
 
+
+<!-- ============================================================
+     MODAL RENOMBRAR CONTACTO
+============================================================ -->
+<div id="renameContactModal">
+  <div class="rename-contact-card">
+    <h3>✏️ Editar contacto</h3>
+    <p class="rename-hint">Solo tú verás este nombre. Los demás seguirán viéndole con su nombre original.</p>
+
+    <div class="add-contact-field">
+      <label>Nuevo nombre</label>
+      <input class="add-contact-input" type="text" id="renameContactInput"
+        placeholder="Ej: María García" maxlength="30">
+    </div>
+
+    <div class="add-contact-error" id="renameContactError"></div>
+
+    <div class="add-contact-actions">
+      <button class="btn-contact-cancel" onclick="cerrarModalRenombrar()">Cancelar</button>
+      <button class="btn-contact-save" id="btnGuardarRenombre" onclick="guardarRenombre()">Guardar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============================================================
      MODAL AGREGAR CONTACTO
@@ -2534,6 +2614,21 @@ function handleMessage(data) {
             audioDataStart: data.audioData ? data.audioData.slice(0,40) : null
         });
 
+        // Actualizar caché de avatar del remitente (útil cuando está offline y manda un msg)
+        if (data.avatar && data.from !== username) {
+            userAvatars[data.from] = data.avatar;
+            // Si este usuario es un contacto nuestro, actualizar también su avatar guardado
+            if (window._phoneToUsername) {
+                const senderPhone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === data.from)?.[0];
+                if (senderPhone && myContacts.has(senderPhone)) {
+                    const c = myContacts.get(senderPhone);
+                    c.avatar = data.avatar;
+                    myContacts.set(senderPhone, c);
+                    userAvatars['__phone__' + senderPhone] = data.avatar;
+                }
+            }
+        }
+
         if (!conversations[otherUser]) conversations[otherUser] = [];
         if (!conversations[otherUser].some(m => m.id === data.id)) conversations[otherUser].push(data);
         lastMessages[otherUser] = data.imageData ? '📷 Imagen' : data.audioData ? '🎙️ Audio' : data.message;
@@ -2597,11 +2692,15 @@ function handleMessage(data) {
     if (data.type === 'call_ended')    { llamadaTerminada(); return; }
 
     if (data.type === 'contactAdded') {
-        onContactAdded(data.contactPhone, data.customName);
+        onContactAdded(data.contactPhone, data.customName, data.avatar, data.username);
         return;
     }
     if (data.type === 'contactRemoved') {
         onContactRemoved(data.contactPhone);
+        return;
+    }
+    if (data.type === 'contactRenamed') {
+        onContactRenamed(data.contactPhone, data.newName);
         return;
     }
     if (data.type === 'contactError') {
@@ -3403,7 +3502,21 @@ async function cargarContactos() {
         const res = await fetch(`/api/contacts?phone=${encodeURIComponent(loginPhone)}`);
         const list = await res.json();
         myContacts = new Map();
-        list.forEach(c => myContacts.set(c.contactPhone, { contactPhone: c.contactPhone, customName: c.customName }));
+        list.forEach(c => {
+            myContacts.set(c.contactPhone, {
+                contactPhone: c.contactPhone,
+                customName:   c.customName,
+                avatar:       c.avatar   || null,
+                username:     c.username || null
+            });
+            // Pre-popular el caché de avatares para que estén disponibles aunque
+            // el usuario esté offline. La clave es tanto el username (si lo tenemos)
+            // como el phone (para lookups rápidos).
+            if (c.avatar) {
+                if (c.username) userAvatars[c.username] = c.avatar;
+                userAvatars['__phone__' + c.contactPhone] = c.avatar;
+            }
+        });
         renderContactsList();
     } catch(e) {
         console.error('Error cargando contactos:', e);
@@ -3423,9 +3536,29 @@ function renderContactsList() {
     const items = [...myContacts.values()].map(c => {
         const onlineUsername = getOnlineUsernameByPhone(c.contactPhone);
         const displayName = c.customName;
+
+        // Prioridad del avatar:
+        // 1. Si está online: userAvatars[username] (el más actualizado, refleja cambios recientes)
+        // 2. Avatar cacheado al cargar contactos / al añadir (offline pero con foto en BD)
+        // 3. Avatar por phone cacheado
+        // 4. Fallback dicebear con el nombre real del usuario (username), no el customName
+        const cachedAvatar = c.avatar
+            || userAvatars['__phone__' + c.contactPhone]
+            || null;
+        const seedName = c.username || displayName; // usar username real para el seed dicebear
         const avatarUrl = onlineUsername
-            ? (userAvatars[onlineUsername] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`)
-            : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+            ? (userAvatars[onlineUsername] || cachedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`)
+            : (cachedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`);
+
+        // Si el usuario acaba de conectarse y tiene avatar actualizado, sincronizar caché
+        if (onlineUsername && userAvatars[onlineUsername]) {
+            userAvatars['__phone__' + c.contactPhone] = userAvatars[onlineUsername];
+            if (c.avatar !== userAvatars[onlineUsername]) {
+                c.avatar = userAvatars[onlineUsername];
+                myContacts.set(c.contactPhone, c);
+            }
+        }
+
         const dotClass = onlineUsername ? 'status-dot' : 'status-dot contact-offline';
         const isActive = onlineUsername && currentChat === onlineUsername ? 'active' : '';
         const escapedPhone = c.contactPhone.replace(/'/g, "\'");
@@ -3446,6 +3579,7 @@ function renderContactsList() {
             </div>
             ${badge}
             <div class="contact-actions">
+                <button class="btn-contact-edit" onclick="event.stopPropagation();abrirModalRenombrar('${escapedPhone}','${escapedName}')" title="Editar nombre">✏️</button>
                 <button class="btn-contact-delete" onclick="event.stopPropagation();confirmarEliminarContacto('${escapedPhone}','${escapedName}')" title="Eliminar contacto">🗑</button>
             </div>
         </li>`;
@@ -3511,8 +3645,13 @@ async function guardarContacto() {
     // Esperar confirmación (la función onContactAdded la cierra el modal)
 }
 
-function onContactAdded(contactPhone, customName) {
-    myContacts.set(contactPhone, { contactPhone, customName });
+function onContactAdded(contactPhone, customName, avatar, username) {
+    myContacts.set(contactPhone, { contactPhone, customName, avatar: avatar || null, username: username || null });
+    // Cachear avatar para uso offline
+    if (avatar) {
+        if (username) userAvatars[username] = avatar;
+        userAvatars['__phone__' + contactPhone] = avatar;
+    }
     renderContactsList();
     cerrarModalContacto();
 }
@@ -3530,6 +3669,73 @@ function confirmarEliminarContacto(phone, name) {
         }));
     }
 }
+
+// ============================================================
+// RENOMBRAR CONTACTO
+// ============================================================
+
+let _renamePhone = null; // teléfono del contacto que se está renombrando
+
+function abrirModalRenombrar(phone, currentName) {
+    _renamePhone = phone;
+    document.getElementById('renameContactInput').value = currentName;
+    document.getElementById('renameContactError').textContent = '';
+    document.getElementById('btnGuardarRenombre').disabled = false;
+    document.getElementById('renameContactModal').classList.add('visible');
+    setTimeout(() => document.getElementById('renameContactInput').focus(), 80);
+}
+
+function cerrarModalRenombrar() {
+    document.getElementById('renameContactModal').classList.remove('visible');
+    _renamePhone = null;
+}
+
+function guardarRenombre() {
+    const newName = document.getElementById('renameContactInput').value.trim();
+    const errEl = document.getElementById('renameContactError');
+
+    if (!newName) {
+        errEl.textContent = 'El nombre no puede estar vacío.';
+        return;
+    }
+    if (!_renamePhone) return;
+
+    errEl.textContent = '';
+    document.getElementById('btnGuardarRenombre').disabled = true;
+
+    socket.send(JSON.stringify({
+        type: 'renameContact',
+        contactPhone: _renamePhone,
+        newName
+    }));
+}
+
+function onContactRenamed(contactPhone, newName) {
+    const contact = myContacts.get(contactPhone);
+    if (contact) {
+        contact.customName = newName;
+        myContacts.set(contactPhone, contact);
+    }
+    // Si el chat actual es este contacto, actualizar el header
+    const onlineUsername = getOnlineUsernameByPhone(contactPhone);
+    if (onlineUsername && currentChat === onlineUsername) {
+        document.getElementById('chatName').textContent = newName;
+    }
+    renderContactsList();
+    cerrarModalRenombrar();
+}
+
+// Cerrar modal al hacer click fuera
+document.getElementById('renameContactModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('renameContactModal')) cerrarModalRenombrar();
+});
+
+// Confirmar con Enter
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('renameContactInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') guardarRenombre();
+    });
+});
 
 // Cerrar modal al hacer click fuera
 document.getElementById('addContactModal').addEventListener('click', (e) => {
