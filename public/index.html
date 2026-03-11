@@ -2083,6 +2083,8 @@ let username;
 let conectado = false;
 let myAvatarDataUrl = ''; // base64 o URL del avatar propio
 let pendingAvatarDataUrl = ''; // avatar seleccionado pero no guardado aún
+
+let userAvatars = {}; // username → avatarUrl de otros usuarios
 const conversations = {};
 let typingTimer = null;
 let unreadCounts = {};
@@ -2286,8 +2288,16 @@ function handleMessage(data) {
     }
 
     if (data.type === 'users') {
-        lastKnownUsers = data.online;
-        renderUsers(data.online);
+        // data.online ahora es array de {username, avatar}
+        const list = data.online.map(u => {
+            if (typeof u === 'object') {
+                userAvatars[u.username] = u.avatar;
+                return u.username;
+            }
+            return u; // compatibilidad con formato antiguo
+        });
+        lastKnownUsers = list;
+        renderUsers(list);
         return;
     }
 
@@ -2326,7 +2336,7 @@ function renderUsers(onlineList) {
         .map(u => {
             const preview = lastMessages[u] || '';
             const badge = unreadCounts[u] ? `<span class="unread-badge">${unreadCounts[u]}</span>` : '';
-            const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${u}`;
+            const avatarUrl = userAvatars[u] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u)}`;
             const isActive = currentChat === u ? 'active' : '';
             return `<li class="${isActive}" onclick="seleccionarUsuario('${u}')">
                 <div class="user-avatar-wrap">

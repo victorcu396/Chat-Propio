@@ -1,11 +1,16 @@
 require('dotenv').config(); 
 const express = require('express');
+
 const WebSocket = require('ws');
 const http = require('http');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
+
 const Message = require('./models/Message');
 const User = require('./models/User');
+
+const app = express();
+const server = http.createServer(app);
 
 const mongoURI = process.env.MONGODB_URI;
 const port = process.env.PORT || 8080;
@@ -14,16 +19,14 @@ mongoose.connect(mongoURI)
     .then(() => console.log("MongoDB conectado"))
     .catch(err => console.error("MongoDB error:", err));
 
-const app = express();
-const server = http.createServer(app);
-
 // Aumentar límite para base64 de imágenes (hasta ~5 MB por imagen)
 const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
 app.use(express.static('public'));
 
+// IMPORTANTE PORT=8080
 server.listen(port, () =>
-    console.log("Servidor en http://localhost:${port}")
+    console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
 );
 
 // Map: username → WebSocket
@@ -346,9 +349,13 @@ function sendMessage(message) {
 }
 
 function broadcastUsers() {
+    const onlineWithAvatars = [...users.entries()].map(([name, ws]) => ({
+        username: name,
+        avatar:   ws.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
+    }));
     broadcast({
         type:   'users',
-        online: [...users.keys()]
+        online: onlineWithAvatars
     });
 }
 

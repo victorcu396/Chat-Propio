@@ -2,7 +2,8 @@
   "dependencies": {
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "mongoose": "^9.1.6",
+    "mongodb": "^7.1.0",
+    "mongoose": "^9.2.4",
     "ws": "^8.19.0"
   },
   "name": "prueba_websocket",
@@ -15,5 +16,14 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "![Logo de kiVooSpace](public/Logo_kiVooSpace.png)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/victorcu396/Chat-Propio.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/victorcu396/Chat-Propio/issues"
+  },
+  "homepage": "https://github.com/victorcu396/Chat-Propio#readme"
 }
