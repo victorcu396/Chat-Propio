@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 
 const Message = require('./models/Message');
 const User = require('./models/User');
+const Contact = require('./models/Contact');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,7 +23,21 @@ mongoose.connect(mongoURI)
 // Aumentar límite para base64 de imágenes (hasta ~5 MB por imagen)
 const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
+app.use(express.json());
 app.use(express.static('public'));
+
+/* REST: cargar contactos al iniciar sesion
+   GET /api/contacts?phone=+34612345678 */
+app.get('/api/contacts', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    try {
+        const contacts = await Contact.find({ ownerPhone: phone });
+        res.json(contacts);
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // IMPORTANTE PORT=8080
 server.listen(port, () =>
@@ -294,6 +309,75 @@ wss.on('connection', (ws) => {
                 }
                 break;
             }
+
+            /* ──────────────────────────────────────
+               AGREGAR CONTACTO
+            ────────────────────────────────────── */
+            case 'addContact': {
+                // data: { contactPhone, customName }
+                if (!data.contactPhone || !data.customName) break;
+                if (!ws.phone) break;
+
+                try {
+                    // 1. Guardar el contacto para el usuario que lo agrega
+                    await Contact.findOneAndUpdate(
+                        { ownerPhone: ws.phone, contactPhone: data.contactPhone },
+                        { ownerPhone: ws.phone, contactPhone: data.contactPhone, customName: data.customName },
+                        { upsert: true, new: true }
+                    );
+
+                    // Confirmar al cliente que lo agregó
+                    ws.send(JSON.stringify({
+                        type: 'contactAdded',
+                        contactPhone: data.contactPhone,
+                        customName: data.customName
+                    }));
+
+                    // 2. Recíproco: si el contacto existe en BD, también guardar el contacto inverso
+                    const contactUser = await User.findOne({ phone: data.contactPhone });
+                    if (contactUser) {
+                        // El nombre que verá el contacto inverso es el username real del que lo agrega
+                        await Contact.findOneAndUpdate(
+                            { ownerPhone: data.contactPhone, contactPhone: ws.phone },
+                            { ownerPhone: data.contactPhone, contactPhone: ws.phone, customName: ws.username },
+                            { upsert: true, new: true }
+                        );
+
+                        // Notificar al contacto si está online
+                        const contactWs = [...users.values()].find(u => u.phone === data.contactPhone);
+                        if (contactWs && contactWs.readyState === WebSocket.OPEN) {
+                            contactWs.send(JSON.stringify({
+                                type: 'contactAdded',
+                                contactPhone: ws.phone,
+                                customName: ws.username
+                            }));
+                        }
+                    }
+                } catch(e) {
+                    console.error('addContact error:', e.message);
+                    ws.send(JSON.stringify({ type: 'contactError', message: e.message }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               ELIMINAR CONTACTO
+            ────────────────────────────────────── */
+            case 'removeContact': {
+                if (!data.contactPhone) break;
+                if (!ws.phone) break;
+
+                try {
+                    await Contact.deleteOne({ ownerPhone: ws.phone, contactPhone: data.contactPhone });
+                    ws.send(JSON.stringify({
+                        type: 'contactRemoved',
+                        contactPhone: data.contactPhone
+                    }));
+                } catch(e) {
+                    console.error('removeContact error:', e.message);
+                }
+                break;
+            }
         }
     });
 
@@ -351,7 +435,8 @@ function sendMessage(message) {
 function broadcastUsers() {
     const onlineWithAvatars = [...users.entries()].map(([name, ws]) => ({
         username: name,
-        avatar:   ws.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
+        avatar:   ws.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+        phone:    ws.phone || null
     }));
     broadcast({
         type:   'users',

@@ -1590,6 +1590,225 @@ html.is-mobile .bubble-wrap { max-width: 82%; }
 }
 
 .bubble { animation: fadeUp .18s ease; }
+
+/* ============================================================
+   CONTACTS
+============================================================ */
+.btn-add-contact {
+    background: var(--bubble-me);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: opacity var(--transition), transform var(--transition);
+}
+.btn-add-contact:hover { opacity: 0.85; transform: scale(1.1); }
+
+/* Contact list items */
+#contactsList {
+    list-style: none;
+    padding: 4px 10px 2px;
+    overflow-y: auto;
+    max-height: 40%;
+}
+
+#contactsList li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition);
+    position: relative;
+}
+
+#contactsList li:hover { background: var(--purple-pale); }
+#contactsList li.active { background: var(--purple-pale); }
+
+.contact-actions {
+    display: none;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+#contactsList li:hover .contact-actions { display: flex; }
+
+.btn-contact-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 2px 5px;
+    border-radius: 5px;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+}
+
+.btn-contact-delete:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
+
+/* Contact offline indicator */
+.status-dot.contact-offline { background: var(--offline); }
+
+/* Modal agregar contacto */
+#addContactModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+#addContactModal.visible { display: flex; }
+
+.add-contact-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: loginIn .25s ease;
+}
+
+.add-contact-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.add-contact-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.add-contact-field label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-mid);
+    text-transform: uppercase;
+}
+
+.add-contact-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark);
+    background: var(--white);
+    transition: border-color var(--transition);
+}
+.add-contact-input:focus {
+    border-color: var(--purple-deep);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
+}
+
+.add-contact-phone-wrap {
+    display: flex;
+    align-items: center;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: border-color var(--transition);
+}
+.add-contact-phone-wrap:focus-within {
+    border-color: var(--purple-deep);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
+}
+.add-contact-phone-wrap .phone-prefix {
+    padding: 11px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--purple-deep);
+    background: var(--purple-pale);
+    border-right: 1.5px solid var(--border);
+    white-space: nowrap;
+    user-select: none;
+    font-family: 'DM Mono', monospace;
+}
+.add-contact-phone-wrap input {
+    flex: 1;
+    padding: 11px 14px;
+    border: none;
+    outline: none;
+    font-size: 15px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text-dark);
+    background: transparent;
+}
+
+.add-contact-error {
+    font-size: 12px;
+    color: #ef4444;
+    min-height: 18px;
+}
+
+.add-contact-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-contact-cancel {
+    flex: 1;
+    padding: 11px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-mid);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.btn-contact-cancel:hover { background: var(--bg-sidebar); }
+
+.btn-contact-save {
+    flex: 1;
+    padding: 11px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--bubble-me);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: opacity var(--transition);
+}
+.btn-contact-save:hover { opacity: 0.88; }
+.btn-contact-save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Empty contacts state */
+.contacts-empty {
+    padding: 8px 18px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+}
 </style>
 </head>
 <body>
@@ -1691,7 +1910,14 @@ html.is-mobile .bubble-wrap { max-width: 82%; }
         </div>
       </div>
 
-      <div class="users-label">Usuarios conectados</div>
+      <!-- Contacts Section -->
+      <div class="users-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
+        <span>Contactos</span>
+        <button class="btn-add-contact" onclick="abrirModalAgregarContacto()" title="Agregar contacto">＋</button>
+      </div>
+      <ul id="contactsList"></ul>
+
+      <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
       <ul id="users"></ul>
     </aside>
 
@@ -1807,6 +2033,40 @@ html.is-mobile .bubble-wrap { max-width: 82%; }
     <div class="avatar-modal-actions">
       <button class="btn-avatar-cancel" onclick="cerrarModalAvatar()">Cancelar</button>
       <button class="btn-avatar-save" id="btnGuardarAvatar" onclick="guardarAvatar()" disabled>Guardar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL AGREGAR CONTACTO
+============================================================ -->
+<div id="addContactModal">
+  <div class="add-contact-card">
+    <h3>👤 Nuevo contacto</h3>
+
+    <div class="add-contact-field">
+      <label>Número de teléfono</label>
+      <div class="add-contact-phone-wrap">
+        <span class="phone-prefix">+34</span>
+        <input type="tel" id="contactPhoneInput" placeholder="612 345 678"
+          maxlength="9" inputmode="numeric"
+          oninput="this.value=this.value.replace(/\D/g,'').slice(0,9)"
+          style="font-family:'DM Mono',monospace;letter-spacing:0.5px;">
+      </div>
+    </div>
+
+    <div class="add-contact-field">
+      <label>Nombre del contacto</label>
+      <input class="add-contact-input" type="text" id="contactNameInput"
+        placeholder="Ej: María García" maxlength="30">
+    </div>
+
+    <div class="add-contact-error" id="addContactError"></div>
+
+    <div class="add-contact-actions">
+      <button class="btn-contact-cancel" onclick="cerrarModalContacto()">Cancelar</button>
+      <button class="btn-contact-save" id="btnGuardarContacto" onclick="guardarContacto()">Agregar</button>
     </div>
   </div>
 </div>
@@ -1992,6 +2252,8 @@ function finishLogin() {
 
     // Iniciar WebSocket
     conectarWS();
+
+    // Cargar contactos guardados (después de que socket se conecte, lo llamamos desde onopen)
 }
 
 function logout() {
@@ -2118,6 +2380,8 @@ function conectarWS() {
         input.disabled = false;
         input.focus();
         document.getElementById('btnMic').style.display = 'flex';
+        // Cargar contactos persistentes
+        cargarContactos();
     };
 
     socket.onmessage = (event) => {
@@ -2284,20 +2548,28 @@ function handleMessage(data) {
             }
         }
         renderUsers(lastKnownUsers);
+        renderContactsList();
         return;
     }
 
     if (data.type === 'users') {
-        // data.online ahora es array de {username, avatar}
+        // data.online ahora es array de {username, avatar, phone}
+        window._phoneToUsername = window._phoneToUsername || {};
+        window._onlinePhones = new Set();
         const list = data.online.map(u => {
             if (typeof u === 'object') {
                 userAvatars[u.username] = u.avatar;
+                if (u.phone) {
+                    window._phoneToUsername[u.phone] = u.username;
+                    window._onlinePhones.add(u.phone);
+                }
                 return u.username;
             }
-            return u; // compatibilidad con formato antiguo
+            return u;
         });
         lastKnownUsers = list;
         renderUsers(list);
+        renderContactsList(); // actualizar estado online de contactos
         return;
     }
 
@@ -2323,6 +2595,20 @@ function handleMessage(data) {
     if (data.type === 'call_ice')      { recibirICE(data); return; }
     if (data.type === 'call_rejected') { llamadaRechazada(); return; }
     if (data.type === 'call_ended')    { llamadaTerminada(); return; }
+
+    if (data.type === 'contactAdded') {
+        onContactAdded(data.contactPhone, data.customName);
+        return;
+    }
+    if (data.type === 'contactRemoved') {
+        onContactRemoved(data.contactPhone);
+        return;
+    }
+    if (data.type === 'contactError') {
+        document.getElementById('addContactError').textContent = 'Error: ' + data.message;
+        document.getElementById('btnGuardarContacto').disabled = false;
+        return;
+    }
 }
 
 let lastKnownUsers = [];
@@ -2331,8 +2617,18 @@ let lastKnownUsers = [];
 // RENDER USUARIOS
 // ============================================================
 function renderUsers(onlineList) {
-    usersUl.innerHTML = onlineList
-        .filter(u => u !== username)
+    // Build set of online phones that are already in contacts (to separate them)
+    const contactPhones = new Set([...myContacts.keys()]);
+    const onlineNotContact = onlineList.filter(u => {
+        if (u === username) return false;
+        // Check if this online user's phone is in contacts
+        const phone = window._phoneToUsername
+            ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === u)?.[0]
+            : null;
+        return !phone || !contactPhones.has(phone);
+    });
+
+    usersUl.innerHTML = onlineNotContact
         .map(u => {
             const preview = lastMessages[u] || '';
             const badge = unreadCounts[u] ? `<span class="unread-badge">${unreadCounts[u]}</span>` : '';
@@ -2350,27 +2646,40 @@ function renderUsers(onlineList) {
                 ${badge}
             </li>`;
         }).join('');
+
+    if (onlineNotContact.length === 0) {
+        usersUl.innerHTML = '<li style="list-style:none;padding:8px 18px;font-size:12px;color:var(--text-muted);font-style:italic;cursor:default;">Nadie más conectado</li>';
+    }
 }
 
 // ============================================================
 // SELECCIONAR USUARIO
 // ============================================================
 function seleccionarUsuario(user) {
+    if (!user) return;
     if (currentChat === user) return;
     currentChat = user;
     unreadCounts[user] = 0;
     chat.innerHTML = '';
 
-    document.getElementById('chatName').textContent = user;
+    // Check if this user is a contact and get custom name
+    const phone = window._phoneToUsername
+        ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
+        : null;
+    const contact = phone ? myContacts.get(phone) : null;
+    const displayName = contact ? contact.customName : user;
+
+    document.getElementById('chatName').textContent = displayName;
     document.getElementById('chatName').style.color = '';
     document.getElementById('chatName').style.fontWeight = '';
     document.getElementById('chatName').style.fontSize = '';
     const av = document.getElementById('chatAvatar');
-    av.src = `https://api.dicebear.com/7.x/initials/svg?seed=${user}`;
+    av.src = userAvatars[user] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user)}`;
     av.style.display = 'block';
-    document.getElementById('chatStatus').textContent = '● En línea';
-    document.getElementById('chatStatus').style.color = 'var(--online)';
-    document.getElementById('btnVoiceCall').disabled = false;
+    const isOnline = lastKnownUsers.includes(user);
+    document.getElementById('chatStatus').textContent = isOnline ? '● En línea' : '○ Desconectado';
+    document.getElementById('chatStatus').style.color = isOnline ? 'var(--online)' : 'var(--text-muted)';
+    document.getElementById('btnVoiceCall').disabled = !isOnline;
 
     if (conversations[user]) {
         let lastDay = '';
@@ -3079,6 +3388,152 @@ function guardarAvatar() {
 // Cerrar modal al hacer click fuera
 document.getElementById('avatarModal').addEventListener('click', (e) => {
     if (e.target === document.getElementById('avatarModal')) cerrarModalAvatar();
+});
+
+// ============================================================
+// CONTACTOS
+// ============================================================
+
+// myContacts: Map de contactPhone → { contactPhone, customName }
+let myContacts = new Map();
+
+/* Cargar contactos desde el servidor via REST al hacer login */
+async function cargarContactos() {
+    try {
+        const res = await fetch(`/api/contacts?phone=${encodeURIComponent(loginPhone)}`);
+        const list = await res.json();
+        myContacts = new Map();
+        list.forEach(c => myContacts.set(c.contactPhone, { contactPhone: c.contactPhone, customName: c.customName }));
+        renderContactsList();
+    } catch(e) {
+        console.error('Error cargando contactos:', e);
+    }
+}
+
+/* Renderizar la lista de contactos en el sidebar */
+function renderContactsList() {
+    const ul = document.getElementById('contactsList');
+    if (!ul) return;
+
+    if (myContacts.size === 0) {
+        ul.innerHTML = '<li class="contacts-empty" style="list-style:none;cursor:default;">Sin contactos guardados</li>';
+        return;
+    }
+
+    const items = [...myContacts.values()].map(c => {
+        const onlineUsername = getOnlineUsernameByPhone(c.contactPhone);
+        const displayName = c.customName;
+        const avatarUrl = onlineUsername
+            ? (userAvatars[onlineUsername] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`)
+            : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+        const dotClass = onlineUsername ? 'status-dot' : 'status-dot contact-offline';
+        const isActive = onlineUsername && currentChat === onlineUsername ? 'active' : '';
+        const escapedPhone = c.contactPhone.replace(/'/g, "\'");
+        const escapedName = displayName.replace(/'/g, "\'").replace(/"/g, '&quot;');
+        const preview = onlineUsername ? (lastMessages[onlineUsername] || '') : '';
+        const unread = onlineUsername ? (unreadCounts[onlineUsername] || 0) : 0;
+        const badge = unread ? `<span class="unread-badge">${unread}</span>` : '';
+        const clickFn = onlineUsername ? `seleccionarUsuario('${onlineUsername}')` : '';
+
+        return `<li class="${isActive}" onclick="${clickFn}" data-phone="${escapedPhone}" style="${!onlineUsername ? 'opacity:0.65;' : ''}">
+            <div class="user-avatar-wrap">
+                <img class="user-avatar" src="${avatarUrl}" alt="${escapedName}">
+                <span class="${dotClass}"></span>
+            </div>
+            <div class="user-info">
+                <div class="user-name">${displayName}</div>
+                <div class="user-preview">${preview || c.contactPhone}</div>
+            </div>
+            ${badge}
+            <div class="contact-actions">
+                <button class="btn-contact-delete" onclick="event.stopPropagation();confirmarEliminarContacto('${escapedPhone}','${escapedName}')" title="Eliminar contacto">🗑</button>
+            </div>
+        </li>`;
+    });
+
+    ul.innerHTML = items.join('');
+}
+
+/* Obtener el username online a partir del phone de un contacto */
+function getOnlineUsernameByPhone(phone) {
+    // Buscamos en el Map users online: wss guarda phone en ws.phone
+    // En el cliente no tenemos acceso directo, pero tenemos userPhones que se
+    // actualiza con cada 'users' broadcast. Usamos window._phoneToUsername
+    if (!window._phoneToUsername) return null;
+    return window._phoneToUsername[phone] || null;
+}
+
+/* Modal agregar contacto */
+function abrirModalAgregarContacto() {
+    document.getElementById('contactPhoneInput').value = '';
+    document.getElementById('contactNameInput').value = '';
+    document.getElementById('addContactError').textContent = '';
+    document.getElementById('btnGuardarContacto').disabled = false;
+    document.getElementById('addContactModal').classList.add('visible');
+    document.getElementById('contactPhoneInput').focus();
+}
+
+function cerrarModalContacto() {
+    document.getElementById('addContactModal').classList.remove('visible');
+}
+
+async function guardarContacto() {
+    const rawPhone = document.getElementById('contactPhoneInput').value.replace(/\D/g, '');
+    const customName = document.getElementById('contactNameInput').value.trim();
+    const errEl = document.getElementById('addContactError');
+
+    if (rawPhone.length < 9) {
+        errEl.textContent = 'Introduce un número válido de 9 dígitos.';
+        return;
+    }
+    if (!customName) {
+        errEl.textContent = 'Pon un nombre para el contacto.';
+        return;
+    }
+
+    const contactPhone = '+34' + rawPhone;
+
+    if (contactPhone === loginPhone) {
+        errEl.textContent = 'No puedes agregarte a ti mismo.';
+        return;
+    }
+
+    errEl.textContent = '';
+    document.getElementById('btnGuardarContacto').disabled = true;
+
+    // Enviar por WS
+    socket.send(JSON.stringify({
+        type: 'addContact',
+        contactPhone,
+        customName
+    }));
+
+    // Esperar confirmación (la función onContactAdded la cierra el modal)
+}
+
+function onContactAdded(contactPhone, customName) {
+    myContacts.set(contactPhone, { contactPhone, customName });
+    renderContactsList();
+    cerrarModalContacto();
+}
+
+function onContactRemoved(contactPhone) {
+    myContacts.delete(contactPhone);
+    renderContactsList();
+}
+
+function confirmarEliminarContacto(phone, name) {
+    if (confirm(`¿Eliminar a "${name}" de tus contactos?`)) {
+        socket.send(JSON.stringify({
+            type: 'removeContact',
+            contactPhone: phone
+        }));
+    }
+}
+
+// Cerrar modal al hacer click fuera
+document.getElementById('addContactModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('addContactModal')) cerrarModalContacto();
 });
 
 </script>
