@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const Message = require('./models/Message');
 const User = require('./models/User');
 const Contact = require('./models/Contact');
+const Group = require('./models/Group');
 
 const app = express();
 const server = http.createServer(app);
@@ -53,6 +54,19 @@ app.get('/api/contacts', async (req, res) => {
     }
 });
 
+/* REST: cargar grupos del usuario
+   GET /api/groups?phone=+34612345678 */
+app.get('/api/groups', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    try {
+        const groups = await Group.find({ members: phone });
+        res.json(groups);
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // IMPORTANTE PORT=8080
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
@@ -63,6 +77,9 @@ const users = new Map();
 
 // Map: username → phone (para info de usuario)
 const userPhones = new Map();
+
+// Map: phone → WebSocket  (para control de sesión única por número)
+const phoneSessions = new Map();
 
 wss.on('connection', (ws) => {
 
@@ -84,6 +101,23 @@ wss.on('connection', (ws) => {
             case 'join': {
                 ws.username = data.username;
                 ws.phone    = data.phone || null;
+
+                // ── Sesión única por número de teléfono ──────────────────
+                // Si ya hay otra sesión activa con el mismo teléfono, la cerramos.
+                if (ws.phone) {
+                    const existingWs = phoneSessions.get(ws.phone);
+                    if (existingWs && existingWs !== ws && existingWs.readyState === 1 /* OPEN */) {
+                        try {
+                            existingWs.send(JSON.stringify({
+                                type: 'session_kicked',
+                                message: 'Tu sesión fue iniciada en otro dispositivo o pestaña.'
+                            }));
+                        } catch(_) {}
+                        existingWs.close(4001, 'session_replaced');
+                    }
+                    phoneSessions.set(ws.phone, ws);
+                }
+                // ─────────────────────────────────────────────────────────
 
                 // Usar avatar personalizado si lo manda el cliente, si no dicebear
                 const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(ws.username)}`;
@@ -399,6 +433,191 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               MENSAJE DE GRUPO
+            ────────────────────────────────────── */
+            case 'groupMessage': {
+                if (!data.groupId || (!data.message && !data.imageData && !data.audioData)) break;
+
+                const grpMsg = await Group.findOne({ groupId: data.groupId });
+                if (!grpMsg) break;
+                if (!grpMsg.members.includes(ws.phone)) break;
+
+                let imageData = null;
+                if (data.imageData && /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) {
+                    imageData = data.imageData;
+                }
+                let audioData = null;
+                if (data.audioData && /^data:audio\/[a-zA-Z0-9]+/.test(data.audioData)) {
+                    audioData = data.audioData;
+                }
+
+                const gmId = crypto.randomUUID();
+                const gmMessage = new Message({
+                    id:             gmId,
+                    conversationId: 'group_' + data.groupId,
+                    from:           ws.username,
+                    to:             data.groupId,
+                    message:        data.message || '',
+                    imageData,
+                    audioData,
+                    avatar:         ws.avatar,
+                    delivered:      true,
+                    read:           false
+                });
+                await gmMessage.save();
+
+                const gmPayload = JSON.stringify({
+                    type:      'groupMessage',
+                    ...gmMessage._doc,
+                    groupId:   data.groupId,
+                    groupName: grpMsg.name
+                });
+                grpMsg.members.forEach(memberPhone => {
+                    const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                    if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                        memberWs.send(gmPayload);
+                    }
+                });
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               CARGAR HISTORIAL DE GRUPO
+            ────────────────────────────────────── */
+            case 'loadGroupConversation': {
+                if (!data.groupId) break;
+                const grpHist = await Group.findOne({ groupId: data.groupId });
+                if (!grpHist || !grpHist.members.includes(ws.phone)) break;
+
+                const grpHistory = await Message.find({ conversationId: 'group_' + data.groupId })
+                    .sort({ time: 1 });
+
+                ws.send(JSON.stringify({
+                    type:     'groupHistory',
+                    groupId:  data.groupId,
+                    messages: grpHistory
+                }));
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               CREAR GRUPO
+            ────────────────────────────────────── */
+            case 'createGroup': {
+                if (!data.name || !data.memberPhones || !data.memberPhones.length) break;
+                if (!ws.phone) break;
+
+                try {
+                    const newGroupId = 'g_' + crypto.randomUUID();
+                    // Asegurar que el creador está en los miembros
+                    const newMembers = [...new Set([ws.phone, ...data.memberPhones])];
+
+                    const newGroup = new Group({
+                        groupId:    newGroupId,
+                        name:       data.name.trim(),
+                        ownerPhone: ws.phone,
+                        members:    newMembers
+                    });
+                    await newGroup.save();
+
+                    const groupCreatedData = {
+                        type:       'groupCreated',
+                        groupId:    newGroupId,
+                        name:       newGroup.name,
+                        ownerPhone: newGroup.ownerPhone,
+                        members:    newGroup.members
+                    };
+
+                    // Notificar a todos los miembros online
+                    newMembers.forEach(memberPhone => {
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                            memberWs.send(JSON.stringify(groupCreatedData));
+                        }
+                    });
+                } catch(e) {
+                    console.error('createGroup error:', e.message);
+                    ws.send(JSON.stringify({ type: 'groupError', message: e.message }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               ELIMINAR GRUPO (solo el creador)
+            ────────────────────────────────────── */
+            case 'deleteGroup': {
+                if (!data.groupId) break;
+                if (!ws.phone) break;
+
+                try {
+                    const delGroup = await Group.findOne({ groupId: data.groupId });
+                    if (!delGroup) break;
+                    if (delGroup.ownerPhone !== ws.phone) {
+                        ws.send(JSON.stringify({ type: 'groupError', message: 'Solo el creador puede eliminar el grupo.' }));
+                        break;
+                    }
+                    const delMembers = [...delGroup.members];
+                    await Group.deleteOne({ groupId: data.groupId });
+
+                    const delPayload = JSON.stringify({ type: 'groupDeleted', groupId: data.groupId });
+                    delMembers.forEach(memberPhone => {
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                            memberWs.send(delPayload);
+                        }
+                    });
+                } catch(e) {
+                    console.error('deleteGroup error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               SALIR DEL GRUPO
+            ────────────────────────────────────── */
+            case 'leaveGroup': {
+                if (!data.groupId) break;
+                if (!ws.phone) break;
+
+                try {
+                    const leaveGrp = await Group.findOne({ groupId: data.groupId });
+                    if (!leaveGrp) break;
+
+                    leaveGrp.members = leaveGrp.members.filter(m => m !== ws.phone);
+
+                    // Si era el dueño y quedan miembros, pasar la propiedad al siguiente
+                    if (leaveGrp.ownerPhone === ws.phone && leaveGrp.members.length > 0) {
+                        leaveGrp.ownerPhone = leaveGrp.members[0];
+                    }
+
+                    if (leaveGrp.members.length === 0) {
+                        await Group.deleteOne({ groupId: data.groupId });
+                    } else {
+                        await leaveGrp.save();
+                    }
+
+                    ws.send(JSON.stringify({ type: 'groupLeft', groupId: data.groupId }));
+
+                    const leaveInfoPayload = JSON.stringify({
+                        type:      'groupMemberLeft',
+                        groupId:   data.groupId,
+                        phone:     ws.phone,
+                        username:  ws.username,
+                        newOwner:  leaveGrp.ownerPhone
+                    });
+                    leaveGrp.members.forEach(memberPhone => {
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                            memberWs.send(leaveInfoPayload);
+                        }
+                    });
+                } catch(e) {
+                    console.error('leaveGroup error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
                RENOMBRAR CONTACTO
                Solo actualiza el customName del dueño.
                El contacto no se entera: cada uno ve
@@ -438,6 +657,10 @@ wss.on('connection', (ws) => {
         if (ws.username) {
             users.delete(ws.username);
             userPhones.delete(ws.username);
+            // Limpiar sesión activa solo si este WS es el actual para ese teléfono
+            if (ws.phone && phoneSessions.get(ws.phone) === ws) {
+                phoneSessions.delete(ws.phone);
+            }
             broadcastUsers();
             broadcast({
                 type:    'info',

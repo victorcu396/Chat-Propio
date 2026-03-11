@@ -1825,8 +1825,183 @@ emoji-picker.visible { display: block; }
 }
 
 /* ============================================================
-   ANIMACIONES
+   GRUPOS
 ============================================================ */
+.groups-label {
+    padding: 14px 16px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 10px;
+}
+
+#groupsList {
+    list-style: none;
+    overflow-y: auto;
+    flex-shrink: 0;
+    max-height: 30%;
+}
+
+#groupsList li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    margin: 0 6px 2px;
+    transition: background var(--transition);
+    position: relative;
+    min-width: 0;
+}
+
+#groupsList li:hover { background: var(--purple-pale); }
+#groupsList li.active { background: var(--purple-pale); }
+
+.group-avatar-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    color: white;
+    font-weight: 700;
+}
+
+/* Modal crear grupo */
+#createGroupModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+
+#createGroupModal.visible { display: flex; }
+
+.create-group-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: loginIn .25s ease;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.create-group-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.group-members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px;
+}
+
+.group-member-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition);
+    user-select: none;
+}
+
+.group-member-item:hover { background: var(--purple-pale); }
+
+.group-member-item input[type=checkbox] {
+    accent-color: var(--purple-deep);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.group-member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.group-member-name {
+    font-size: 14px;
+    color: var(--text-dark);
+    font-weight: 500;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-actions-btn {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.btn-group-action {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+    touch-action: manipulation;
+}
+
+.btn-group-action:hover { background: rgba(79,70,229,0.1); color: var(--purple-deep); }
+.btn-group-action.danger:hover { background: rgba(239,68,68,0.1); color: #ef4444; }
+
+.group-badge-owner {
+    font-size: 10px;
+    background: var(--purple-pale);
+    color: var(--purple-deep);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+
 @keyframes fadeUp {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -2227,6 +2402,13 @@ html.is-mobile .contact-actions { display: flex; }
       </div>
       <ul id="contactsList"></ul>
 
+      <!-- Groups Section -->
+      <div class="groups-label">
+        <span>Grupos</span>
+        <button class="btn-add-contact" onclick="abrirModalCrearGrupo()" title="Crear grupo">＋</button>
+      </div>
+      <ul id="groupsList"></ul>
+
       <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
       <ul id="users"></ul>
     </aside>
@@ -2400,6 +2582,35 @@ html.is-mobile .contact-actions { display: flex; }
     <div class="add-contact-actions">
       <button class="btn-contact-cancel" onclick="cerrarModalContacto()">Cancelar</button>
       <button class="btn-contact-save" id="btnGuardarContacto" onclick="guardarContacto()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL CREAR GRUPO
+============================================================ -->
+<div id="createGroupModal">
+  <div class="create-group-card">
+    <h3>👥 Nuevo grupo</h3>
+
+    <div class="add-contact-field">
+      <label>Nombre del grupo</label>
+      <input class="add-contact-input" type="text" id="groupNameInput"
+        placeholder="Ej: Amigos del trabajo" maxlength="40">
+    </div>
+
+    <div class="add-contact-field">
+      <label>Selecciona miembros de tus contactos</label>
+      <div class="group-members-list" id="groupMembersList">
+        <span style="font-size:13px;color:var(--text-muted);">Cargando contactos…</span>
+      </div>
+    </div>
+
+    <div class="add-contact-error" id="createGroupError"></div>
+
+    <div class="add-contact-actions">
+      <button class="btn-contact-cancel" onclick="cerrarModalCrearGrupo()">Cancelar</button>
+      <button class="btn-contact-save" id="btnCrearGrupo" onclick="crearGrupo()">Crear grupo</button>
     </div>
   </div>
 </div>
@@ -2715,6 +2926,7 @@ function conectarWS() {
         document.getElementById('btnMic').style.display = 'flex';
         // Cargar contactos persistentes
         cargarContactos();
+        cargarGrupos();
     };
 
     socket.onmessage = (event) => {
@@ -2961,6 +3173,54 @@ function handleMessage(data) {
         document.getElementById('btnGuardarContacto').disabled = false;
         return;
     }
+
+    // ── Sesión expulsada (mismo número en otro dispositivo) ──
+    if (data.type === 'session_kicked') {
+        if (socket) { socket.onclose = null; socket.close(); socket = null; }
+        alert('⚠️ Tu sesión fue iniciada en otro dispositivo. Serás desconectado.');
+        logout();
+        return;
+    }
+
+    // ── Grupos ──
+    if (data.type === 'groupCreated') {
+        onGroupCreated(data);
+        return;
+    }
+    if (data.type === 'groupDeleted') {
+        onGroupDeleted(data.groupId);
+        return;
+    }
+    if (data.type === 'groupLeft') {
+        onGroupDeleted(data.groupId);
+        return;
+    }
+    if (data.type === 'groupMemberLeft') {
+        const g = myGroups.get(data.groupId);
+        if (g) {
+            g.members = g.members.filter(m => m !== data.phone);
+            if (data.newOwner) g.ownerPhone = data.newOwner;
+            myGroups.set(data.groupId, g);
+            // Añadir mensaje de info en el chat si estamos en ese grupo
+            if (currentChat === 'group_' + data.groupId) {
+                addInfo(`${data.username} abandonó el grupo.`);
+            }
+        }
+        return;
+    }
+    if (data.type === 'groupMessage') {
+        onGroupMessage(data);
+        return;
+    }
+    if (data.type === 'groupHistory') {
+        onGroupHistory(data);
+        return;
+    }
+    if (data.type === 'groupError') {
+        const errEl = document.getElementById('createGroupError');
+        if (errEl) errEl.textContent = 'Error: ' + data.message;
+        return;
+    }
 }
 
 let lastKnownUsers = [];
@@ -3060,6 +3320,32 @@ function enviar() {
     if (!text && !pendingImage) return;
     if (!currentChat) return;
 
+    // ── Mensaje de grupo ──────────────────────────────
+    if (currentChat.startsWith('group_')) {
+        const groupId = currentChat.replace('group_', '');
+        if (pendingImage) {
+            socket.send(JSON.stringify({
+                type: 'groupMessage',
+                groupId,
+                message: text || '',
+                imageData: pendingImage.dataUrl
+            }));
+            cancelarImagen();
+        } else {
+            socket.send(JSON.stringify({
+                type: 'groupMessage',
+                groupId,
+                message: text
+            }));
+        }
+        input.value = '';
+        input.style.height = 'auto';
+        btnEnviar.disabled = true;
+        emojiPicker.classList.remove('visible');
+        return;
+    }
+
+    // ── Mensaje 1:1 ───────────────────────────────────
     if (pendingImage) {
         socket.send(JSON.stringify({
             type: 'message',
@@ -3091,6 +3377,7 @@ input.addEventListener('input', () => {
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
 
     if (!socket || !currentChat) return;
+    if (currentChat.startsWith('group_')) return; // no typing en grupos
     socket.send(JSON.stringify({ type: 'typing', to: currentChat, status: 'start' }));
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
@@ -3592,12 +3879,22 @@ function doEnviarAudio() {
         return;
     }
 
-    socket.send(JSON.stringify({
-        type: 'message',
-        to: currentChat,
-        message: '',
-        audioData: pendingAudio.dataUrl
-    }));
+    if (currentChat.startsWith('group_')) {
+        const groupId = currentChat.replace('group_', '');
+        socket.send(JSON.stringify({
+            type: 'groupMessage',
+            groupId,
+            message: '',
+            audioData: pendingAudio.dataUrl
+        }));
+    } else {
+        socket.send(JSON.stringify({
+            type: 'message',
+            to: currentChat,
+            message: '',
+            audioData: pendingAudio.dataUrl
+        }));
+    }
 
     pendingAudio = null;
     audioChunks = [];
@@ -3744,6 +4041,304 @@ function guardarAvatar() {
 // Cerrar modal al hacer click fuera
 document.getElementById('avatarModal').addEventListener('click', (e) => {
     if (e.target === document.getElementById('avatarModal')) cerrarModalAvatar();
+});
+
+// ============================================================
+// GRUPOS
+// ============================================================
+
+// myGroups: Map de groupId → { groupId, name, ownerPhone, members }
+let myGroups = new Map();
+
+/* Cargar grupos desde el servidor via REST al hacer login */
+async function cargarGrupos() {
+    try {
+        const res = await fetch(`/api/groups?phone=${encodeURIComponent(loginPhone)}`);
+        const list = await res.json();
+        myGroups = new Map();
+        list.forEach(g => {
+            myGroups.set(g.groupId, {
+                groupId:    g.groupId,
+                name:       g.name,
+                ownerPhone: g.ownerPhone,
+                members:    g.members
+            });
+        });
+        renderGroupsList();
+    } catch(e) {
+        console.error('Error cargando grupos:', e);
+    }
+}
+
+function renderGroupsList() {
+    const ul = document.getElementById('groupsList');
+    if (!ul) return;
+
+    if (myGroups.size === 0) {
+        ul.innerHTML = '<li class="contacts-empty" style="list-style:none;cursor:default;">Sin grupos</li>';
+        return;
+    }
+
+    const items = [...myGroups.values()].map(g => {
+        const chatKey = 'group_' + g.groupId;
+        const isActive = currentChat === chatKey ? 'active' : '';
+        const unread = unreadCounts[chatKey] || 0;
+        const badge = unread ? `<span class="unread-badge">${unread}</span>` : '';
+        const preview = lastMessages[chatKey] || '';
+        const isOwner = g.ownerPhone === loginPhone;
+        const initial = g.name.charAt(0).toUpperCase();
+        const escapedName = g.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
+
+        const ownerBadge = isOwner ? `<span class="group-badge-owner">Admin</span>` : '';
+        const leaveBtn   = !isOwner
+            ? `<button class="btn-group-action danger" onclick="event.stopPropagation();salirDeGrupo('${g.groupId}','${escapedName}')" title="Salir del grupo">🚪</button>`
+            : '';
+        const deleteBtn  = isOwner
+            ? `<button class="btn-group-action danger" onclick="event.stopPropagation();eliminarGrupo('${g.groupId}','${escapedName}')" title="Eliminar grupo">🗑</button>`
+            : '';
+
+        return `<li class="${isActive}" onclick="seleccionarGrupo('${g.groupId}')">
+            <div class="group-avatar-circle">${initial}</div>
+            <div class="user-info" style="flex:1;min-width:0;">
+                <div class="user-name" style="display:flex;align-items:center;gap:6px;">${g.name} ${ownerBadge}</div>
+                <div class="user-preview">${preview || g.members.length + ' miembros'}</div>
+            </div>
+            ${badge}
+            <div class="contact-actions">${leaveBtn}${deleteBtn}</div>
+        </li>`;
+    });
+
+    ul.innerHTML = items.join('');
+}
+
+function seleccionarGrupo(groupId) {
+    const g = myGroups.get(groupId);
+    if (!g) return;
+    const chatKey = 'group_' + groupId;
+    if (currentChat === chatKey) return;
+
+    currentChat = chatKey;
+    unreadCounts[chatKey] = 0;
+    chat.innerHTML = '';
+
+    document.getElementById('chatName').textContent = '👥 ' + g.name;
+    document.getElementById('chatName').style.color = '';
+    document.getElementById('chatName').style.fontWeight = '';
+    document.getElementById('chatName').style.fontSize = '';
+    const av = document.getElementById('chatAvatar');
+    av.style.display = 'none';
+    document.getElementById('chatStatus').textContent = `${g.members.length} miembros`;
+    document.getElementById('chatStatus').style.color = 'var(--text-muted)';
+    document.getElementById('btnVoiceCall').disabled = true;
+
+    if (conversations[chatKey]) {
+        let lastDay = '';
+        conversations[chatKey].forEach(msg => {
+            const day = obtenerDia(msg.time);
+            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+            addGroupMessage(msg);
+        });
+    } else {
+        socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
+    }
+
+    renderGroupsList();
+    renderContactsList();
+
+    if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar.classList.contains('visible')) toggleSidebar();
+    }
+}
+
+function addGroupMessage(msg) {
+    const isMe = msg.from === username;
+    const row = document.createElement('li');
+    row.className = `msg-row ${isMe ? 'me' : ''}`;
+
+    const avatarSrc = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.from}`;
+    const estadoHtml = isMe
+        ? `<span class="estado" id="estado_${msg.id}">${msg.read ? '✔✔ leído' : msg.delivered ? '✔✔' : '✔'}</span>`
+        : '';
+
+    // Nombre del remitente encima del burbuja (para mensajes ajenos)
+    const senderLabel = !isMe ? `<div style="font-size:11px;font-weight:600;color:var(--purple-deep);margin-bottom:2px;">${escapeHTML(msg.from)}</div>` : '';
+
+    let content = '';
+    if (msg.imageData) {
+        content = `<img class="img-msg" src="${msg.imageData}" alt="imagen">`;
+        if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
+    } else if (msg.audioData) {
+        // Reusar la misma lógica que mensajes 1:1 — delegamos a addMessage
+        addMessage(msg);
+        return;
+    } else {
+        content = escapeHTML(msg.message);
+    }
+
+    row.innerHTML = `
+        <img class="msg-avatar" src="${avatarSrc}" alt="${msg.from}">
+        <div class="bubble-wrap">
+            ${senderLabel}
+            <div class="bubble ${isMe ? 'me' : 'other'}" id="${msg.id}">
+                <span class="msg-text">${content}</span>
+                <span class="meta">
+                    <span class="hora">${horaActual(msg.time)}</span>
+                    ${estadoHtml}
+                </span>
+            </div>
+        </div>
+    `;
+
+    if (msg.imageData) {
+        const imgEl = row.querySelector('.img-msg');
+        if (imgEl) imgEl.addEventListener('click', () => openLightbox(msg.imageData));
+    }
+
+    chat.appendChild(row);
+    if (autoScroll) scrollChat();
+}
+
+function onGroupMessage(data) {
+    const chatKey = 'group_' + data.groupId;
+    if (!conversations[chatKey]) conversations[chatKey] = [];
+    if (!conversations[chatKey].some(m => m.id === data.id)) {
+        conversations[chatKey].push(data);
+    }
+
+    lastMessages[chatKey] = data.imageData ? '📷 Imagen' : data.audioData ? '🎙️ Audio' : data.message;
+
+    if (currentChat === chatKey) {
+        addGroupMessage(data);
+    } else {
+        unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
+        if (data.from !== username) {
+            playNotifSound();
+            mostrarNotificacion('👥 ' + data.groupName, lastMessages[chatKey]);
+        }
+    }
+    renderGroupsList();
+}
+
+function onGroupHistory(data) {
+    const chatKey = 'group_' + data.groupId;
+    conversations[chatKey] = data.messages;
+    if (currentChat === chatKey) {
+        chat.innerHTML = '';
+        let lastDay = '';
+        data.messages.forEach(msg => {
+            const day = obtenerDia(msg.time);
+            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+            addGroupMessage(msg);
+        });
+    }
+}
+
+function onGroupCreated(data) {
+    myGroups.set(data.groupId, {
+        groupId:    data.groupId,
+        name:       data.name,
+        ownerPhone: data.ownerPhone,
+        members:    data.members
+    });
+    renderGroupsList();
+    cerrarModalCrearGrupo();
+}
+
+function onGroupDeleted(groupId) {
+    const chatKey = 'group_' + groupId;
+    myGroups.delete(groupId);
+    delete conversations[chatKey];
+    if (currentChat === chatKey) {
+        currentChat = null;
+        chat.innerHTML = '';
+        document.getElementById('chatName').textContent = 'Selecciona un usuario para empezar';
+        document.getElementById('chatName').style.color = 'var(--text-muted)';
+        document.getElementById('chatAvatar').style.display = 'none';
+        document.getElementById('chatStatus').textContent = '';
+    }
+    renderGroupsList();
+}
+
+/* Modal crear grupo */
+function abrirModalCrearGrupo() {
+    document.getElementById('groupNameInput').value = '';
+    document.getElementById('createGroupError').textContent = '';
+    document.getElementById('btnCrearGrupo').disabled = false;
+
+    // Rellenar lista de contactos con checkboxes
+    const listEl = document.getElementById('groupMembersList');
+    if (myContacts.size === 0) {
+        listEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted);">No tienes contactos guardados. Agrega contactos primero.</span>';
+    } else {
+        listEl.innerHTML = [...myContacts.values()].map(c => {
+            const seedName = c.username || c.customName;
+            const avatarUrl = c.avatar
+                || userAvatars['__phone__' + c.contactPhone]
+                || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`;
+            const escaped = c.contactPhone.replace(/'/g,"\'");
+            return `<label class="group-member-item">
+                <input type="checkbox" value="${escaped}">
+                <img class="group-member-avatar" src="${avatarUrl}" alt="${c.customName}">
+                <span class="group-member-name">${c.customName}</span>
+            </label>`;
+        }).join('');
+    }
+
+    document.getElementById('createGroupModal').classList.add('visible');
+    document.getElementById('groupNameInput').focus();
+}
+
+function cerrarModalCrearGrupo() {
+    document.getElementById('createGroupModal').classList.remove('visible');
+}
+
+function crearGrupo() {
+    const name = document.getElementById('groupNameInput').value.trim();
+    const errEl = document.getElementById('createGroupError');
+
+    if (!name) {
+        errEl.textContent = 'Pon un nombre para el grupo.';
+        return;
+    }
+
+    const checked = [...document.querySelectorAll('#groupMembersList input[type=checkbox]:checked')];
+    if (checked.length === 0) {
+        errEl.textContent = 'Selecciona al menos un contacto.';
+        return;
+    }
+
+    const memberPhones = checked.map(cb => cb.value);
+
+    errEl.textContent = '';
+    document.getElementById('btnCrearGrupo').disabled = true;
+
+    socket.send(JSON.stringify({
+        type: 'createGroup',
+        name,
+        memberPhones
+    }));
+}
+
+function salirDeGrupo(groupId, name) {
+    if (!confirm(`¿Salir del grupo "${name}"?`)) return;
+    socket.send(JSON.stringify({ type: 'leaveGroup', groupId }));
+}
+
+function eliminarGrupo(groupId, name) {
+    if (!confirm(`¿Eliminar el grupo "${name}"? Esta acción no se puede deshacer.`)) return;
+    socket.send(JSON.stringify({ type: 'deleteGroup', groupId }));
+}
+
+// Cerrar modal crear grupo al hacer click fuera
+document.addEventListener('DOMContentLoaded', () => {
+    const cgm = document.getElementById('createGroupModal');
+    if (cgm) cgm.addEventListener('click', (e) => {
+        if (e.target === cgm) cerrarModalCrearGrupo();
+    });
+    document.getElementById('groupNameInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') crearGrupo();
+    });
 });
 
 // ============================================================
