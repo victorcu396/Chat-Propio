@@ -152,16 +152,66 @@ wss.on('connection', (ws) => {
                     type: 'info',
                     message: `${ws.username} se ha unido al chat`
                 });
+
+                // ── Entregar mensajes pendientes (enviados mientras estaba offline) ──
+                try {
+                    const pending = await Message.find({
+                        to:        ws.username,
+                        delivered: false
+                    }).sort({ time: 1 });
+
+                    for (const msg of pending) {
+                        // Enviar al destinatario (ahora online)
+                        ws.send(JSON.stringify({ type: 'message', ...msg._doc }));
+                        // Marcar como entregado
+                        await Message.updateOne({ id: msg.id }, { delivered: true });
+                        // Notificar al remitente si está online
+                        const senderWs = users.get(msg.from);
+                        if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                            senderWs.send(JSON.stringify({ type: 'delivered', id: msg.id }));
+                        }
+                    }
+                } catch(e) {
+                    console.error('Error entregando mensajes pendientes:', e.message);
+                }
+
+                // ── Entregar missed calls pendientes ──
+                try {
+                    const missedCalls = await Message.find({
+                        to:        ws.username,
+                        delivered: false,
+                        message:   '__missed_call__'
+                    }).sort({ time: 1 });
+
+                    // (ya cubierto por el loop anterior; aquí no hay trabajo extra)
+                } catch(_) {}
+
                 break;
             }
 
             /* ──────────────────────────────────────
                MESSAGE (texto + imagen opcional)
+               Acepta: to (username online) o toPhone (teléfono, para offline)
             ────────────────────────────────────── */
             case 'message': {
-                if (!data.to) break;
+                // Resolver destinatario: puede venir como username o como teléfono
+                let recipientUsername = data.to || null;
+                let recipientPhone    = data.toPhone || null;
 
-                const usersSorted    = [ws.username, data.to].sort();
+                // Si solo viene teléfono, buscar username en BD
+                if (!recipientUsername && recipientPhone) {
+                    const recipientUser = await User.findOne({ phone: recipientPhone }).lean();
+                    if (recipientUser) recipientUsername = recipientUser.username;
+                }
+                // Si solo viene username, buscar teléfono en BD (para stored conversationId)
+                if (recipientUsername && !recipientPhone) {
+                    const recipientUser = await User.findOne({ username: recipientUsername }).lean();
+                    if (recipientUser) recipientPhone = recipientUser.phone;
+                }
+
+                if (!recipientUsername) break; // destinatario desconocido
+
+                const usersSorted    = [ws.username, recipientUsername].sort();
                 const conversationId = usersSorted.join('_');
                 const id             = crypto.randomUUID();
 
@@ -176,7 +226,6 @@ wss.on('connection', (ws) => {
                 // Validar audio base64 si viene
                 let audioData = null;
                 if (data.audioData) {
-                    // Acepta variantes reales: audio/webm;codecs=opus, audio/ogg;codecs=opus, etc.
                     if (/^data:audio\/[a-zA-Z0-9]+/.test(data.audioData)) {
                         audioData = data.audioData;
                     }
@@ -186,7 +235,7 @@ wss.on('connection', (ws) => {
                     id,
                     conversationId,
                     from:      ws.username,
-                    to:        data.to,
+                    to:        recipientUsername,
                     message:   data.message || '',
                     imageData,
                     audioData,
@@ -218,11 +267,17 @@ wss.on('connection', (ws) => {
 
             /* ──────────────────────────────────────
                CARGAR CONVERSACIÓN
+               Acepta: with (username) o withPhone (teléfono)
             ────────────────────────────────────── */
             case 'loadConversation': {
-                if (!data.with) break;
+                let withUsername = data.with || null;
+                if (!withUsername && data.withPhone) {
+                    const u = await User.findOne({ phone: data.withPhone }).lean();
+                    if (u) withUsername = u.username;
+                }
+                if (!withUsername) break;
 
-                const usersSorted    = [ws.username, data.with].sort();
+                const usersSorted    = [ws.username, withUsername].sort();
                 const conversationId = usersSorted.join('_');
 
                 const history = await Message.find({ conversationId })
@@ -230,7 +285,8 @@ wss.on('connection', (ws) => {
 
                 ws.send(JSON.stringify({
                     type:     'history',
-                    messages: history
+                    messages: history,
+                    withUsername  // devolver el username resuelto al cliente
                 }));
                 break;
             }
@@ -272,11 +328,31 @@ wss.on('connection', (ws) => {
                         sdp:  data.sdp
                     }));
                 } else {
-                    // Destinatario offline
+                    // Destinatario offline — guardar missed call en BD
+                    try {
+                        const recipientUser = await User.findOne({ username: data.to }).lean();
+                        if (recipientUser) {
+                            const usersSorted    = [ws.username, data.to].sort();
+                            const conversationId = usersSorted.join('_');
+                            await new Message({
+                                id:             crypto.randomUUID(),
+                                conversationId,
+                                from:           ws.username,
+                                to:             data.to,
+                                message:        '__missed_call__',
+                                avatar:         ws.avatar,
+                                delivered:      false,
+                                read:           false
+                            }).save();
+                        }
+                    } catch(e) { console.error('missed call save error:', e.message); }
+
                     ws.send(JSON.stringify({
                         type: 'info',
-                        message: `${data.to} no está disponible para llamadas ahora mismo.`
+                        message: `${data.to} no está disponible. Le llegará una notificación de llamada perdida.`
                     }));
+                    // También cancelar la llamada en el caller
+                    ws.send(JSON.stringify({ type: 'call_rejected', from: data.to }));
                 }
                 break;
             }
@@ -841,29 +917,23 @@ function sendMessage(message) {
         ...message._doc
     });
 
-    users.forEach((client, username) => {
-        if (username === message.from || username === message.to) {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(payload);
-            }
-        }
-    });
+    // Enviar al remitente siempre (para que aparezca en su chat)
+    const senderWs = users.get(message.from);
+    if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+        senderWs.send(payload);
+    }
 
-    // Marcar como entregado si el destinatario está online
-    if (users.has(message.to)) {
-        Message.updateOne(
-            { id: message.id },
-            { delivered: true }
-        ).exec();
-
-        const senderWs = users.get(message.from);
+    // Enviar al destinatario si está online
+    const targetWs = users.get(message.to);
+    if (targetWs && targetWs.readyState === WebSocket.OPEN && targetWs !== senderWs) {
+        targetWs.send(payload);
+        // Marcar como entregado
+        Message.updateOne({ id: message.id }, { delivered: true }).exec();
         if (senderWs && senderWs.readyState === WebSocket.OPEN) {
-            senderWs.send(JSON.stringify({
-                type: 'delivered',
-                id:   message.id
-            }));
+            senderWs.send(JSON.stringify({ type: 'delivered', id: message.id }));
         }
     }
+    // Si offline: el mensaje queda en BD con delivered:false y se entrega al reconectar
 }
 
 function broadcastUsers() {

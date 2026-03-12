@@ -1280,33 +1280,37 @@ emoji-picker.visible { display: block; }
 #callOverlay {
     display: none;
     position: fixed;
-    inset: 0;
+    bottom: 80px;
+    right: 16px;
     z-index: 8000;
-    background: rgba(15,10,40,0.92);
-    backdrop-filter: blur(8px);
-    align-items: center;
-    justify-content: center;
+    background: linear-gradient(145deg, #1e1b4b, #312e81);
+    border-radius: 20px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+    padding: 14px 16px 12px;
+    width: 240px;
     flex-direction: column;
-    padding: 20px;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    cursor: grab;
 }
+#callOverlay:active { cursor: grabbing; }
 
 #callOverlay.visible { display: flex; }
+
+/* Barra de arrastre visual */
+#callOverlay::before {
+    content: ''; display: block; width: 32px; height: 4px;
+    background: rgba(255,255,255,0.2); border-radius: 2px; margin-bottom: 2px;
+}
 
 .call-card {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     color: white;
-    padding: 40px 32px;
-    background: rgba(255,255,255,0.07);
-    border-radius: 28px;
-    border: 1px solid rgba(255,255,255,0.12);
-    box-shadow: 0 24px 64px rgba(0,0,0,0.4);
-    min-width: 280px;
-    max-width: 360px;
     width: 100%;
-    animation: callIn .3s ease;
 }
 
 @keyframes callIn {
@@ -1315,66 +1319,70 @@ emoji-picker.visible { display: block; }
 }
 
 .call-avatar {
-    width: 88px;
-    height: 88px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
-    border: 3px solid rgba(255,255,255,0.3);
-    animation: callPulse 2s ease-in-out infinite;
+    border: 2px solid rgba(255,255,255,0.3);
+    animation: callPulseAvatar 2s ease-in-out infinite;
 }
 
-@keyframes callPulse {
+@keyframes callPulseAvatar {
     0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.3); }
-    50%       { box-shadow: 0 0 0 14px rgba(255,255,255,0); }
+    50%       { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
 }
 
 .call-name {
-    font-size: 22px;
+    font-size: 14px;
     font-weight: 700;
-    letter-spacing: -0.3px;
     text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
 }
 
 .call-status {
-    font-size: 14px;
-    opacity: 0.7;
+    font-size: 11px;
+    opacity: 0.6;
     text-align: center;
+    margin-top: -4px;
 }
 
 .call-timer {
-    font-size: 28px;
-    font-weight: 300;
+    font-size: 18px;
+    font-weight: 700;
     font-family: 'DM Mono', monospace;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     color: rgba(255,255,255,0.9);
 }
 
 .call-actions {
     display: flex;
-    gap: 20px;
-    margin-top: 12px;
+    gap: 10px;
+    margin-top: 4px;
 }
 
 .btn-call-action {
-    width: 62px;
-    height: 62px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
     border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 18px;
     transition: all .2s;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     touch-action: manipulation;
 }
 
 .btn-call-action span {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
     color: white;
-    margin-top: 4px;
+    margin-top: 2px;
     white-space: nowrap;
 }
 
@@ -1885,12 +1893,7 @@ emoji-picker.visible { display: block; }
 }
 
 /* Botón llamada grupal en el header */
-#btnGroupCall {
-    display: none;
-}
-#btnGroupCall.visible {
-    display: flex;
-}
+/* Botón llamada unificado — visible siempre en el header */
 
 /* Avatar de grupo en el header — reutiliza .group-avatar-circle pero más grande */
 #chatGroupAvatar {
@@ -1907,54 +1910,67 @@ emoji-picker.visible { display: block; }
 /* Input oculto para foto de grupo */
 #groupAvatarFileInput { display: none; }
 
-/* Overlay llamada grupal */
+/* Overlay llamada grupal — mini panel flotante */
 #groupCallOverlay {
-    display: none; position: fixed; inset: 0; z-index: 9800;
-    background: linear-gradient(135deg, #1e1b4b, #312e81);
-    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-    padding: 24px;
+    display: none; position: fixed;
+    bottom: 80px; right: 16px;
+    z-index: 9800;
+    background: linear-gradient(145deg, #1e1b4b, #312e81);
+    border-radius: 20px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+    padding: 14px 16px 12px;
+    width: 260px;
+    flex-direction: column; align-items: center; gap: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
 }
 #groupCallOverlay.visible { display: flex; }
+/* Barra de arrastre visual */
+#groupCallOverlay::before {
+    content: ''; display: block; width: 32px; height: 4px;
+    background: rgba(255,255,255,0.2); border-radius: 2px; margin-bottom: 2px;
+}
 .group-call-title {
-    font-size: 22px; font-weight: 700; color: white; text-align: center;
+    font-size: 14px; font-weight: 700; color: white; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
 }
 .group-call-subtitle {
-    font-size: 14px; color: rgba(255,255,255,0.65); text-align: center; margin-top: -8px;
+    font-size: 11px; color: rgba(255,255,255,0.55); text-align: center; margin-top: -4px;
 }
 .group-call-avatars {
-    display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 340px;
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 230px;
 }
 .group-call-participant {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
 .group-call-participant img {
-    width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
-    border: 2px solid rgba(255,255,255,0.25);
+    width: 38px; height: 38px; border-radius: 50%; object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.2);
 }
 .group-call-participant.connected img { border-color: #10b981; }
 .group-call-participant.calling img  { border-color: #f59e0b; animation: callPulse 1s ease-in-out infinite; }
 .group-call-participant.rejected img { border-color: #ef4444; opacity: 0.5; }
-@keyframes callPulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0.5)} 50%{box-shadow:0 0 0 8px rgba(245,158,11,0)} }
+@keyframes callPulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0.5)} 50%{box-shadow:0 0 0 6px rgba(245,158,11,0)} }
 .group-call-participant-name {
-    font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 600; text-align: center; max-width: 64px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 10px; color: rgba(255,255,255,0.75); font-weight: 600; text-align: center;
+    max-width: 50px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .group-call-timer {
-    font-size: 28px; font-weight: 700; color: white; font-family: 'DM Mono', monospace;
+    font-size: 18px; font-weight: 700; color: white; font-family: 'DM Mono', monospace;
+    letter-spacing: 1px;
 }
 .group-call-actions {
-    display: flex; gap: 16px; margin-top: 8px;
+    display: flex; gap: 10px; margin-top: 4px;
 }
 .btn-group-call-mute {
-    width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
-    background: rgba(255,255,255,0.15); color: white; font-size: 22px;
+    width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(255,255,255,0.15); color: white; font-size: 17px;
     display: flex; align-items: center; justify-content: center; transition: all .2s;
 }
 .btn-group-call-mute:hover { background: rgba(255,255,255,0.25); }
-.btn-group-call-mute.muted { background: rgba(239,68,68,0.4); }
+.btn-group-call-mute.muted { background: rgba(239,68,68,0.5); }
 .btn-group-call-end {
-    width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
-    background: #ef4444; color: white; font-size: 26px;
+    width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+    background: #ef4444; color: white; font-size: 20px;
     display: flex; align-items: center; justify-content: center; transition: all .2s;
 }
 .btn-group-call-end:hover { background: #dc2626; transform: scale(1.05); }
@@ -2583,8 +2599,7 @@ html.is-mobile .contact-actions { display: flex; }
           <div id="chatStatus"></div>
         </div>
         <div class="call-btns">
-          <button class="btn-call audio" id="btnGroupCall" title="Llamada grupal" onclick="iniciarLlamadaGrupal()">📞</button>
-          <button class="btn-call audio" id="btnVoiceCall" title="Llamada de voz" onclick="iniciarLlamada()" disabled>📞</button>
+          <button class="btn-call audio" id="btnCallUnified" title="Llamada" onclick="onBtnCall()" disabled>📞</button>
         </div>
       </div>
 
@@ -3021,6 +3036,9 @@ function finishLogin() {
     // Guardar nombre localmente para este número
     localStorage.setItem(`kvs_name_${loginPhone}`, loginUsername);
 
+    // Persistir sesión para sobrevivir recargas (sessionStorage se borra al cerrar pestaña)
+    sessionStorage.setItem('kvs_session', JSON.stringify({ phone: loginPhone, username: loginUsername }));
+
     // Ocultar modal, mostrar app
     document.getElementById('loginModal').style.display = 'none';
     document.getElementById('appContainer').style.display = 'flex';
@@ -3042,6 +3060,7 @@ function finishLogin() {
 
 function logout() {
     if (socket) { socket.close(); socket = null; }
+    sessionStorage.removeItem('kvs_session');
     loginPhone = '';
     loginUsername = '';
     username = null;
@@ -3294,7 +3313,14 @@ function actualizarBtnEnviar() {
 function handleMessage(data) {
 
     if (data.type === 'history') {
-        conversations[currentChat] = data.messages;
+        // El servidor puede devolver withUsername (resuelto desde withPhone)
+        // En ese caso, guardamos también bajo el chatKey de username para cuando se conecte
+        const chatKey = currentChat;
+        conversations[chatKey] = data.messages;
+        if (data.withUsername && currentChat.startsWith('phone:')) {
+            // También indexar por username para cuando el contacto se conecte
+            conversations[data.withUsername] = data.messages;
+        }
         chat.innerHTML = '';
         let lastDay = '';
         data.messages.forEach(msg => {
@@ -3306,23 +3332,18 @@ function handleMessage(data) {
     }
 
     if (data.type === 'message') {
+        // Ignorar mensajes de llamada perdida aquí — se tratan por separado
+        if (data.message === '__missed_call__') {
+            mostrarLlamadaPerdida(data);
+            return;
+        }
+
         let otherUser = data.from === username ? data.to : data.to === username ? data.from : null;
         if (!otherUser) return;
 
-        // DEBUG: mostrar en consola qué campos trae el mensaje
-        console.log('[MSG recibido]', {
-            id: data.id,
-            from: data.from,
-            hasAudio: !!data.audioData,
-            hasImage: !!data.imageData,
-            message: data.message,
-            audioDataStart: data.audioData ? data.audioData.slice(0,40) : null
-        });
-
-        // Actualizar caché de avatar del remitente (útil cuando está offline y manda un msg)
+        // Actualizar caché de avatar del remitente
         if (data.avatar && data.from !== username) {
             userAvatars[data.from] = data.avatar;
-            // Si este usuario es un contacto nuestro, actualizar también su avatar guardado
             if (window._phoneToUsername) {
                 const senderPhone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === data.from)?.[0];
                 if (senderPhone && myContacts.has(senderPhone)) {
@@ -3334,17 +3355,32 @@ function handleMessage(data) {
             }
         }
 
-        if (!conversations[otherUser]) conversations[otherUser] = [];
-        if (!conversations[otherUser].some(m => m.id === data.id)) conversations[otherUser].push(data);
-        lastMessages[otherUser] = data.imageData ? '📷 Imagen' : data.audioData ? '🎙️ Audio' : data.message;
+        // Determinar el chatKey donde mostrar el mensaje
+        // Si el otro usuario es un contacto offline que tenemos abierto como 'phone:XXXXX', usar ese chatKey
+        let chatKey = otherUser;
+        if (window._phoneToUsername) {
+            // Buscar si el otherUser tiene phone y si tenemos ese chat abierto como phone:XXXXX
+            const phone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === otherUser)?.[0];
+            if (phone && currentChat === 'phone:' + phone) {
+                chatKey = 'phone:' + phone;
+            }
+        }
 
-        if (currentChat === otherUser) {
+        if (!conversations[chatKey]) conversations[chatKey] = [];
+        if (!conversations[otherUser]) conversations[otherUser] = conversations[chatKey]; // alias
+        if (!conversations[chatKey].some(m => m.id === data.id)) conversations[chatKey].push(data);
+
+        const preview = data.imageData ? '📷 Imagen' : data.audioData ? '🎙️ Audio' : data.message;
+        lastMessages[chatKey]   = preview;
+        lastMessages[otherUser] = preview;
+
+        if (currentChat === chatKey || currentChat === otherUser) {
             addMessage(data);
         } else {
-            unreadCounts[otherUser] = (unreadCounts[otherUser] || 0) + 1;
+            unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
             if (data.from !== username) {
                 playNotifSound();
-                mostrarNotificacion(data.from, lastMessages[otherUser]);
+                mostrarNotificacion(data.from, preview);
             }
         }
         renderUsers(lastKnownUsers);
@@ -3523,6 +3559,25 @@ function renderUsers(onlineList) {
     if (onlineNotContact.length === 0) {
         usersUl.innerHTML = '<li style="list-style:none;padding:8px 18px;font-size:12px;color:var(--text-muted);font-style:italic;cursor:default;">Nadie más conectado</li>';
     }
+
+    // Actualizar botón unificado si el chat activo es 1:1 y cambia el estado online
+    if (currentChat && !currentChat.startsWith('group_')) {
+        const btnU = document.getElementById('btnCallUnified');
+        if (btnU && btnU.dataset.mode === '1to1') {
+            btnU.disabled = !onlineList.includes(currentChat);
+        }
+    }
+}
+
+// Dispatcher del botón de llamada unificado
+function onBtnCall() {
+    const btnU = document.getElementById('btnCallUnified');
+    if (!btnU || btnU.disabled) return;
+    if (btnU.dataset.mode === 'group') {
+        iniciarLlamadaGrupal();
+    } else {
+        iniciarLlamada();
+    }
 }
 
 // ============================================================
@@ -3550,14 +3605,19 @@ function seleccionarUsuario(user) {
     av.src = userAvatars[user] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user)}`;
     av.style.display = 'block';
 
-    // Ocultar avatar de grupo y botón de llamada grupal
+    // Ocultar avatar de grupo; configurar botón unificado para llamada 1:1
     document.getElementById('chatGroupAvatar').classList.remove('visible');
-    document.getElementById('btnGroupCall').classList.remove('visible');
+
+    // Restaurar placeholder normal
+    input.placeholder = 'Escribe un mensaje...';
 
     const isOnline = lastKnownUsers.includes(user);
     document.getElementById('chatStatus').textContent = isOnline ? '● En línea' : '○ Desconectado';
     document.getElementById('chatStatus').style.color = isOnline ? 'var(--online)' : 'var(--text-muted)';
-    document.getElementById('btnVoiceCall').disabled = !isOnline;
+    const btnU = document.getElementById('btnCallUnified');
+    btnU.disabled = !isOnline;
+    btnU.dataset.mode = '1to1';
+    btnU.title = 'Llamada de voz';
 
     if (conversations[user]) {
         let lastDay = '';
@@ -3572,6 +3632,68 @@ function seleccionarUsuario(user) {
 
     renderUsers(lastKnownUsers);
     // Cerrar sidebar en móvil y tablet al seleccionar usuario
+    if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar.classList.contains('visible')) toggleSidebar();
+    }
+}
+
+// ============================================================
+// SELECCIONAR CONTACTO OFFLINE (chatKey = 'phone:XXXXX')
+// ============================================================
+function seleccionarContactoOffline(phone) {
+    const chatKey = 'phone:' + phone;
+    if (currentChat === chatKey) return;
+    currentChat = chatKey;
+    unreadCounts[chatKey] = 0;
+    chat.innerHTML = '';
+
+    const contact = myContacts.get(phone);
+    const displayName = contact ? contact.customName : phone;
+    const seedName = contact ? (contact.username || contact.customName) : phone;
+    const avatarUrl = contact
+        ? (contact.avatar || userAvatars['__phone__' + phone] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`)
+        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`;
+
+    document.getElementById('chatName').textContent = displayName;
+    document.getElementById('chatName').style.color = '';
+    document.getElementById('chatName').style.fontWeight = '';
+    document.getElementById('chatName').style.fontSize = '';
+
+    const av = document.getElementById('chatAvatar');
+    av.src = avatarUrl;
+    av.style.display = 'block';
+    document.getElementById('chatGroupAvatar').classList.remove('visible');
+
+    document.getElementById('chatStatus').textContent = '○ Desconectado';
+    document.getElementById('chatStatus').style.color = 'var(--text-muted)';
+
+    // Botón de llamada habilitado — al llamar a offline se guarda missed call
+    const btnU = document.getElementById('btnCallUnified');
+    btnU.disabled = false;
+    btnU.dataset.mode = '1to1';
+    btnU.dataset.phone = phone;  // guardar phone para la llamada a offline
+    btnU.title = 'Llamar (dejará notificación de llamada perdida)';
+
+    // Habilitar escritura
+    input.disabled = false;
+    input.placeholder = 'Escribe un mensaje… (se entregará al conectarse)';
+
+    renderContactsList();
+    renderGroupsList();
+
+    // Cargar historial por phone
+    if (conversations[chatKey]) {
+        let lastDay = '';
+        conversations[chatKey].forEach(msg => {
+            const day = obtenerDia(msg.time);
+            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+            addMessage(msg);
+        });
+    } else {
+        socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
+    }
+
     if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
@@ -3611,11 +3733,16 @@ function enviar() {
         return;
     }
 
-    // ── Mensaje 1:1 ───────────────────────────────────
+    // ── Mensaje 1:1 (online o offline) ───────────────────────
+    // currentChat puede ser un username (online) o 'phone:XXXXX' (offline)
+    const isOfflineChat = currentChat.startsWith('phone:');
+    const toPhone = isOfflineChat ? currentChat.replace('phone:', '') : null;
+    const toUsername = isOfflineChat ? null : currentChat;
+
     if (pendingImage) {
         socket.send(JSON.stringify({
             type: 'message',
-            to: currentChat,
+            ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text || '',
             imageData: pendingImage.dataUrl
         }));
@@ -3623,7 +3750,7 @@ function enviar() {
     } else {
         socket.send(JSON.stringify({
             type: 'message',
-            to: currentChat,
+            ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text
         }));
     }
@@ -3663,6 +3790,19 @@ input.addEventListener('keydown', (e) => {
 // ============================================================
 function addMessage(msg) {
     const isMe = msg.from === username;
+
+    // ── Caso LLAMADA PERDIDA ──
+    if (msg.message === '__missed_call__') {
+        const li = document.createElement('li');
+        li.className = 'info-msg';
+        li.innerHTML = isMe
+            ? `📵 Llamada perdida enviada a <b>${msg.to}</b> · ${horaActual(msg.time)}`
+            : `📵 Llamada perdida de <b>${msg.from}</b> · ${horaActual(msg.time)}`;
+        li.style.cssText = 'color:#ef4444;background:rgba(239,68,68,0.08);border-radius:8px;padding:6px 12px;';
+        chat.appendChild(li);
+        if (autoScroll) scrollChat();
+        return;
+    }
 
     const row = document.createElement('li');
     row.className = `msg-row ${isMe ? 'me' : ''}`;
@@ -3801,6 +3941,28 @@ function addInfo(text) {
     chat.appendChild(li);
 }
 
+// Mostrar notificación de llamada perdida (recibida al reconectar)
+function mostrarLlamadaPerdida(data) {
+    // Añadir al historial de conversación
+    const chatKey = currentChat && (currentChat === data.from || currentChat === 'phone:' + (window._phoneToUsername ? Object.entries(window._phoneToUsername).find(([,un]) => un === data.from)?.[0] : null))
+        ? currentChat : data.from;
+
+    if (!conversations[chatKey]) conversations[chatKey] = [];
+    if (!conversations[chatKey].some(m => m.id === data.id)) conversations[chatKey].push(data);
+
+    // Si el chat con ese usuario está abierto, renderizar inline
+    if (currentChat === data.from || currentChat === chatKey) {
+        addMessage(data);
+    } else {
+        // Notificación flotante
+        unreadCounts[data.from] = (unreadCounts[data.from] || 0) + 1;
+        playNotifSound();
+        mostrarNotificacion('📵 Llamada perdida', data.from);
+    }
+    renderContactsList();
+    renderUsers(lastKnownUsers);
+}
+
 function updateEstado(id, estado) {
     const el = document.getElementById(`estado_${id}`);
     if (el) el.textContent = estado;
@@ -3837,7 +3999,36 @@ const rtcConfig = {
 
 async function iniciarLlamada() {
     if (!currentChat || !socket) return;
-    callTarget = currentChat;
+
+    // Resolver destinatario: puede ser username (online) o phone: (offline)
+    const isOfflineChat = currentChat.startsWith('phone:');
+    const offlinePhone = isOfflineChat ? currentChat.replace('phone:', '') : null;
+
+    // Para offline: obtener username del contacto desde la BD via servidor
+    // El servidor resuelve el username al recibir call_offer con toPhone
+    // Aquí simplemente enviamos la oferta — el servidor la guarda como missed call y devuelve call_rejected
+    if (isOfflineChat) {
+        // Llamada a offline: el servidor guardará missed call automáticamente
+        const contact = myContacts.get(offlinePhone);
+        const displayName = contact ? contact.customName : offlinePhone;
+        // Necesitamos el username del destinatario para enviar la oferta
+        // Buscamos si lo tenemos en caché (puede que lo hayamos visto online antes)
+        let targetUsername = contact && contact.username ? contact.username : null;
+        if (!targetUsername) {
+            addInfo(`📵 Llamada perdida enviada a ${displayName}. Le llegará la notificación al conectarse.`);
+            // Guardar missed call via mensaje especial
+            socket.send(JSON.stringify({
+                type: 'message',
+                toPhone: offlinePhone,
+                message: '__missed_call__'
+            }));
+            return;
+        }
+        callTarget = targetUsername;
+    } else {
+        callTarget = currentChat;
+    }
+
     isCaller = true;
 
     try {
@@ -3991,10 +4182,16 @@ function crearPeer() {
 function mostrarCallOverlay(name, status) {
     document.getElementById('callName').textContent = name;
     document.getElementById('callStatusText').textContent = status;
-    document.getElementById('callAvatar').src = `https://api.dicebear.com/7.x/initials/svg?seed=${name}`;
+    document.getElementById('callAvatar').src = userAvatars[name] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
     document.getElementById('callTimer').style.display = 'none';
     document.getElementById('callTimer').textContent = '00:00';
-    document.getElementById('callOverlay').classList.add('visible');
+    const overlay = document.getElementById('callOverlay');
+    // Resetear posición al inicio de cada llamada
+    overlay.style.left   = '';
+    overlay.style.bottom = '';
+    overlay.style.right  = '16px';
+    overlay.classList.add('visible');
+    activarDragPanel(overlay);
 }
 
 function actualizarTimer() {
@@ -4405,14 +4602,17 @@ function seleccionarGrupo(groupId) {
 
     document.getElementById('chatStatus').textContent = `${g.members.length} miembros`;
     document.getElementById('chatStatus').style.color = 'var(--text-muted)';
-    document.getElementById('btnVoiceCall').disabled = true;
 
-    // Botón llamada grupal: solo admin
-    const btnGC = document.getElementById('btnGroupCall');
+    // Botón unificado: solo admin puede hacer llamada grupal
+    const btnU = document.getElementById('btnCallUnified');
     if (g.ownerPhone === loginPhone) {
-        btnGC.classList.add('visible');
+        btnU.disabled = false;
+        btnU.dataset.mode = 'group';
+        btnU.title = 'Llamada grupal';
     } else {
-        btnGC.classList.remove('visible');
+        btnU.disabled = true;
+        btnU.dataset.mode = 'group';
+        btnU.title = 'Solo el administrador puede iniciar llamadas grupales';
     }
 
     if (conversations[chatKey]) {
@@ -4906,22 +5106,26 @@ function renderContactsList() {
         }
 
         const dotClass = onlineUsername ? 'status-dot' : 'status-dot contact-offline';
-        const isActive = onlineUsername && currentChat === onlineUsername ? 'active' : '';
+        const isActive = (onlineUsername && currentChat === onlineUsername)
+            || (!onlineUsername && currentChat === 'phone:' + c.contactPhone)
+            ? 'active' : '';
         const escapedPhone = c.contactPhone.replace(/'/g, "\'");
         const escapedName = displayName.replace(/'/g, "\'").replace(/"/g, '&quot;');
         const preview = onlineUsername ? (lastMessages[onlineUsername] || '') : '';
         const unread = onlineUsername ? (unreadCounts[onlineUsername] || 0) : 0;
         const badge = unread ? `<span class="unread-badge">${unread}</span>` : '';
-        const clickFn = onlineUsername ? `seleccionarUsuario('${onlineUsername}')` : '';
+        const clickFn = onlineUsername
+            ? `seleccionarUsuario('${onlineUsername}')`
+            : `seleccionarContactoOffline('${escapedPhone}')`;
 
-        return `<li class="${isActive}" onclick="${clickFn}" data-phone="${escapedPhone}" style="${!onlineUsername ? 'opacity:0.65;' : ''}">
+        return `<li class="${isActive}" onclick="${clickFn}" data-phone="${escapedPhone}">
             <div class="user-avatar-wrap">
                 <img class="user-avatar" src="${avatarUrl}" alt="${escapedName}">
                 <span class="${dotClass}"></span>
             </div>
             <div class="user-info">
                 <div class="user-name">${displayName}</div>
-                <div class="user-preview">${preview || c.contactPhone}</div>
+                <div class="user-preview">${preview || (onlineUsername ? '' : '● Desconectado')}</div>
             </div>
             ${badge}
             <div class="contact-actions">
@@ -5254,7 +5458,7 @@ function crearPeerGrupal(targetUsername, targetPhone, isInitiator, groupId) {
 }
 
 function mostrarOverlayLlamadaGrupal(g, onlineMembers) {
-    document.getElementById('groupCallTitle').textContent = '👥 ' + g.name;
+    document.getElementById('groupCallTitle').textContent = '📞 ' + g.name;
     document.getElementById('groupCallSubtitle').textContent = 'Llamando a ' + onlineMembers.length + ' miembro(s)…';
     document.getElementById('groupCallTimer').style.display = 'none';
     document.getElementById('groupCallTimer').textContent = '00:00';
@@ -5273,7 +5477,15 @@ function mostrarOverlayLlamadaGrupal(g, onlineMembers) {
         </div>`;
     }).join('');
 
-    document.getElementById('groupCallOverlay').classList.add('visible');
+    const overlay = document.getElementById('groupCallOverlay');
+    // Resetear posición al inicio de cada llamada
+    overlay.style.left   = '';
+    overlay.style.bottom = '';
+    overlay.style.right  = '16px';
+    overlay.classList.add('visible');
+
+    // Hacer el panel arrastrable
+    activarDragPanel(overlay);
 }
 
 function actualizarEstadoParticipante(username, state) {
@@ -5416,6 +5628,79 @@ function onGroupCallEnded(data) {
     limpiarLlamadaGrupal();
     addInfo('La llamada grupal ha finalizado.');
 }
+
+// ============================================================
+// DRAG — hace arrastrable un panel flotante (touch + mouse)
+// ============================================================
+function activarDragPanel(el) {
+    // Evitar doble-bind
+    if (el._dragBound) return;
+    el._dragBound = true;
+
+    let startX, startY, origLeft, origBottom;
+
+    function onDown(e) {
+        // Solo arrastrar desde el propio fondo del panel (no los botones)
+        if (e.target.closest('button') || e.target.closest('img')) return;
+        const touch = e.touches ? e.touches[0] : e;
+        startX = touch.clientX;
+        startY = touch.clientY;
+        const rect = el.getBoundingClientRect();
+        origLeft   = rect.left;
+        origBottom = window.innerHeight - rect.bottom;
+        // Fijar posición absoluta en left/bottom para el drag
+        el.style.right  = 'auto';
+        el.style.left   = origLeft + 'px';
+        el.style.bottom = origBottom + 'px';
+        document.addEventListener(e.touches ? 'touchmove' : 'mousemove', onMove, { passive: false });
+        document.addEventListener(e.touches ? 'touchend'  : 'mouseup',   onUp);
+    }
+    function onMove(e) {
+        e.preventDefault();
+        const touch = e.touches ? e.touches[0] : e;
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        let newLeft   = origLeft   + dx;
+        let newBottom = origBottom - dy;
+        // Mantener dentro de la ventana
+        newLeft   = Math.max(0, Math.min(window.innerWidth  - el.offsetWidth,  newLeft));
+        newBottom = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, newBottom));
+        el.style.left   = newLeft   + 'px';
+        el.style.bottom = newBottom + 'px';
+    }
+    function onUp(e) {
+        document.removeEventListener(e.type === 'touchend' ? 'touchmove' : 'mousemove', onMove);
+        document.removeEventListener(e.type,  onUp);
+    }
+    el.addEventListener('mousedown',  onDown);
+    el.addEventListener('touchstart', onDown, { passive: false });
+}
+
+// ============================================================
+// SESIÓN PERSISTENTE (se mantiene en refresh, se borra al cerrar pestaña)
+// ============================================================
+(function tryAutoLogin() {
+    const saved = sessionStorage.getItem('kvs_session');
+    if (!saved) return;
+    try {
+        const s = JSON.parse(saved);
+        if (!s.phone || !s.username) return;
+        loginPhone    = s.phone;
+        loginUsername = s.username;
+        // Restaurar avatar guardado
+        const savedAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
+        myAvatarDataUrl = savedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
+        // Mostrar app directamente sin login
+        document.getElementById('loginModal').style.display  = 'none';
+        document.getElementById('appContainer').style.display = 'flex';
+        document.getElementById('myName').textContent   = loginUsername;
+        document.getElementById('myPhone').textContent  = loginPhone;
+        document.getElementById('myAvatar').src         = myAvatarDataUrl;
+        conectarWS();
+    } catch(e) {
+        sessionStorage.removeItem('kvs_session');
+    }
+})();
 
 </script>
 </body>
