@@ -1862,6 +1862,8 @@ emoji-picker.visible { display: block; }
 
 #groupsList li:hover { background: var(--purple-pale); }
 #groupsList li.active { background: var(--purple-pale); }
+#groupsList li:hover .contact-actions { display: flex; }
+@media (hover: none) and (pointer: coarse) { #groupsList li .contact-actions { display: flex; } }
 
 .group-avatar-circle {
     width: 40px;
@@ -1875,9 +1877,101 @@ emoji-picker.visible { display: block; }
     flex-shrink: 0;
     color: white;
     font-weight: 700;
+    overflow: hidden;
+    cursor: default;
+}
+.group-avatar-circle img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
 }
 
-/* Modal crear grupo */
+/* Botón llamada grupal en el header */
+#btnGroupCall {
+    display: none;
+}
+#btnGroupCall.visible {
+    display: flex;
+}
+
+/* Avatar de grupo en el header — reutiliza .group-avatar-circle pero más grande */
+#chatGroupAvatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    display: none; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0; color: white; font-weight: 700;
+    overflow: hidden; cursor: pointer; transition: opacity var(--transition);
+}
+#chatGroupAvatar:hover { opacity: 0.8; }
+#chatGroupAvatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+#chatGroupAvatar.visible { display: flex; }
+
+/* Input oculto para foto de grupo */
+#groupAvatarFileInput { display: none; }
+
+/* Overlay llamada grupal */
+#groupCallOverlay {
+    display: none; position: fixed; inset: 0; z-index: 9800;
+    background: linear-gradient(135deg, #1e1b4b, #312e81);
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    padding: 24px;
+}
+#groupCallOverlay.visible { display: flex; }
+.group-call-title {
+    font-size: 22px; font-weight: 700; color: white; text-align: center;
+}
+.group-call-subtitle {
+    font-size: 14px; color: rgba(255,255,255,0.65); text-align: center; margin-top: -8px;
+}
+.group-call-avatars {
+    display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 340px;
+}
+.group-call-participant {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.group-call-participant img {
+    width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.25);
+}
+.group-call-participant.connected img { border-color: #10b981; }
+.group-call-participant.calling img  { border-color: #f59e0b; animation: callPulse 1s ease-in-out infinite; }
+.group-call-participant.rejected img { border-color: #ef4444; opacity: 0.5; }
+@keyframes callPulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0.5)} 50%{box-shadow:0 0 0 8px rgba(245,158,11,0)} }
+.group-call-participant-name {
+    font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 600; text-align: center; max-width: 64px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.group-call-timer {
+    font-size: 28px; font-weight: 700; color: white; font-family: 'DM Mono', monospace;
+}
+.group-call-actions {
+    display: flex; gap: 16px; margin-top: 8px;
+}
+.btn-group-call-mute {
+    width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(255,255,255,0.15); color: white; font-size: 22px;
+    display: flex; align-items: center; justify-content: center; transition: all .2s;
+}
+.btn-group-call-mute:hover { background: rgba(255,255,255,0.25); }
+.btn-group-call-mute.muted { background: rgba(239,68,68,0.4); }
+.btn-group-call-end {
+    width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
+    background: #ef4444; color: white; font-size: 26px;
+    display: flex; align-items: center; justify-content: center; transition: all .2s;
+}
+.btn-group-call-end:hover { background: #dc2626; transform: scale(1.05); }
+
+/* Banner llamada grupal entrante */
+#incomingGroupCall {
+    display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 9900; background: white; border-radius: 18px; box-shadow: var(--shadow-card);
+    padding: 14px 18px; max-width: 360px; width: calc(100vw - 32px);
+}
+#incomingGroupCall.visible { display: block; }
+.incoming-group-inner {
+    display: flex; align-items: center; gap: 12px;
+}
+.incoming-group-info { flex: 1; min-width: 0; }
+.incoming-group-title { font-size: 13px; color: var(--text-muted); }
+.incoming-group-name  { font-size: 15px; font-weight: 700; color: var(--text-dark); }
 #createGroupModal {
     display: none;
     position: fixed;
@@ -1999,6 +2093,70 @@ emoji-picker.visible { display: block; }
     padding: 1px 5px;
     font-weight: 700;
     flex-shrink: 0;
+}
+
+/* ── Badges de estado en listas de miembros ── */
+.member-not-contact {
+    font-size: 10px; background: #fef3c7; color: #92400e;
+    border-radius: 4px; padding: 1px 6px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+.member-is-contact {
+    font-size: 10px; background: #d1fae5; color: #065f46;
+    border-radius: 4px; padding: 1px 6px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+.member-is-me {
+    font-size: 10px; background: var(--purple-pale); color: var(--purple-deep);
+    border-radius: 4px; padding: 1px 6px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+
+/* ── Fila de miembro en modales de grupo ── */
+.group-member-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: var(--radius-sm); background: var(--bg-sidebar);
+}
+.group-member-phone {
+    font-size: 11px; color: var(--text-muted);
+    font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Modal Ver Miembros ── */
+#viewMembersModal {
+    display: none; position: fixed; inset: 0; z-index: 9500;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(15,10,40,0.7); backdrop-filter: blur(6px);
+}
+#viewMembersModal.visible { display: flex; }
+.view-members-card {
+    background: var(--white); border-radius: 20px; padding: 28px 24px 24px;
+    width: 100%; max-width: 420px; box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column; gap: 14px;
+    animation: loginIn .25s ease; max-height: 88vh; overflow-y: auto;
+}
+.view-members-card h3 { font-size: 17px; font-weight: 700; color: var(--text-dark); margin: 0; display: flex; align-items: center; gap: 8px; }
+.view-members-subtitle { font-size: 12px; color: var(--text-muted); margin-top: -6px; }
+.view-members-list {
+    display: flex; flex-direction: column; gap: 6px; max-height: 300px;
+    overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 10px;
+}
+
+/* ── Modal Editar Grupo ── */
+#editGroupModal {
+    display: none; position: fixed; inset: 0; z-index: 9500;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(15,10,40,0.7); backdrop-filter: blur(6px);
+}
+#editGroupModal.visible { display: flex; }
+.edit-group-card {
+    background: var(--white); border-radius: 20px; padding: 28px 24px 24px;
+    width: 100%; max-width: 460px; box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column; gap: 16px;
+    animation: loginIn .25s ease; max-height: 92vh; overflow-y: auto;
+}
+.edit-group-card h3 { font-size: 17px; font-weight: 700; color: var(--text-dark); margin: 0; display: flex; align-items: center; gap: 8px; }
+.edit-group-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.edit-group-members-list {
+    display: flex; flex-direction: column; gap: 6px; max-height: 220px;
+    overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 10px;
 }
 
 
@@ -2419,11 +2577,13 @@ html.is-mobile .contact-actions { display: flex; }
       <div class="chat-header">
         <button id="hamburger" onclick="toggleSidebar()">☰</button>
         <img id="chatAvatar" src="" style="display:none">
+        <div id="chatGroupAvatar" onclick="onClickGroupAvatar()" title="Cambiar foto del grupo"></div>
         <div class="chat-header-info">
           <div id="chatName" style="color:var(--text-muted);font-weight:400;font-size:14px;">Selecciona un usuario para empezar</div>
           <div id="chatStatus"></div>
         </div>
         <div class="call-btns">
+          <button class="btn-call audio" id="btnGroupCall" title="Llamada grupal" onclick="iniciarLlamadaGrupal()">📞</button>
           <button class="btn-call audio" id="btnVoiceCall" title="Llamada de voz" onclick="iniciarLlamada()" disabled>📞</button>
         </div>
       </div>
@@ -2611,6 +2771,86 @@ html.is-mobile .contact-actions { display: flex; }
     <div class="add-contact-actions">
       <button class="btn-contact-cancel" onclick="cerrarModalCrearGrupo()">Cancelar</button>
       <button class="btn-contact-save" id="btnCrearGrupo" onclick="crearGrupo()">Crear grupo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL VER MIEMBROS (visible para todos los miembros del grupo)
+============================================================ -->
+<div id="viewMembersModal">
+  <div class="view-members-card">
+    <h3>👥 <span id="viewMembersGroupName"></span></h3>
+    <p class="view-members-subtitle">🟢 Verde = contacto agregado &nbsp;·&nbsp; 🟡 Amarillo = sin agregar</p>
+    <div class="view-members-list" id="viewMembersList"></div>
+    <div class="add-contact-actions" style="margin-top:4px;">
+      <button class="btn-contact-save" onclick="cerrarModalVerMiembros()" style="flex:1;">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL EDITAR GRUPO (solo para el admin)
+============================================================ -->
+<div id="editGroupModal">
+  <div class="edit-group-card">
+    <h3>✏️ Editar grupo</h3>
+
+    <div class="add-contact-field">
+      <label>Nombre del grupo</label>
+      <input class="add-contact-input" type="text" id="editGroupNameInput"
+        placeholder="Nombre del grupo" maxlength="40">
+    </div>
+
+    <div>
+      <div class="edit-group-section-title">Miembros actuales</div>
+      <div class="edit-group-members-list" id="editGroupCurrentMembers"></div>
+    </div>
+
+    <div>
+      <div class="edit-group-section-title">Añadir más contactos</div>
+      <div class="edit-group-members-list group-members-list" id="editGroupAddMembers"></div>
+    </div>
+
+    <div class="add-contact-error" id="editGroupError"></div>
+
+    <div class="add-contact-actions">
+      <button class="btn-contact-cancel" onclick="cerrarModalEditarGrupo()">Cancelar</button>
+      <button class="btn-contact-save" id="btnGuardarEditarGrupo" onclick="guardarEditarGrupo()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<!-- Input oculto para cambiar foto del grupo -->
+<input type="file" id="groupAvatarFileInput" accept="image/*" style="display:none" onchange="onGroupAvatarFileSelected(event)">
+
+<!-- ============================================================
+     OVERLAY LLAMADA GRUPAL (admin)
+============================================================ -->
+<div id="groupCallOverlay">
+  <div class="group-call-title" id="groupCallTitle">Llamada grupal</div>
+  <div class="group-call-subtitle" id="groupCallSubtitle">Conectando…</div>
+  <div class="group-call-timer" id="groupCallTimer" style="display:none">00:00</div>
+  <div class="group-call-avatars" id="groupCallAvatars"></div>
+  <div class="group-call-actions">
+    <button class="btn-group-call-mute" id="btnGroupCallMute" onclick="toggleGroupMute()" title="Silenciar">🎤</button>
+    <button class="btn-group-call-end" onclick="terminarLlamadaGrupal()" title="Colgar">📵</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     BANNER LLAMADA GRUPAL ENTRANTE
+============================================================ -->
+<div id="incomingGroupCall">
+  <div class="incoming-group-inner">
+    <div style="font-size:32px;flex-shrink:0;">👥</div>
+    <div class="incoming-group-info">
+      <div class="incoming-group-title">Llamada grupal entrante</div>
+      <div class="incoming-group-name" id="incomingGroupName"></div>
+    </div>
+    <div class="incoming-actions">
+      <button class="btn-accept" onclick="aceptarLlamadaGrupal()" title="Aceptar">📞</button>
+      <button class="btn-decline" onclick="rechazarLlamadaGrupal()" title="Rechazar">📵</button>
     </div>
   </div>
 </div>
@@ -3219,8 +3459,29 @@ function handleMessage(data) {
     if (data.type === 'groupError') {
         const errEl = document.getElementById('createGroupError');
         if (errEl) errEl.textContent = 'Error: ' + data.message;
+        const editErrEl = document.getElementById('editGroupError');
+        if (editErrEl) editErrEl.textContent = 'Error: ' + data.message;
+        const editBtn = document.getElementById('btnGuardarEditarGrupo');
+        if (editBtn) editBtn.disabled = false;
         return;
     }
+    if (data.type === 'groupUpdated') {
+        onGroupUpdated(data);
+        return;
+    }
+    if (data.type === 'groupAvatarUpdated') {
+        const grp = myGroups.get(data.groupId);
+        if (grp) { grp.avatar = data.avatar; myGroups.set(data.groupId, grp); }
+        // Actualizar header si es el grupo activo
+        if (currentChat === 'group_' + data.groupId) actualizarHeaderGrupo(grp || { groupId: data.groupId, avatar: data.avatar, name: '' });
+        renderGroupsList();
+        return;
+    }
+    if (data.type === 'group_call_offer')    { recibirLlamadaGrupal(data); return; }
+    if (data.type === 'group_call_answer')   { onGroupCallAnswer(data); return; }
+    if (data.type === 'group_call_ice')      { onGroupCallIce(data); return; }
+    if (data.type === 'group_call_rejected') { onGroupCallRejected(data); return; }
+    if (data.type === 'group_call_ended')    { onGroupCallEnded(data); return; }
 }
 
 let lastKnownUsers = [];
@@ -3288,6 +3549,11 @@ function seleccionarUsuario(user) {
     const av = document.getElementById('chatAvatar');
     av.src = userAvatars[user] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user)}`;
     av.style.display = 'block';
+
+    // Ocultar avatar de grupo y botón de llamada grupal
+    document.getElementById('chatGroupAvatar').classList.remove('visible');
+    document.getElementById('btnGroupCall').classList.remove('visible');
+
     const isOnline = lastKnownUsers.includes(user);
     document.getElementById('chatStatus').textContent = isOnline ? '● En línea' : '○ Desconectado';
     document.getElementById('chatStatus').style.color = isOnline ? 'var(--online)' : 'var(--text-muted)';
@@ -4090,6 +4356,10 @@ function renderGroupsList() {
         const escapedName = g.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
 
         const ownerBadge = isOwner ? `<span class="group-badge-owner">Admin</span>` : '';
+        const viewBtn    = `<button class="btn-group-action" onclick="event.stopPropagation();abrirModalVerMiembros('${g.groupId}')" title="Ver miembros">👁️</button>`;
+        const editBtn    = isOwner
+            ? `<button class="btn-group-action" onclick="event.stopPropagation();abrirModalEditarGrupo('${g.groupId}')" title="Editar grupo">✏️</button>`
+            : '';
         const leaveBtn   = !isOwner
             ? `<button class="btn-group-action danger" onclick="event.stopPropagation();salirDeGrupo('${g.groupId}','${escapedName}')" title="Salir del grupo">🚪</button>`
             : '';
@@ -4098,13 +4368,13 @@ function renderGroupsList() {
             : '';
 
         return `<li class="${isActive}" onclick="seleccionarGrupo('${g.groupId}')">
-            <div class="group-avatar-circle">${initial}</div>
+            <div class="group-avatar-circle">${g.avatar ? `<img src="${g.avatar}" alt="${g.name}">` : initial}</div>
             <div class="user-info" style="flex:1;min-width:0;">
                 <div class="user-name" style="display:flex;align-items:center;gap:6px;">${g.name} ${ownerBadge}</div>
                 <div class="user-preview">${preview || g.members.length + ' miembros'}</div>
             </div>
             ${badge}
-            <div class="contact-actions">${leaveBtn}${deleteBtn}</div>
+            <div class="contact-actions">${viewBtn}${editBtn}${leaveBtn}${deleteBtn}</div>
         </li>`;
     });
 
@@ -4125,11 +4395,25 @@ function seleccionarGrupo(groupId) {
     document.getElementById('chatName').style.color = '';
     document.getElementById('chatName').style.fontWeight = '';
     document.getElementById('chatName').style.fontSize = '';
+
+    // Ocultar avatar de usuario 1:1
     const av = document.getElementById('chatAvatar');
     av.style.display = 'none';
+
+    // Mostrar avatar de grupo
+    actualizarHeaderGrupo(g);
+
     document.getElementById('chatStatus').textContent = `${g.members.length} miembros`;
     document.getElementById('chatStatus').style.color = 'var(--text-muted)';
     document.getElementById('btnVoiceCall').disabled = true;
+
+    // Botón llamada grupal: solo admin
+    const btnGC = document.getElementById('btnGroupCall');
+    if (g.ownerPhone === loginPhone) {
+        btnGC.classList.add('visible');
+    } else {
+        btnGC.classList.remove('visible');
+    }
 
     if (conversations[chatKey]) {
         let lastDay = '';
@@ -4339,7 +4623,217 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('groupNameInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') crearGrupo();
     });
+
+    // Modal ver miembros: cerrar al click fuera
+    const vmm = document.getElementById('viewMembersModal');
+    if (vmm) vmm.addEventListener('click', (e) => { if (e.target === vmm) cerrarModalVerMiembros(); });
+
+    // Modal editar grupo: cerrar al click fuera + Enter en el nombre
+    const egm = document.getElementById('editGroupModal');
+    if (egm) egm.addEventListener('click', (e) => { if (e.target === egm) cerrarModalEditarGrupo(); });
+    const egn = document.getElementById('editGroupNameInput');
+    if (egn) egn.addEventListener('keydown', (e) => { if (e.key === 'Enter') guardarEditarGrupo(); });
 });
+
+// ============================================================
+// VER MIEMBROS DEL GRUPO (todos los miembros)
+// ============================================================
+
+function abrirModalVerMiembros(groupId) {
+    const g = myGroups.get(groupId);
+    if (!g) return;
+
+    document.getElementById('viewMembersGroupName').textContent = g.name;
+
+    const listEl = document.getElementById('viewMembersList');
+    listEl.innerHTML = g.members.map(phone => {
+        const isMe = phone === loginPhone;
+        const isOwner = phone === g.ownerPhone;
+        const contactEntry = myContacts.get(phone);
+        const isContact = !!contactEntry;
+
+        const displayName = isMe ? loginUsername
+            : (contactEntry ? contactEntry.customName : phone);
+        const seedName = isMe ? loginUsername
+            : (contactEntry ? (contactEntry.username || contactEntry.customName) : phone);
+        const avatarUrl = isMe ? myAvatarDataUrl
+            : (contactEntry
+                ? (contactEntry.avatar || userAvatars['__phone__' + phone]
+                    || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`)
+                : (userAvatars['__phone__' + phone]
+                    || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`));
+
+        let badges = '';
+        if (isMe) {
+            badges = `<span class="member-is-me">Tú</span>`;
+        } else {
+            if (isOwner) badges += `<span class="member-is-me">Admin</span>`;
+            if (isContact) badges += `<span class="member-is-contact">✓ Contacto</span>`;
+            else           badges += `<span class="member-not-contact">Sin agregar</span>`;
+        }
+
+        const addBtn = (!isMe && !isContact)
+            ? `<button class="btn-group-action" title="Agregar contacto"
+                onclick="abrirModalAgregarContactoDesdeGrupo('${phone.replace(/'/g,"\\'")}','${seedName.replace(/'/g,"\\'")}')"
+                style="font-size:12px;padding:3px 8px;">＋</button>`
+            : '';
+
+        return `<div class="group-member-row">
+            <img class="group-member-avatar" src="${avatarUrl}" alt="${escapeHTML(displayName)}"
+                onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
+            <div style="flex:1;min-width:0;">
+                <div class="group-member-name">${escapeHTML(displayName)}</div>
+                <div class="group-member-phone">${phone}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${badges}${addBtn}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('viewMembersModal').classList.add('visible');
+}
+
+function cerrarModalVerMiembros() {
+    document.getElementById('viewMembersModal').classList.remove('visible');
+}
+
+// Abre el modal "Nuevo contacto" con el teléfono del miembro pre-rellenado
+function abrirModalAgregarContactoDesdeGrupo(phone, suggestedName) {
+    cerrarModalVerMiembros();
+    const digits = phone.replace(/^\+34/, '').replace(/\D/g, '').slice(0, 9);
+    document.getElementById('contactPhoneInput').value = digits;
+    document.getElementById('contactNameInput').value = suggestedName || '';
+    document.getElementById('addContactError').textContent = '';
+    document.getElementById('btnGuardarContacto').disabled = false;
+    document.getElementById('addContactModal').classList.add('visible');
+    document.getElementById('contactNameInput').focus();
+}
+
+// ============================================================
+// EDITAR GRUPO (solo el admin)
+// ============================================================
+
+let _editingGroupId = null;
+
+function abrirModalEditarGrupo(groupId) {
+    const g = myGroups.get(groupId);
+    if (!g) return;
+    _editingGroupId = groupId;
+
+    document.getElementById('editGroupNameInput').value = g.name;
+    document.getElementById('editGroupError').textContent = '';
+    document.getElementById('btnGuardarEditarGrupo').disabled = false;
+
+    // Miembros actuales
+    const currentEl = document.getElementById('editGroupCurrentMembers');
+    currentEl.innerHTML = g.members.map(phone => {
+        const isMe = phone === loginPhone;
+        const isOwner = phone === g.ownerPhone;
+        const contactEntry = myContacts.get(phone);
+        const isContact = !!contactEntry;
+        const displayName = isMe ? (loginUsername + ' (tú)')
+            : (contactEntry ? contactEntry.customName : phone);
+        const seedName = isMe ? loginUsername
+            : (contactEntry ? (contactEntry.username || contactEntry.customName) : phone);
+        const avatarUrl = isMe ? myAvatarDataUrl
+            : (contactEntry
+                ? (contactEntry.avatar || userAvatars['__phone__' + phone]
+                    || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`)
+                : (userAvatars['__phone__' + phone]
+                    || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`));
+
+        let badge = isMe ? `<span class="member-is-me">Tú</span>`
+            : isOwner ? `<span class="member-is-me">Admin</span>`
+            : isContact ? `<span class="member-is-contact">Contacto</span>`
+            : `<span class="member-not-contact">Sin agregar</span>`;
+
+        const removeBtn = !isMe
+            ? `<button class="btn-group-action danger" title="Quitar del grupo"
+                onclick="quitarMiembroDelGrupo(this,'${phone.replace(/'/g,"\\'")}')"
+                style="margin-left:4px;">✕</button>`
+            : '';
+
+        return `<div class="group-member-row" data-phone="${phone}">
+            <img class="group-member-avatar" src="${avatarUrl}" alt="${escapeHTML(displayName)}"
+                onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
+            <div style="flex:1;min-width:0;">
+                <div class="group-member-name">${escapeHTML(displayName)}</div>
+                <div class="group-member-phone">${phone}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${badge}${removeBtn}</div>
+        </div>`;
+    }).join('');
+
+    // Contactos para añadir (los que aún no están en el grupo)
+    const addEl = document.getElementById('editGroupAddMembers');
+    const memberSet = new Set(g.members);
+    const toAdd = [...myContacts.values()].filter(c => !memberSet.has(c.contactPhone));
+    if (toAdd.length === 0) {
+        addEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted);padding:4px 0;">Todos tus contactos ya están en el grupo.</span>';
+    } else {
+        addEl.innerHTML = toAdd.map(c => {
+            const seedName = c.username || c.customName;
+            const avatarUrl = c.avatar || userAvatars['__phone__' + c.contactPhone]
+                || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`;
+            return `<label class="group-member-item">
+                <input type="checkbox" value="${c.contactPhone.replace(/'/g,"\\'")}">
+                <img class="group-member-avatar" src="${avatarUrl}" alt="${escapeHTML(c.customName)}"
+                    onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
+                <span class="group-member-name">${escapeHTML(c.customName)}</span>
+            </label>`;
+        }).join('');
+    }
+
+    document.getElementById('editGroupModal').classList.add('visible');
+    setTimeout(() => document.getElementById('editGroupNameInput').focus(), 80);
+}
+
+function cerrarModalEditarGrupo() {
+    document.getElementById('editGroupModal').classList.remove('visible');
+    _editingGroupId = null;
+}
+
+function quitarMiembroDelGrupo(btn, phone) {
+    const row = btn.closest('[data-phone]');
+    if (row) row.remove();
+}
+
+function guardarEditarGrupo() {
+    if (!_editingGroupId) return;
+    const errEl = document.getElementById('editGroupError');
+    const newName = document.getElementById('editGroupNameInput').value.trim();
+    if (!newName) { errEl.textContent = 'El nombre no puede estar vacío.'; return; }
+
+    const remainingPhones = [...document.querySelectorAll('#editGroupCurrentMembers [data-phone]')]
+        .map(r => r.getAttribute('data-phone'));
+    const newPhones = [...document.querySelectorAll('#editGroupAddMembers input[type=checkbox]:checked')]
+        .map(cb => cb.value);
+    const allPhones = [...new Set([...remainingPhones, ...newPhones])];
+
+    if (allPhones.length === 0) { errEl.textContent = 'El grupo debe tener al menos un miembro.'; return; }
+
+    errEl.textContent = '';
+    document.getElementById('btnGuardarEditarGrupo').disabled = true;
+    socket.send(JSON.stringify({ type: 'editGroup', groupId: _editingGroupId, name: newName, memberPhones: allPhones }));
+}
+
+function onGroupUpdated(data) {
+    const existing = myGroups.get(data.groupId);
+    if (existing) {
+        existing.name       = data.name;
+        existing.ownerPhone = data.ownerPhone;
+        existing.members    = data.members;
+        myGroups.set(data.groupId, existing);
+    } else {
+        myGroups.set(data.groupId, { groupId: data.groupId, name: data.name, ownerPhone: data.ownerPhone, members: data.members });
+    }
+    const chatKey = 'group_' + data.groupId;
+    if (currentChat === chatKey) {
+        document.getElementById('chatName').textContent = '👥 ' + data.name;
+        document.getElementById('chatStatus').textContent = `${data.members.length} miembros`;
+    }
+    renderGroupsList();
+    cerrarModalEditarGrupo();
+}
 
 // ============================================================
 // CONTACTOS
@@ -4593,6 +5087,335 @@ document.addEventListener('DOMContentLoaded', () => {
 document.getElementById('addContactModal').addEventListener('click', (e) => {
     if (e.target === document.getElementById('addContactModal')) cerrarModalContacto();
 });
+
+// ============================================================
+// FOTO DE GRUPO
+// ============================================================
+
+// Actualiza el avatar de grupo en el header del chat
+function actualizarHeaderGrupo(g) {
+    const el = document.getElementById('chatGroupAvatar');
+    if (!el || !g) return;
+    if (g.avatar) {
+        el.innerHTML = `<img src="${g.avatar}" alt="${escapeHTML(g.name || '')}">`;
+    } else {
+        el.innerHTML = (g.name || '?').charAt(0).toUpperCase();
+    }
+    // Solo el admin puede cambiar la foto → tooltip diferente
+    el.title = (g.ownerPhone === loginPhone) ? 'Cambiar foto del grupo' : 'Foto del grupo';
+    el.classList.add('visible');
+}
+
+// Click en el avatar del grupo en el header
+function onClickGroupAvatar() {
+    if (!currentChat || !currentChat.startsWith('group_')) return;
+    const groupId = currentChat.replace('group_', '');
+    const g = myGroups.get(groupId);
+    if (!g || g.ownerPhone !== loginPhone) return; // solo admin
+    document.getElementById('groupAvatarFileInput').value = '';
+    document.getElementById('groupAvatarFileInput').click();
+}
+
+function onGroupAvatarFileSelected(event) {
+    const file = event.target.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > 5 * 1024 * 1024) { alert('La imagen es demasiado grande. Máximo 5MB.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const SIZE = 256;
+            canvas.width = SIZE; canvas.height = SIZE;
+            const ctx = canvas.getContext('2d');
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, SIZE, SIZE);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+            const groupId = currentChat.replace('group_', '');
+            // Actualizar localmente de inmediato
+            const g = myGroups.get(groupId);
+            if (g) { g.avatar = dataUrl; myGroups.set(groupId, g); }
+            actualizarHeaderGrupo(myGroups.get(groupId));
+            renderGroupsList();
+
+            // Enviar al servidor
+            socket.send(JSON.stringify({ type: 'updateGroupAvatar', groupId, avatar: dataUrl }));
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+// ============================================================
+// LLAMADA GRUPAL (admin inicia, WebRTC mesh)
+// ============================================================
+// Estado de la llamada grupal
+let groupCallState = {
+    groupId: null,
+    peers: {},       // username → { pc, stream, phone }
+    localStream: null,
+    timerInterval: null,
+    startTime: null,
+    isMuted: false
+};
+
+function iniciarLlamadaGrupal() {
+    if (!currentChat || !currentChat.startsWith('group_')) return;
+    const groupId = currentChat.replace('group_', '');
+    const g = myGroups.get(groupId);
+    if (!g || g.ownerPhone !== loginPhone) return;
+
+    // Obtener miembros online (excluir al propio admin)
+    const onlineMembers = g.members.filter(phone => {
+        if (phone === loginPhone) return false;
+        return window._phoneToUsername && window._phoneToUsername[phone];
+    });
+    if (onlineMembers.length === 0) {
+        alert('No hay miembros del grupo conectados en este momento.');
+        return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        groupCallState.groupId = groupId;
+        groupCallState.localStream = stream;
+        groupCallState.peers = {};
+        groupCallState.isMuted = false;
+
+        mostrarOverlayLlamadaGrupal(g, onlineMembers);
+
+        // Crear un peer por cada miembro online y enviar ofertas
+        onlineMembers.forEach(memberPhone => {
+            const memberUsername = window._phoneToUsername[memberPhone];
+            if (!memberUsername) return;
+            crearPeerGrupal(memberUsername, memberPhone, true, groupId);
+        });
+    }).catch(e => { alert('No se pudo acceder al micrófono: ' + e.message); });
+}
+
+function crearPeerGrupal(targetUsername, targetPhone, isInitiator, groupId) {
+    const pc = new RTCPeerConnection(rtcConfig);
+    groupCallState.peers[targetUsername] = { pc, phone: targetPhone };
+
+    groupCallState.localStream.getTracks().forEach(t => pc.addTrack(t, groupCallState.localStream));
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) {
+            socket.send(JSON.stringify({
+                type: 'group_call_ice',
+                to: targetUsername,
+                groupId,
+                candidate: e.candidate
+            }));
+        }
+    };
+
+    pc.ontrack = (e) => {
+        // Reproducir audio del participante
+        let audioEl = document.getElementById('groupAudio_' + targetUsername);
+        if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.id = 'groupAudio_' + targetUsername;
+            audioEl.autoplay = true;
+            audioEl.style.display = 'none';
+            document.body.appendChild(audioEl);
+        }
+        audioEl.srcObject = e.streams[0];
+        actualizarEstadoParticipante(targetUsername, 'connected');
+    };
+
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+            actualizarEstadoParticipante(targetUsername, 'connected');
+            // Iniciar timer cuando al menos uno conecte
+            if (!groupCallState.startTime) {
+                groupCallState.startTime = Date.now();
+                groupCallState.timerInterval = setInterval(actualizarTimerGrupal, 1000);
+                document.getElementById('groupCallTimer').style.display = 'block';
+            }
+        }
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            actualizarEstadoParticipante(targetUsername, 'rejected');
+        }
+    };
+
+    if (isInitiator) {
+        pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
+            socket.send(JSON.stringify({
+                type: 'group_call_offer',
+                groupId,
+                sdp: pc.localDescription.sdp
+            }));
+        });
+    }
+}
+
+function mostrarOverlayLlamadaGrupal(g, onlineMembers) {
+    document.getElementById('groupCallTitle').textContent = '👥 ' + g.name;
+    document.getElementById('groupCallSubtitle').textContent = 'Llamando a ' + onlineMembers.length + ' miembro(s)…';
+    document.getElementById('groupCallTimer').style.display = 'none';
+    document.getElementById('groupCallTimer').textContent = '00:00';
+
+    const avatarsEl = document.getElementById('groupCallAvatars');
+    avatarsEl.innerHTML = onlineMembers.map(phone => {
+        const uname = window._phoneToUsername[phone] || phone;
+        const contact = myContacts.get(phone);
+        const displayName = contact ? contact.customName : uname;
+        const avatarUrl = contact
+            ? (contact.avatar || userAvatars['__phone__' + phone] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(uname)}`)
+            : (userAvatars['__phone__' + phone] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(uname)}`);
+        return `<div class="group-call-participant calling" id="gcpart_${uname}">
+            <img src="${avatarUrl}" alt="${escapeHTML(displayName)}">
+            <div class="group-call-participant-name">${escapeHTML(displayName)}</div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('groupCallOverlay').classList.add('visible');
+}
+
+function actualizarEstadoParticipante(username, state) {
+    const el = document.getElementById('gcpart_' + username);
+    if (!el) return;
+    el.className = 'group-call-participant ' + state;
+    const connectedCount = document.querySelectorAll('.group-call-participant.connected').length;
+    if (connectedCount > 0) {
+        document.getElementById('groupCallSubtitle').textContent = connectedCount + ' conectado(s)';
+    }
+}
+
+function actualizarTimerGrupal() {
+    if (!groupCallState.startTime) return;
+    const elapsed = Math.floor((Date.now() - groupCallState.startTime) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    document.getElementById('groupCallTimer').textContent = m + ':' + s;
+}
+
+function toggleGroupMute() {
+    if (!groupCallState.localStream) return;
+    groupCallState.isMuted = !groupCallState.isMuted;
+    groupCallState.localStream.getAudioTracks().forEach(t => t.enabled = !groupCallState.isMuted);
+    const btn = document.getElementById('btnGroupCallMute');
+    btn.textContent = groupCallState.isMuted ? '🔇' : '🎤';
+    btn.classList.toggle('muted', groupCallState.isMuted);
+}
+
+function terminarLlamadaGrupal() {
+    if (groupCallState.groupId) {
+        socket.send(JSON.stringify({ type: 'group_call_ended', groupId: groupCallState.groupId }));
+    }
+    limpiarLlamadaGrupal();
+}
+
+function limpiarLlamadaGrupal() {
+    if (groupCallState.timerInterval) { clearInterval(groupCallState.timerInterval); }
+    Object.values(groupCallState.peers).forEach(({ pc }) => { try { pc.close(); } catch(e) {} });
+    document.querySelectorAll('[id^="groupAudio_"]').forEach(el => { el.srcObject = null; el.remove(); });
+    if (groupCallState.localStream) groupCallState.localStream.getTracks().forEach(t => t.stop());
+    groupCallState = { groupId: null, peers: {}, localStream: null, timerInterval: null, startTime: null, isMuted: false };
+    document.getElementById('groupCallOverlay').classList.remove('visible');
+}
+
+// --- Recibir llamada grupal (miembro) ---
+let _pendingGroupOffer = null;
+
+function recibirLlamadaGrupal(data) {
+    _pendingGroupOffer = data;
+    document.getElementById('incomingGroupName').textContent = data.from + ' · ' + data.groupName;
+    document.getElementById('incomingGroupCall').classList.add('visible');
+    playRingtone();
+}
+
+function aceptarLlamadaGrupal() {
+    stopRingtone();
+    document.getElementById('incomingGroupCall').classList.remove('visible');
+    const offer = _pendingGroupOffer;
+    if (!offer) return;
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        groupCallState.groupId = offer.groupId;
+        groupCallState.localStream = stream;
+        groupCallState.peers = {};
+
+        // Crear peer con el admin que llama
+        const pc = new RTCPeerConnection(rtcConfig);
+        groupCallState.peers[offer.from] = { pc };
+
+        stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+        pc.onicecandidate = (e) => {
+            if (e.candidate) {
+                socket.send(JSON.stringify({ type: 'group_call_ice', to: offer.from, groupId: offer.groupId, candidate: e.candidate }));
+            }
+        };
+
+        pc.ontrack = (e) => {
+            let audioEl = document.getElementById('groupAudio_' + offer.from);
+            if (!audioEl) {
+                audioEl = document.createElement('audio');
+                audioEl.id = 'groupAudio_' + offer.from;
+                audioEl.autoplay = true;
+                audioEl.style.display = 'none';
+                document.body.appendChild(audioEl);
+            }
+            audioEl.srcObject = e.streams[0];
+        };
+
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'connected' && !groupCallState.startTime) {
+                groupCallState.startTime = Date.now();
+            }
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                limpiarLlamadaGrupal();
+                addInfo('La llamada grupal ha finalizado.');
+            }
+        };
+
+        pc.setRemoteDescription({ type: 'offer', sdp: offer.sdp })
+            .then(() => pc.createAnswer())
+            .then(answer => pc.setLocalDescription(answer))
+            .then(() => {
+                socket.send(JSON.stringify({ type: 'group_call_answer', to: offer.from, groupId: offer.groupId, sdp: pc.localDescription.sdp }));
+            });
+
+        _pendingGroupOffer = null;
+    }).catch(e => { alert('No se pudo acceder al micrófono: ' + e.message); rechazarLlamadaGrupal(); });
+}
+
+function rechazarLlamadaGrupal() {
+    stopRingtone();
+    document.getElementById('incomingGroupCall').classList.remove('visible');
+    if (_pendingGroupOffer) {
+        socket.send(JSON.stringify({ type: 'group_call_rejected', to: _pendingGroupOffer.from, groupId: _pendingGroupOffer.groupId }));
+        _pendingGroupOffer = null;
+    }
+}
+
+function onGroupCallAnswer(data) {
+    const peer = groupCallState.peers[data.from];
+    if (!peer) return;
+    peer.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp }).catch(e => console.error('setRemoteDesc error:', e));
+}
+
+function onGroupCallIce(data) {
+    const peer = groupCallState.peers[data.from];
+    if (!peer || !data.candidate) return;
+    peer.pc.addIceCandidate(data.candidate).catch(e => {});
+}
+
+function onGroupCallRejected(data) {
+    actualizarEstadoParticipante(data.from, 'rejected');
+    const peer = groupCallState.peers[data.from];
+    if (peer) { try { peer.pc.close(); } catch(e) {} delete groupCallState.peers[data.from]; }
+}
+
+function onGroupCallEnded(data) {
+    limpiarLlamadaGrupal();
+    addInfo('La llamada grupal ha finalizado.');
+}
 
 </script>
 </body>

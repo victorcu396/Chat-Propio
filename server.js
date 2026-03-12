@@ -344,6 +344,122 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               ACTUALIZAR AVATAR DE GRUPO (solo admin)
+            ────────────────────────────────────── */
+            case 'updateGroupAvatar': {
+                if (!data.groupId || !data.avatar) break;
+                if (!ws.phone) break;
+                if (!/^data:image\//.test(data.avatar)) break;
+                try {
+                    const grp = await Group.findOne({ groupId: data.groupId });
+                    if (!grp || grp.ownerPhone !== ws.phone) break;
+                    grp.avatar = data.avatar;
+                    await grp.save();
+                    // Notificar a todos los miembros
+                    const payload = JSON.stringify({ type: 'groupAvatarUpdated', groupId: data.groupId, avatar: data.avatar });
+                    grp.members.forEach(memberPhone => {
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) memberWs.send(payload);
+                    });
+                } catch(e) {
+                    console.error('updateGroupAvatar error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               LLAMADA GRUPAL: el admin envía oferta
+               a todos los miembros online del grupo
+            ────────────────────────────────────── */
+            case 'group_call_offer': {
+                if (!data.groupId || !data.sdp) break;
+                if (!ws.phone) break;
+                try {
+                    const grp = await Group.findOne({ groupId: data.groupId });
+                    if (!grp || grp.ownerPhone !== ws.phone) break;
+                    // Reenviar la oferta a cada miembro online (excepto el admin)
+                    grp.members.forEach(memberPhone => {
+                        if (memberPhone === ws.phone) return;
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                            memberWs.send(JSON.stringify({
+                                type:      'group_call_offer',
+                                groupId:   data.groupId,
+                                groupName: grp.name,
+                                from:      ws.username,
+                                sdp:       data.sdp
+                            }));
+                        }
+                    });
+                } catch(e) {
+                    console.error('group_call_offer error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               LLAMADA GRUPAL: respuesta de un miembro
+            ────────────────────────────────────── */
+            case 'group_call_answer': {
+                if (!data.to || !data.sdp || !data.groupId) break;
+                const callerWs = users.get(data.to);
+                if (callerWs && callerWs.readyState === WebSocket.OPEN) {
+                    callerWs.send(JSON.stringify({
+                        type:    'group_call_answer',
+                        from:    ws.username,
+                        phone:   ws.phone,
+                        groupId: data.groupId,
+                        sdp:     data.sdp
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               LLAMADA GRUPAL: ICE candidate
+            ────────────────────────────────────── */
+            case 'group_call_ice': {
+                if (!data.to || !data.groupId) break;
+                const iceTarget = users.get(data.to);
+                if (iceTarget && iceTarget.readyState === WebSocket.OPEN) {
+                    iceTarget.send(JSON.stringify({
+                        type:      'group_call_ice',
+                        from:      ws.username,
+                        groupId:   data.groupId,
+                        candidate: data.candidate
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               LLAMADA GRUPAL: rechazar / colgar
+            ────────────────────────────────────── */
+            case 'group_call_rejected': {
+                if (!data.to || !data.groupId) break;
+                const rejTarget = users.get(data.to);
+                if (rejTarget && rejTarget.readyState === WebSocket.OPEN) {
+                    rejTarget.send(JSON.stringify({ type: 'group_call_rejected', from: ws.username, groupId: data.groupId }));
+                }
+                break;
+            }
+            case 'group_call_ended': {
+                if (!data.groupId) break;
+                try {
+                    const grp = await Group.findOne({ groupId: data.groupId });
+                    if (!grp) break;
+                    grp.members.forEach(memberPhone => {
+                        if (memberPhone === ws.phone) return;
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                            memberWs.send(JSON.stringify({ type: 'group_call_ended', from: ws.username, groupId: data.groupId }));
+                        }
+                    });
+                } catch(e) {}
+                break;
+            }
+
+            /* ──────────────────────────────────────
                WEBRTC: CALL ENDED
             ────────────────────────────────────── */
             case 'call_ended': {
@@ -613,6 +729,48 @@ wss.on('connection', (ws) => {
                     });
                 } catch(e) {
                     console.error('leaveGroup error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               EDITAR GRUPO (renombrar + cambiar miembros)
+               Solo el admin/creador puede hacerlo
+            ────────────────────────────────────── */
+            case 'editGroup': {
+                if (!data.groupId) break;
+                if (!ws.phone) break;
+                try {
+                    const grp = await Group.findOne({ groupId: data.groupId });
+                    if (!grp) { ws.send(JSON.stringify({ type: 'groupError', message: 'Grupo no encontrado.' })); break; }
+                    if (grp.ownerPhone !== ws.phone) { ws.send(JSON.stringify({ type: 'groupError', message: 'Solo el administrador puede editar el grupo.' })); break; }
+
+                    const oldMembers = [...grp.members];
+
+                    if (data.name && data.name.trim()) grp.name = data.name.trim();
+
+                    if (Array.isArray(data.memberPhones)) {
+                        grp.members = [...new Set([ws.phone, ...data.memberPhones])];
+                    }
+
+                    await grp.save();
+
+                    const updatedPayload = { type: 'groupUpdated', groupId: grp.groupId, name: grp.name, ownerPhone: grp.ownerPhone, members: grp.members };
+                    const allAffected = [...new Set([...oldMembers, ...grp.members])];
+
+                    allAffected.forEach(memberPhone => {
+                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                            if (!grp.members.includes(memberPhone)) {
+                                memberWs.send(JSON.stringify({ type: 'groupLeft', groupId: grp.groupId }));
+                            } else {
+                                memberWs.send(JSON.stringify(updatedPayload));
+                            }
+                        }
+                    });
+                } catch(e) {
+                    console.error('editGroup error:', e.message);
+                    ws.send(JSON.stringify({ type: 'groupError', message: e.message }));
                 }
                 break;
             }
