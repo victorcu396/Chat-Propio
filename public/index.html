@@ -349,6 +349,14 @@ html, body {
 
 .otp-info strong { color: var(--text-dark); }
 
+/* Evitar que el teclado virtual en móvil desplace la pantalla al hacer focus en OTP */
+#loginModal {
+    overflow: hidden;
+}
+#loginModal .login-card {
+    position: relative;
+}
+
 /* ============================================================
    SIDEBAR
 ============================================================ */
@@ -2940,7 +2948,7 @@ function sendOTP() {
     }
 
     goToStep(2);
-    document.getElementById('otp0').focus();
+    document.getElementById('otp0').focus({ preventScroll: true });
 
     // Notificación visual de OTP enviado
     showOtpToast(otpGenerado);
@@ -2971,13 +2979,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = document.getElementById(`otp${i}`);
         el.addEventListener('input', () => {
             el.value = el.value.replace(/\D/g,'').slice(0,1);
-            if (el.value && i < 5) document.getElementById(`otp${i+1}`).focus();
+            if (el.value && i < 5) document.getElementById(`otp${i+1}`).focus({ preventScroll: true });
             // Si se completó el último dígito, intentar verificar automáticamente
             if (i === 5 && el.value) verifyOTP();
         });
         el.addEventListener('keydown', (e) => {
             if (e.key === 'Backspace' && !el.value && i > 0) {
-                document.getElementById(`otp${i-1}`).focus();
+                document.getElementById(`otp${i-1}`).focus({ preventScroll: true });
             }
         });
         el.addEventListener('paste', (e) => {
@@ -3015,6 +3023,9 @@ function verifyOTP() {
     const savedName = localStorage.getItem(`kvs_name_${loginPhone}`);
     if (savedName) {
         loginUsername = savedName;
+        // Restaurar avatar ANTES de finishLogin para que se envíe correctamente al servidor
+        const savedAvatarEarly = localStorage.getItem(`kvs_avatar_${loginPhone}`);
+        if (savedAvatarEarly) myAvatarDataUrl = savedAvatarEarly;
         finishLogin();
         return;
     }

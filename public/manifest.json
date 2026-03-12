@@ -1,0 +1,25 @@
+{
+  "name": "kiVooSpace",
+  "short_name": "kiVooSpace",
+  "description": "Tu espacio de chat privado",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f0fb",
+  "theme_color": "#4f46e5",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "Logo_kiVooSpace.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "Logo_kiVooSpace.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
