@@ -591,6 +591,83 @@ html, body {
 
 .btn-logout:hover { background: rgba(239,68,68,0.1); color: #ef4444; }
 
+.btn-settings {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 18px; padding: 6px;
+    border-radius: 6px; transition: background var(--transition), color var(--transition);
+    flex-shrink: 0; touch-action: manipulation; line-height: 1;
+}
+.btn-settings:hover { background: var(--purple-pale); color: var(--purple-deep); }
+
+#settingsModal {
+    display: none; position: fixed; inset: 0; z-index: 8000;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(30,27,75,0.45); backdrop-filter: blur(4px);
+}
+#settingsModal.open { display: flex; }
+.settings-card {
+    background: var(--white); border-radius: 20px; box-shadow: var(--shadow-card);
+    border: 1px solid var(--border); width: 100%; max-width: 340px;
+    overflow: hidden; animation: loginIn .25s cubic-bezier(.4,0,.2,1);
+}
+.settings-card-header {
+    padding: 20px 20px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.settings-card-header h3 { font-size: 16px; font-weight: 700; color: var(--text-dark); }
+.btn-settings-close {
+    background: none; border: none; font-size: 20px; color: var(--text-muted);
+    cursor: pointer; padding: 2px 6px; border-radius: 6px; line-height: 1;
+}
+.btn-settings-close:hover { color: var(--text-dark); }
+.settings-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.settings-profile-row {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    background: var(--purple-pale); border-radius: var(--radius-md);
+}
+.settings-profile-row img {
+    width: 42px; height: 42px; border-radius: 50%; object-fit: cover;
+    border: 2px solid var(--purple-light);
+}
+.settings-profile-info { flex: 1; min-width: 0; }
+.settings-profile-name {
+    font-size: 14px; font-weight: 600; color: var(--text-dark);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.settings-profile-phone { font-size: 12px; color: var(--text-muted); }
+.settings-divider { height: 1px; background: var(--border); margin: 2px 0; }
+.btn-settings-action {
+    display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+    border: none; background: none; border-radius: var(--radius-md);
+    cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 14px;
+    font-weight: 500; color: var(--text-dark); transition: background var(--transition);
+    width: 100%; text-align: left;
+}
+.btn-settings-action:hover { background: var(--bg-body); }
+.btn-settings-action.danger { color: #ef4444; }
+.btn-settings-action.danger:hover { background: rgba(239,68,68,0.08); }
+.btn-settings-action .action-icon { font-size: 18px; line-height: 1; }
+#logoutConfirmBox {
+    display: none; padding: 14px 20px 20px; border-top: 1px solid var(--border);
+    flex-direction: column; gap: 10px;
+}
+#logoutConfirmBox.open { display: flex; }
+#logoutConfirmBox p { font-size: 13px; color: var(--text-mid); text-align: center; }
+.logout-confirm-btns { display: flex; gap: 8px; }
+.btn-logout-cancel {
+    flex: 1; padding: 10px; border: 1.5px solid var(--border); background: none;
+    border-radius: var(--radius-md); font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; color: var(--text-dark);
+    transition: background var(--transition);
+}
+.btn-logout-cancel:hover { background: var(--bg-body); }
+.btn-logout-confirm {
+    flex: 1; padding: 10px; border: none; background: #ef4444; color: white;
+    border-radius: var(--radius-md); font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity .15s;
+}
+.btn-logout-confirm:hover { opacity: 0.88; }
+
 /* ---- Usuarios lista ---- */
 .users-label {
     padding: 14px 16px 6px;
@@ -2578,7 +2655,7 @@ html.is-mobile .contact-actions { display: flex; }
             <div class="my-profile-name" id="myName"></div>
             <div class="my-profile-phone" id="myPhone"></div>
           </div>
-          <button class="btn-logout" title="Cerrar sesión" onclick="logout()">⏻</button>
+          <button class="btn-settings" title="Ajustes" onclick="abrirAjustes()">&#9881;</button>
         </div>
       </div>
 
@@ -3098,8 +3175,10 @@ function finishLogin() {
     // Guardar nombre localmente para este número
     localStorage.setItem(`kvs_name_${loginPhone}`, loginUsername);
 
-    // Persistir sesión para sobrevivir recargas (sessionStorage se borra al cerrar pestaña)
-    sessionStorage.setItem('kvs_session', JSON.stringify({ phone: loginPhone, username: loginUsername }));
+    // Persistir sesión: localStorage (permanente) en PWA, sessionStorage en web
+    const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername });
+    if (esPWA()) { localStorage.setItem('kvs_session_pwa', sessionData); }
+    else { sessionStorage.setItem('kvs_session', sessionData); }
 
     // Ocultar modal, mostrar app
     document.getElementById('loginModal').style.display = 'none';
@@ -3123,6 +3202,7 @@ function finishLogin() {
 function logout() {
     if (socket) { socket.close(); socket = null; }
     sessionStorage.removeItem('kvs_session');
+    localStorage.removeItem('kvs_session_pwa');
     loginPhone = '';
     loginUsername = '';
     username = null;
@@ -5739,10 +5819,17 @@ function activarDragPanel(el) {
 }
 
 // ============================================================
-// SESIÓN PERSISTENTE (se mantiene en refresh, se borra al cerrar pestaña)
+// SESIÓN PERSISTENTE
 // ============================================================
 (function tryAutoLogin() {
-    const saved = sessionStorage.getItem('kvs_session');
+    // PWA: leer localStorage; Web: leer sessionStorage
+    const savedPWA = localStorage.getItem('kvs_session_pwa');
+    const savedWeb = sessionStorage.getItem('kvs_session');
+    // esPWA() aún no está definida aquí, detectar inline
+    const runningAsPWA = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true
+        || document.referrer.startsWith('android-app://');
+    const saved = runningAsPWA ? (savedPWA || savedWeb) : savedWeb;
     if (!saved) return;
     try {
         const s = JSON.parse(saved);
@@ -5770,12 +5857,86 @@ function activarDragPanel(el) {
                 }
             })
             .catch(() => {});
+        // Si corremos como PWA y la sesión era de sessionStorage, migrarla
+        if (runningAsPWA && !savedPWA && savedWeb) {
+            localStorage.setItem('kvs_session_pwa', savedWeb);
+        }
         conectarWS();
     } catch(e) {
         sessionStorage.removeItem('kvs_session');
+        localStorage.removeItem('kvs_session_pwa');
     }
 })();
 
+// ============================================================
+// HELPER: detectar si se ejecuta como PWA instalada
+// ============================================================
+function esPWA() {
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true
+        || document.referrer.startsWith('android-app://');
+}
+
+// ============================================================
+// AJUSTES MODAL (JS)
+// ============================================================
+function abrirAjustes() {
+    document.getElementById('settingsAvatar').src        = myAvatarDataUrl || '';
+    document.getElementById('settingsName').textContent  = loginUsername || '';
+    document.getElementById('settingsPhone').textContent = loginPhone || '';
+    ocultarConfirmLogout();
+    document.getElementById('settingsModal').classList.add('open');
+}
+function cerrarAjustes() {
+    document.getElementById('settingsModal').classList.remove('open');
+    ocultarConfirmLogout();
+}
+function cerrarAjustesOutside(e) {
+    if (e.target === document.getElementById('settingsModal')) cerrarAjustes();
+}
+function mostrarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.add('open'); }
+function ocultarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.remove('open'); }
+function logoutConfirmado() { cerrarAjustes(); logout(); }
+
 </script>
+
+<!-- ============================================================
+     MODAL AJUSTES (HTML - fuera del script, dentro del body)
+============================================================ -->
+<div id="settingsModal" onclick="cerrarAjustesOutside(event)">
+  <div class="settings-card">
+    <div class="settings-card-header">
+      <h3>⚙️ Ajustes</h3>
+      <button class="btn-settings-close" onclick="cerrarAjustes()">×</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-profile-row">
+        <img id="settingsAvatar" src="" alt="avatar">
+        <div class="settings-profile-info">
+          <div class="settings-profile-name"  id="settingsName"></div>
+          <div class="settings-profile-phone" id="settingsPhone"></div>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+      <button class="btn-settings-action" onclick="cerrarAjustes();abrirModalAvatar()">
+        <span class="action-icon">📷</span>
+        <span>Cambiar foto de perfil</span>
+      </button>
+      <div class="settings-divider"></div>
+      <button class="btn-settings-action danger" onclick="mostrarConfirmLogout()">
+        <span class="action-icon">🚪</span>
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
+    <div id="logoutConfirmBox">
+      <p>¿Seguro que quieres cerrar sesión en este dispositivo?</p>
+      <div class="logout-confirm-btns">
+        <button class="btn-logout-cancel"  onclick="ocultarConfirmLogout()">Cancelar</button>
+        <button class="btn-logout-confirm" onclick="logoutConfirmado()">Cerrar sesión</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
