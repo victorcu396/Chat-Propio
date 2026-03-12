@@ -67,6 +67,21 @@ app.get('/api/groups', async (req, res) => {
     }
 });
 
+/* REST: obtener datos de usuario por teléfono
+   GET /api/user?phone=+34612345678
+   Devuelve avatar y username guardados en BD (para sincronizar entre dispositivos) */
+app.get('/api/user', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    try {
+        const user = await User.findOne({ phone }).lean();
+        if (!user) return res.status(404).json({ error: 'usuario no encontrado' });
+        res.json({ phone: user.phone, username: user.username, avatar: user.avatar });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // IMPORTANTE PORT=8080
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)

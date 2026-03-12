@@ -349,14 +349,6 @@ html, body {
 
 .otp-info strong { color: var(--text-dark); }
 
-/* Evitar que el teclado virtual en móvil desplace la pantalla al hacer focus en OTP */
-#loginModal {
-    overflow: hidden;
-}
-#loginModal .login-card {
-    position: relative;
-}
-
 /* ============================================================
    SIDEBAR
 ============================================================ */
@@ -2516,8 +2508,19 @@ html.is-mobile .contact-actions { display: flex; }
       <!-- Paso 2: OTP -->
       <div class="login-step" id="step2">
         <p class="otp-info">Código enviado a <strong id="otpPhone"></strong></p>
+        <!-- Código visible siempre mientras esté en este paso -->
+        <div id="otpCodeDisplay" style="
+            background: linear-gradient(135deg,#4f46e5,#7c3aed);
+            color: white; border-radius: 12px; padding: 10px 16px;
+            text-align: center; margin-bottom: 16px; display: none;
+            font-family: 'DM Mono', monospace; letter-spacing: 2px;
+        ">
+          <div style="font-size:11px;opacity:.8;margin-bottom:4px;">Tu código de verificación</div>
+          <div id="otpCodeValue" style="font-size:26px;font-weight:700;letter-spacing:6px;"></div>
+          <div id="otpCodeTimer" style="font-size:11px;opacity:.75;margin-top:4px;"></div>
+        </div>
         <div class="login-field">
-          <label>Código de verificación</label>
+          <label>Introduce el código</label>
           <div class="otp-wrap">
             <input class="otp-digit" type="text" maxlength="1" id="otp0" inputmode="numeric">
             <input class="otp-digit" type="text" maxlength="1" id="otp1" inputmode="numeric">
@@ -2528,6 +2531,8 @@ html.is-mobile .contact-actions { display: flex; }
           </div>
         </div>
         <div class="login-error" id="otpError"></div>
+        <div id="otpTimerWrap" style="text-align:center;font-size:12px;color:var(--text-muted);margin-bottom:4px;min-height:18px;"></div>
+        <button id="btnRegenOtp" class="btn-login-ghost" onclick="regenOTP()" style="display:none;margin-bottom:4px;">&#x1F504; Volver a generar código</button>
         <button class="btn-login" onclick="verifyOTP()">Verificar</button>
         <button class="btn-login-ghost" onclick="goToStep(1)">← Cambiar número</button>
       </div>
@@ -2948,29 +2953,59 @@ function sendOTP() {
     }
 
     goToStep(2);
-    document.getElementById('otp0').focus({ preventScroll: true });
+    document.getElementById('otp0').focus();
 
     // Notificación visual de OTP enviado
     showOtpToast(otpGenerado);
 }
 
-function showOtpToast(code) {
-    // En modo demo, mostramos el código en consola y en una alerta no intrusiva
-    const existing = document.getElementById('devOtpToast');
-    if (existing) existing.remove();
+let otpCountdownInterval = null;
 
-    const toast = document.createElement('div');
-    toast.id = 'devOtpToast';
-    toast.style.cssText = `
-        position:fixed; top:16px; left:50%; transform:translateX(-50%);
-        background:#1e1b4b; color:white; padding:10px 20px; border-radius:12px;
-        font-size:14px; z-index:99999; box-shadow:0 8px 32px rgba(0,0,0,0.3);
-        font-family:'DM Mono',monospace; letter-spacing:1px;
-        animation: fadeUp .3s ease;
-    `;
-    toast.innerHTML = `🔑 <strong>OTP demo: ${code}</strong> <span style="opacity:.6;font-size:12px;margin-left:6px;">(solo modo dev)</span>`;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 8000);
+function showOtpToast(code) {
+    // Mostrar el código en el display fijo dentro del paso 2 (siempre visible)
+    const display = document.getElementById('otpCodeDisplay');
+    const valueEl = document.getElementById('otpCodeValue');
+    if (display && valueEl) {
+        valueEl.textContent = code;
+        display.style.display = 'block';
+    }
+    startOtpCountdown(60);
+}
+
+function startOtpCountdown(seconds) {
+    clearInterval(otpCountdownInterval);
+    const timerEl  = document.getElementById('otpCodeTimer');
+    const wrapEl   = document.getElementById('otpTimerWrap');
+    const regenBtn = document.getElementById('btnRegenOtp');
+    const display  = document.getElementById('otpCodeDisplay');
+    if (regenBtn) regenBtn.style.display = 'none';
+    let remaining = seconds;
+    function tick() {
+        if (timerEl) timerEl.textContent = `Caduca en ${remaining}s`;
+        if (wrapEl)  wrapEl.textContent  = `El código caduca en ${remaining}s`;
+        if (remaining <= 0) {
+            clearInterval(otpCountdownInterval);
+            otpGenerado = '';
+            if (timerEl)  timerEl.textContent  = 'Código caducado';
+            if (wrapEl)   wrapEl.textContent   = 'Código caducado.';
+            if (display)  display.style.opacity = '0.45';
+            if (regenBtn) regenBtn.style.display = 'block';
+        }
+        remaining--;
+    }
+    tick();
+    otpCountdownInterval = setInterval(tick, 1000);
+}
+
+function regenOTP() {
+    otpGenerado = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log(`[DEV] Nuevo OTP para ${loginPhone}: ${otpGenerado}`);
+    for (let i = 0; i < 6; i++) document.getElementById(`otp${i}`).value = '';
+    document.getElementById('otpError').textContent = '';
+    const display = document.getElementById('otpCodeDisplay');
+    if (display) display.style.opacity = '1';
+    document.getElementById('otp0').focus({ preventScroll: true });
+    showOtpToast(otpGenerado);
 }
 
 // OTP navigation
@@ -2979,13 +3014,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = document.getElementById(`otp${i}`);
         el.addEventListener('input', () => {
             el.value = el.value.replace(/\D/g,'').slice(0,1);
-            if (el.value && i < 5) document.getElementById(`otp${i+1}`).focus({ preventScroll: true });
+            if (el.value && i < 5) document.getElementById(`otp${i+1}`).focus();
             // Si se completó el último dígito, intentar verificar automáticamente
             if (i === 5 && el.value) verifyOTP();
         });
         el.addEventListener('keydown', (e) => {
             if (e.key === 'Backspace' && !el.value && i > 0) {
-                document.getElementById(`otp${i-1}`).focus({ preventScroll: true });
+                document.getElementById(`otp${i-1}`).focus();
             }
         });
         el.addEventListener('paste', (e) => {
@@ -3023,10 +3058,26 @@ function verifyOTP() {
     const savedName = localStorage.getItem(`kvs_name_${loginPhone}`);
     if (savedName) {
         loginUsername = savedName;
-        // Restaurar avatar ANTES de finishLogin para que se envíe correctamente al servidor
-        const savedAvatarEarly = localStorage.getItem(`kvs_avatar_${loginPhone}`);
-        if (savedAvatarEarly) myAvatarDataUrl = savedAvatarEarly;
-        finishLogin();
+        // Cargar avatar desde servidor (sincroniza entre dispositivos)
+        // Si el servidor tiene uno más reciente que el localStorage, se usa ese
+        const localAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
+        fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(userData => {
+                if (userData && userData.avatar && userData.avatar.startsWith('data:image/')) {
+                    // El servidor tiene avatar real: usarlo y actualizarlo en local
+                    myAvatarDataUrl = userData.avatar;
+                    localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
+                } else if (localAvatar) {
+                    myAvatarDataUrl = localAvatar;
+                }
+                finishLogin();
+            })
+            .catch(() => {
+                // Sin conexión: usar lo que haya en local
+                if (localAvatar) myAvatarDataUrl = localAvatar;
+                finishLogin();
+            });
         return;
     }
 
@@ -5698,7 +5749,7 @@ function activarDragPanel(el) {
         if (!s.phone || !s.username) return;
         loginPhone    = s.phone;
         loginUsername = s.username;
-        // Restaurar avatar guardado
+        // Restaurar avatar: primero local, luego sincronizar con servidor
         const savedAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
         myAvatarDataUrl = savedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
         // Mostrar app directamente sin login
@@ -5707,6 +5758,18 @@ function activarDragPanel(el) {
         document.getElementById('myName').textContent   = loginUsername;
         document.getElementById('myPhone').textContent  = loginPhone;
         document.getElementById('myAvatar').src         = myAvatarDataUrl;
+        // Sincronizar avatar con servidor en background (por si fue cambiado desde otro dispositivo)
+        fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(userData => {
+                if (userData && userData.avatar && userData.avatar.startsWith('data:image/')
+                    && userData.avatar !== myAvatarDataUrl) {
+                    myAvatarDataUrl = userData.avatar;
+                    localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
+                    document.getElementById('myAvatar').src = myAvatarDataUrl;
+                }
+            })
+            .catch(() => {});
         conectarWS();
     } catch(e) {
         sessionStorage.removeItem('kvs_session');
