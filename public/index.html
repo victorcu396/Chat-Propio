@@ -3142,17 +3142,19 @@ function verifyOTP() {
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
                 if (userData && userData.avatar && userData.avatar.startsWith('data:image/')) {
-                    // El servidor tiene avatar real: usarlo y actualizarlo en local
+                    // El servidor tiene avatar real (foto subida): usarlo y guardarlo en local
                     myAvatarDataUrl = userData.avatar;
                     localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
-                } else if (localAvatar) {
+                } else if (localAvatar && localAvatar.startsWith('data:image/')) {
+                    // No hay avatar en servidor pero sí en local: usar el local
                     myAvatarDataUrl = localAvatar;
                 }
+                // Si no hay nada, myAvatarDataUrl quedará vacío y finishLogin usará dicebear
                 finishLogin();
             })
             .catch(() => {
                 // Sin conexión: usar lo que haya en local
-                if (localAvatar) myAvatarDataUrl = localAvatar;
+                if (localAvatar && localAvatar.startsWith('data:image/')) myAvatarDataUrl = localAvatar;
                 finishLogin();
             });
         return;
@@ -3175,10 +3177,9 @@ function finishLogin() {
     // Guardar nombre localmente para este número
     localStorage.setItem(`kvs_name_${loginPhone}`, loginUsername);
 
-    // Persistir sesión: localStorage (permanente) en PWA, sessionStorage en web
+    // Persistir sesión siempre en localStorage (permanente en PWA y navegador)
     const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername });
-    if (esPWA()) { localStorage.setItem('kvs_session_pwa', sessionData); }
-    else { sessionStorage.setItem('kvs_session', sessionData); }
+    localStorage.setItem('kvs_session', sessionData);
 
     // Ocultar modal, mostrar app
     document.getElementById('loginModal').style.display = 'none';
@@ -3201,8 +3202,7 @@ function finishLogin() {
 
 function logout() {
     if (socket) { socket.close(); socket = null; }
-    sessionStorage.removeItem('kvs_session');
-    localStorage.removeItem('kvs_session_pwa');
+    localStorage.removeItem('kvs_session');
     loginPhone = '';
     loginUsername = '';
     username = null;
@@ -5825,49 +5825,54 @@ function activarDragPanel(el) {
 // SESIÓN PERSISTENTE
 // ============================================================
 (function tryAutoLogin() {
-    // PWA: leer localStorage; Web: leer sessionStorage
-    const savedPWA = localStorage.getItem('kvs_session_pwa');
-    const savedWeb = sessionStorage.getItem('kvs_session');
-    // esPWA() aún no está definida aquí, detectar inline
-    const runningAsPWA = window.matchMedia('(display-mode: standalone)').matches
-        || window.navigator.standalone === true
-        || document.referrer.startsWith('android-app://');
-    const saved = runningAsPWA ? (savedPWA || savedWeb) : savedWeb;
+    // Leer sesión guardada (siempre en localStorage, funciona en PWA y navegador)
+    const saved = localStorage.getItem('kvs_session')
+        || localStorage.getItem('kvs_session_pwa') // compatibilidad con versión anterior
+        || sessionStorage.getItem('kvs_session');   // compatibilidad con versión anterior
+
     if (!saved) return;
     try {
         const s = JSON.parse(saved);
         if (!s.phone || !s.username) return;
         loginPhone    = s.phone;
         loginUsername = s.username;
-        // Restaurar avatar: primero local, luego sincronizar con servidor
+
+        // Migrar claves antiguas a la nueva clave unificada
+        if (!localStorage.getItem('kvs_session')) {
+            localStorage.setItem('kvs_session', saved);
+        }
+        localStorage.removeItem('kvs_session_pwa');
+        sessionStorage.removeItem('kvs_session');
+
+        // Restaurar avatar desde localStorage
         const savedAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
         myAvatarDataUrl = savedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
+
         // Mostrar app directamente sin login
         document.getElementById('loginModal').style.display  = 'none';
         document.getElementById('appContainer').style.display = 'flex';
         document.getElementById('myName').textContent   = loginUsername;
         document.getElementById('myPhone').textContent  = loginPhone;
         document.getElementById('myAvatar').src         = myAvatarDataUrl;
-        // Sincronizar avatar con servidor en background (por si fue cambiado desde otro dispositivo)
+
+        // Sincronizar avatar con servidor en background
+        // Solo reemplazar si el servidor tiene un avatar base64 real (foto subida por el usuario)
         fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
-                if (userData && userData.avatar && userData.avatar.startsWith('data:image/')
-                    && userData.avatar !== myAvatarDataUrl) {
+                if (userData && userData.avatar && userData.avatar.startsWith('data:image/')) {
                     myAvatarDataUrl = userData.avatar;
                     localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
                     document.getElementById('myAvatar').src = myAvatarDataUrl;
                 }
             })
             .catch(() => {});
-        // Si corremos como PWA y la sesión era de sessionStorage, migrarla
-        if (runningAsPWA && !savedPWA && savedWeb) {
-            localStorage.setItem('kvs_session_pwa', savedWeb);
-        }
+
         conectarWS();
     } catch(e) {
-        sessionStorage.removeItem('kvs_session');
+        localStorage.removeItem('kvs_session');
         localStorage.removeItem('kvs_session_pwa');
+        sessionStorage.removeItem('kvs_session');
     }
 })();
 
