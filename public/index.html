@@ -29,7 +29,7 @@
 <!-- Emoji Picker -->
 <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 
-<!-- Service Worker + PWA Install -->
+<!-- Service Worker + PWA Install + Botón Atrás -->
 <script>
 // ── Registro del Service Worker ──────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -45,18 +45,14 @@ let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
-    // Mostrar botón de instalar si existe
     const btn = document.getElementById('btnInstalarPWA');
     if (btn) btn.style.display = 'flex';
 });
-
-// Ocultar botón si ya está instalada
 window.addEventListener('appinstalled', () => {
     deferredInstallPrompt = null;
     const btn = document.getElementById('btnInstalarPWA');
     if (btn) btn.style.display = 'none';
 });
-
 async function instalarPWA() {
     if (!deferredInstallPrompt) return;
     deferredInstallPrompt.prompt();
@@ -66,6 +62,70 @@ async function instalarPWA() {
     const btn = document.getElementById('btnInstalarPWA');
     if (btn) btn.style.display = 'none';
 }
+
+// ── Botón atrás del sistema → volver al menú/lista ───────────
+// Funciona en Android (botón físico/gestual) e iOS (gesto swipe back en PWA)
+// Estrategia: cuando se abre un chat, empujamos un estado al historial.
+// Al pulsar atrás, el navegador dispara 'popstate' y nosotros volvemos
+// al sidebar en vez de salir de la app.
+
+function _pushChatState() {
+    // Solo en móvil o PWA donde el sidebar se oculta al abrir un chat
+    const esMobil = window.innerWidth <= 768
+        || document.documentElement.classList.contains('is-mobile');
+    if (!esMobil) return;
+    // Empujar un estado "chat abierto" si no lo hemos hecho ya
+    if (!history.state || history.state.kvs !== 'chat') {
+        history.pushState({ kvs: 'chat' }, '');
+    }
+}
+
+function _volverAlMenu() {
+    // Mostrar sidebar / volver a la lista
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar && !sidebar.classList.contains('visible')) {
+        sidebar.classList.add('visible');
+        if (overlay) overlay.classList.add('visible');
+    }
+}
+
+window.addEventListener('popstate', (e) => {
+    // Si el estado anterior era "chat abierto", interceptar y volver al menú
+    const esMobil = window.innerWidth <= 768
+        || document.documentElement.classList.contains('is-mobile');
+    if (!esMobil) return;
+
+    // Si hay algún modal abierto, cerrarlo primero (comportamiento natural)
+    const modalesAbiertos = [
+        document.getElementById('avatarModal'),
+        document.getElementById('settingsModal'),
+        document.getElementById('addContactModal'),
+        document.getElementById('newGroupModal'),
+        document.getElementById('editGroupModal'),
+    ].filter(m => m && (m.classList.contains('visible') || m.classList.contains('open')
+        || (m.style && m.style.display && m.style.display !== 'none')));
+
+    if (modalesAbiertos.length > 0) {
+        // Cerrar el modal más reciente y volver a empujar estado chat
+        modalesAbiertos.forEach(m => {
+            m.classList.remove('visible');
+            m.classList.remove('open');
+            if (m.style) m.style.display = 'none';
+        });
+        history.pushState({ kvs: 'chat' }, '');
+        return;
+    }
+
+    // Si el chat está abierto y el sidebar está oculto → volver al menú
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && !sidebar.classList.contains('visible')) {
+        _volverAlMenu();
+        // Volver a empujar el estado base para que el próximo atrás salga de la app
+        // (no seguimos interceptando indefinidamente)
+        return;
+    }
+});
 </script>
 
 <style>
@@ -724,7 +784,7 @@ html, body {
 
 /* ── Botón instalar PWA ── */
 #btnInstalarPWA {
-    display: none; /* se muestra solo si el evento beforeinstallprompt se dispara */
+    display: none;
     width: 100%;
     align-items: center;
     gap: 10px;
@@ -3216,11 +3276,9 @@ function verifyOTP() {
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
                 if (userData && userData.avatar && userData.avatar.startsWith('data:image/')) {
-                    // El servidor tiene avatar real (foto subida): usarlo
                     myAvatarDataUrl = userData.avatar;
                     localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
                 } else if (localAvatar && localAvatar.startsWith('data:image/')) {
-                    // No hay avatar real en servidor pero sí en local: usar el local
                     myAvatarDataUrl = localAvatar;
                 }
                 finishLogin();
@@ -3852,6 +3910,7 @@ function seleccionarUsuario(user) {
     if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
+        _pushChatState();
     }
 }
 
@@ -3914,6 +3973,7 @@ function seleccionarContactoOffline(phone) {
     if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
+        _pushChatState();
     }
 }
 
@@ -4849,6 +4909,7 @@ function seleccionarGrupo(groupId) {
     if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
+        _pushChatState();
     }
 }
 
@@ -5897,38 +5958,27 @@ function activarDragPanel(el) {
 // SESIÓN PERSISTENTE
 // ============================================================
 (function tryAutoLogin() {
-    // Leer sesión guardada (siempre en localStorage)
     const saved = localStorage.getItem('kvs_session')
-        || localStorage.getItem('kvs_session_pwa') // compatibilidad versión anterior
-        || sessionStorage.getItem('kvs_session');   // compatibilidad versión anterior
-
+        || localStorage.getItem('kvs_session_pwa')
+        || sessionStorage.getItem('kvs_session');
     if (!saved) return;
     try {
         const s = JSON.parse(saved);
         if (!s.phone || !s.username) return;
         loginPhone    = s.phone;
         loginUsername = s.username;
-
-        // Migrar claves antiguas a la nueva clave unificada
         if (!localStorage.getItem('kvs_session')) {
             localStorage.setItem('kvs_session', saved);
         }
         localStorage.removeItem('kvs_session_pwa');
         sessionStorage.removeItem('kvs_session');
-
-        // Restaurar avatar desde localStorage
         const savedAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
         myAvatarDataUrl = savedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
-
-        // Mostrar app directamente sin login
         document.getElementById('loginModal').style.display  = 'none';
         document.getElementById('appContainer').style.display = 'flex';
         document.getElementById('myName').textContent   = loginUsername;
         document.getElementById('myPhone').textContent  = loginPhone;
         document.getElementById('myAvatar').src         = myAvatarDataUrl;
-
-        // Sincronizar avatar con servidor en background
-        // Solo reemplazar si el servidor tiene un avatar base64 real (foto subida)
         fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
@@ -5939,7 +5989,6 @@ function activarDragPanel(el) {
                 }
             })
             .catch(() => {});
-
         conectarWS();
     } catch(e) {
         localStorage.removeItem('kvs_session');
