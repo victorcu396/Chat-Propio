@@ -449,9 +449,13 @@ wss.on('connection', (ws) => {
                 // Validar que sea un data URL de imagen
                 if (!/^data:image\//.test(data.avatar)) break;
                 ws.avatar = data.avatar;
-                // Actualizar en MongoDB
+                // Actualizar en MongoDB con await para garantizar persistencia
                 if (ws.phone) {
-                    User.updateOne({ phone: ws.phone }, { avatar: ws.avatar }).exec();
+                    try {
+                        await User.updateOne({ phone: ws.phone }, { avatar: ws.avatar });
+                    } catch(e) {
+                        console.error('updateAvatar error:', e.message);
+                    }
                 }
                 break;
             }

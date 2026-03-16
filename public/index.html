@@ -2,9 +2,24 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<!-- Favicon -->
+
+<!-- PWA: Manifest -->
+<link rel="manifest" href="manifest.json">
+
+<!-- Favicon e iconos -->
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <link rel="icon" type="image/png" href="Logo_kiVooSpace.png">
-<link rel="apple-touch-icon" href="Logo_kiVooSpace.png">
+
+<!-- iOS PWA: icono, barra de estado y modo standalone -->
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="kiVooSpace">
+
+<!-- Android / general -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="kiVooSpace">
 <meta name="theme-color" content="#4f46e5">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
@@ -13,6 +28,45 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- Emoji Picker -->
 <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
+
+<!-- Service Worker + PWA Install -->
+<script>
+// ── Registro del Service Worker ──────────────────────────────
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[SW] Registrado:', reg.scope))
+            .catch(err => console.warn('[SW] Error al registrar:', err));
+    });
+}
+
+// ── Capturar evento de instalación PWA ───────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    // Mostrar botón de instalar si existe
+    const btn = document.getElementById('btnInstalarPWA');
+    if (btn) btn.style.display = 'flex';
+});
+
+// Ocultar botón si ya está instalada
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    const btn = document.getElementById('btnInstalarPWA');
+    if (btn) btn.style.display = 'none';
+});
+
+async function instalarPWA() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    console.log('[PWA] Resultado instalación:', outcome);
+    deferredInstallPrompt = null;
+    const btn = document.getElementById('btnInstalarPWA');
+    if (btn) btn.style.display = 'none';
+}
+</script>
 
 <style>
 /* ============================================================
@@ -667,6 +721,26 @@ html, body {
     cursor: pointer; font-family: 'DM Sans', sans-serif; transition: opacity .15s;
 }
 .btn-logout-confirm:hover { opacity: 0.88; }
+
+/* ── Botón instalar PWA ── */
+#btnInstalarPWA {
+    display: none; /* se muestra solo si el evento beforeinstallprompt se dispara */
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity var(--transition);
+    margin-top: 4px;
+}
+#btnInstalarPWA:hover { opacity: 0.88; }
 
 /* ---- Usuarios lista ---- */
 .users-label {
@@ -3142,18 +3216,16 @@ function verifyOTP() {
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
                 if (userData && userData.avatar && userData.avatar.startsWith('data:image/')) {
-                    // El servidor tiene avatar real (foto subida): usarlo y guardarlo en local
+                    // El servidor tiene avatar real (foto subida): usarlo
                     myAvatarDataUrl = userData.avatar;
                     localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
                 } else if (localAvatar && localAvatar.startsWith('data:image/')) {
-                    // No hay avatar en servidor pero sí en local: usar el local
+                    // No hay avatar real en servidor pero sí en local: usar el local
                     myAvatarDataUrl = localAvatar;
                 }
-                // Si no hay nada, myAvatarDataUrl quedará vacío y finishLogin usará dicebear
                 finishLogin();
             })
             .catch(() => {
-                // Sin conexión: usar lo que haya en local
                 if (localAvatar && localAvatar.startsWith('data:image/')) myAvatarDataUrl = localAvatar;
                 finishLogin();
             });
@@ -5825,10 +5897,10 @@ function activarDragPanel(el) {
 // SESIÓN PERSISTENTE
 // ============================================================
 (function tryAutoLogin() {
-    // Leer sesión guardada (siempre en localStorage, funciona en PWA y navegador)
+    // Leer sesión guardada (siempre en localStorage)
     const saved = localStorage.getItem('kvs_session')
-        || localStorage.getItem('kvs_session_pwa') // compatibilidad con versión anterior
-        || sessionStorage.getItem('kvs_session');   // compatibilidad con versión anterior
+        || localStorage.getItem('kvs_session_pwa') // compatibilidad versión anterior
+        || sessionStorage.getItem('kvs_session');   // compatibilidad versión anterior
 
     if (!saved) return;
     try {
@@ -5856,7 +5928,7 @@ function activarDragPanel(el) {
         document.getElementById('myAvatar').src         = myAvatarDataUrl;
 
         // Sincronizar avatar con servidor en background
-        // Solo reemplazar si el servidor tiene un avatar base64 real (foto subida por el usuario)
+        // Solo reemplazar si el servidor tiene un avatar base64 real (foto subida)
         fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
@@ -5929,6 +6001,11 @@ function logoutConfirmado() { cerrarAjustes(); logout(); }
       <button class="btn-settings-action" onclick="cerrarAjustes();abrirModalAvatar()">
         <span class="action-icon">📷</span>
         <span>Cambiar foto de perfil</span>
+      </button>
+      <div class="settings-divider"></div>
+      <button id="btnInstalarPWA" onclick="instalarPWA()">
+        <span style="font-size:18px;">📲</span>
+        <span>Instalar app en este dispositivo</span>
       </button>
       <div class="settings-divider"></div>
       <button class="btn-settings-action danger" onclick="mostrarConfirmLogout()">
