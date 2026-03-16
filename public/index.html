@@ -3317,7 +3317,10 @@ function conectarWS() {
     username = loginUsername;
     pedirPermisoNotificaciones();
 
-    socket = new WebSocket("wss://brutal-cacogenic-asa.ngrok-free.dev/");
+    // Detectar automáticamente si estamos en local o en producción (Render)
+    const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsHost     = location.host;
+    socket = new WebSocket(wsProtocol + wsHost);
 
     socket.onopen = () => {
         conectado = true;

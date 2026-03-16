@@ -1,8 +1,12 @@
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 require('dotenv').config(); 
 const express = require('express');
 
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 
@@ -26,6 +30,11 @@ const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
 app.use(express.json());
 app.use(express.static('public'));
+
+/* ── Health check: Render lo usa para saber que el servidor está vivo ── */
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
 
 /* REST: cargar contactos al iniciar sesion
    GET /api/contacts?phone=+34612345678
@@ -82,10 +91,23 @@ app.get('/api/user', async (req, res) => {
     }
 });
 
-// IMPORTANTE PORT=8080
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
 );
+
+/* ── Keep-alive: evita que Render duerma el servidor en plan gratuito ──
+   Render inyecta RENDER_EXTERNAL_URL automáticamente con la URL pública.
+   Cada 14 minutos hacemos un ping al propio /health para mantenerlo despierto. */
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_URL) {
+    setInterval(() => {
+        https.get(`${SELF_URL}/health`, (res) => {
+            console.log(`[keep-alive] ping → ${res.statusCode}`);
+        }).on('error', (err) => {
+            console.warn('[keep-alive] error:', err.message);
+        });
+    }, 14 * 60 * 1000); // cada 14 minutos
+}
 
 // Map: username → WebSocket
 const users = new Map();
