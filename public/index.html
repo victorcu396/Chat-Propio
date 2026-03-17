@@ -3308,7 +3308,7 @@ function finishLogin() {
     localStorage.setItem(`kvs_name_${loginPhone}`, loginUsername);
 
     // Persistir sesión siempre en localStorage (permanente en PWA y navegador)
-    const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername });
+    const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername, timestamp: Date.now() });
     localStorage.setItem('kvs_session', sessionData);
 
     // Ocultar modal, mostrar app
