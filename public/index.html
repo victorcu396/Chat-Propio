@@ -3667,6 +3667,7 @@ function handleMessage(data) {
 
     if (data.type === 'message') {
         mostrarMensaje(data);
+        addMessage(data);
         // Ignorar mensajes de llamada perdida aquí — se tratan por separado
         if (data.message === '__missed_call__') {
             mostrarLlamadaPerdida(data);
