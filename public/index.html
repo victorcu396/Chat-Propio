@@ -3498,7 +3498,7 @@ function conectarWS() {
         console.log('❌ Desconectado');
 
         conectado = false;
-        addInfo('Reconectando...');
+        
 
         intentarReconexion();
     };
@@ -3666,6 +3666,7 @@ function handleMessage(data) {
     }
 
     if (data.type === 'message') {
+        mostrarMensaje(data);
         // Ignorar mensajes de llamada perdida aquí — se tratan por separado
         if (data.message === '__missed_call__') {
             mostrarLlamadaPerdida(data);
@@ -4082,6 +4083,15 @@ function enviar() {
             message: text || '',
             imageData: pendingImage.dataUrl
         }));
+        addMessage({
+            id: 'local_' + Date.now(),
+            from: username,
+            to: toUsername,
+            toPhone: toPhone,
+            message: text,
+            timestamp: Date.now(),
+            self: true
+        });
         cancelarImagen();
     } else {
         socket.send(JSON.stringify({
@@ -4089,6 +4099,15 @@ function enviar() {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text
         }));
+        addMessage({
+            id: 'local_' + Date.now(),
+            from: username,
+            to: toUsername,
+            toPhone: toPhone,
+            message: text,
+            timestamp: Date.now(),
+            self: true
+        });
     }
 
     input.value = '';
@@ -4125,7 +4144,7 @@ input.addEventListener('keydown', (e) => {
 // ADD MESSAGE AL DOM
 // ============================================================
 function addMessage(msg) {
-    const isMe = msg.from === username;
+    const isMe = msg.self || msg.from === username;
 
     // ── Caso LLAMADA PERDIDA ──
     if (msg.message === '__missed_call__') {
