@@ -3308,7 +3308,7 @@ function finishLogin() {
     localStorage.setItem(`kvs_name_${loginPhone}`, loginUsername);
 
     // Persistir sesión siempre en localStorage (permanente en PWA y navegador)
-    const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername, timestamp: Date.now() });
+    const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername});
     localStorage.setItem('kvs_session', sessionData);
 
     // Ocultar modal, mostrar app
@@ -3444,6 +3444,9 @@ const imgPreviewEl = document.getElementById('imgPreview');
 // WEBSOCKET
 // ============================================================
 function conectarWS() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+    return;
+}
     username = loginUsername;
     pedirPermisoNotificaciones();
 
@@ -3469,9 +3472,15 @@ function conectarWS() {
     };
 
     socket.onclose = () => {
-        conectado = false;
-        addInfo('Desconectado del servidor. Recarga la página para reconectar.');
-    };
+    conectado = false;
+    addInfo('Reconectando...');
+
+    // Intentar reconectar automáticamente
+    setTimeout(() => {
+        console.log('Intentando reconectar...');
+        conectarWS();
+    }, 2000);
+};
 }
 
 // ============================================================
@@ -6026,7 +6035,18 @@ function cerrarAjustesOutside(e) {
 function mostrarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.add('open'); }
 function ocultarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.remove('open'); }
 function logoutConfirmado() { cerrarAjustes(); logout(); }
-
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            console.log('Volviendo a la app → reconectando...');
+            conectarWS();
+        }
+    }
+});
+window.addEventListener('online', () => {
+    console.log('Internet volvió → reconectando');
+    conectarWS();
+});
 </script>
 
 <!-- ============================================================
