@@ -3443,25 +3443,44 @@ const imgPreviewEl = document.getElementById('imgPreview');
 // ============================================================
 // WEBSOCKET
 // ============================================================
+let reconnectInterval = 500;
+let reconnectTimer = null;
+
 function conectarWS() {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-    return;
-}
+
+    // 🚫 Evitar múltiples conexiones
+    if (socket && (
+        socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING
+    )) {
+        return;
+    }
+
     username = loginUsername;
     pedirPermisoNotificaciones();
 
-    // Detectar automáticamente si estamos en local o en producción (Render)
     const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
     const wsHost     = location.host;
+
     socket = new WebSocket(wsProtocol + wsHost);
 
     socket.onopen = () => {
+        console.log('✅ Conectado');
+
         conectado = true;
-        socket.send(JSON.stringify({ type: 'join', username, phone: loginPhone, avatar: myAvatarDataUrl }));
+        reconnectInterval = 500; // reset
+
+        socket.send(JSON.stringify({
+            type: 'join',
+            username,
+            phone: loginPhone,
+            avatar: myAvatarDataUrl
+        }));
+
         input.disabled = false;
         input.focus();
         document.getElementById('btnMic').style.display = 'flex';
-        // Cargar contactos persistentes
+
         cargarContactos();
         cargarGrupos();
     };
@@ -3471,17 +3490,48 @@ function conectarWS() {
         handleMessage(data);
     };
 
-    socket.onclose = () => {
-    conectado = false;
-    addInfo('Reconectando...');
+    socket.onerror = (error) => {
+        console.warn('⚠️ Error WebSocket:', error);
+    };
 
-    // Intentar reconectar automáticamente
-    setTimeout(() => {
-        console.log('Intentando reconectar...');
-        conectarWS();
-    }, 2000);
-};
+    socket.onclose = () => {
+        console.log('❌ Desconectado');
+
+        conectado = false;
+        addInfo('Reconectando...');
+
+        intentarReconexion();
+    };
 }
+function intentarReconexion() {
+    if (reconnectTimer) return;
+
+    reconnectTimer = setTimeout(() => {
+        console.log('🔄 Intentando reconectar...');
+        conectarWS();
+        reconnectTimer = null;
+
+        reconnectInterval = Math.min(reconnectInterval * 1.5, 5000);
+    }, reconnectInterval);
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+
+        console.log('👀 Usuario volvió → reconexión inmediata');
+
+        reconnectInterval = 500;
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            conectarWS();
+        }
+    }
+});
+window.addEventListener('online', () => {
+    console.log('🌐 Internet volvió');
+
+    reconnectInterval = 500;
+    conectarWS();
+});
 
 // ============================================================
 // EMOJI PICKER
@@ -6035,18 +6085,8 @@ function cerrarAjustesOutside(e) {
 function mostrarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.add('open'); }
 function ocultarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.remove('open'); }
 function logoutConfirmado() { cerrarAjustes(); logout(); }
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
-            console.log('Volviendo a la app → reconectando...');
-            conectarWS();
-        }
-    }
-});
-window.addEventListener('online', () => {
-    console.log('Internet volvió → reconectando');
-    conectarWS();
-});
+
+
 </script>
 
 <!-- ============================================================
