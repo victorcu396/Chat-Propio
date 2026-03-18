@@ -4555,7 +4555,6 @@ function handleMessage(data) {
     }
 
     if (data.type === 'message') {
-        mostrarMensaje(data);
         // Ignorar mensajes de llamada perdida aquí — se tratan por separado
         if (data.message === '__missed_call__') {
             mostrarLlamadaPerdida(data);
@@ -5068,13 +5067,29 @@ function enviar() {
         const groupId = currentChat.replace('group_', '');
         // ¿Es una respuesta?
         if (_replyState && _replyState.id) {
+            const replySnapshot = { ..._replyState }; // guardar antes de cancelar
             socket.send(JSON.stringify({
                 type: 'replyMessage',
                 groupId,
                 message: text || '',
                 imageData: pendingImage ? pendingImage.dataUrl : undefined,
-                replyToId: _replyState.id
+                replyToId: replySnapshot.id
             }));
+            // Preview local inmediato en el grupo
+            addGroupMessage({
+                id: 'local_' + Date.now(),
+                from: username,
+                to: groupId,
+                groupId,
+                message: text || '',
+                imageData: pendingImage ? pendingImage.dataUrl : null,
+                time: new Date(),
+                avatar: myAvatarDataUrl,
+                replyToId:   replySnapshot.id,
+                replyToFrom: replySnapshot.from === 'T\u00fa' ? username : replySnapshot.from,
+                replyToText: replySnapshot.text
+            });
+            if (pendingImage) cancelarImagen();
             cancelarRespuesta();
         } else if (pendingImage) {
             socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text || '', imageData: pendingImage.dataUrl }));
@@ -5096,13 +5111,28 @@ function enviar() {
 
     // ¿Es una respuesta?
     if (_replyState && _replyState.id) {
+        const replySnapshot = { ..._replyState }; // guardar antes de cancelar
         socket.send(JSON.stringify({
             type: 'replyMessage',
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text || '',
             imageData: pendingImage ? pendingImage.dataUrl : undefined,
-            replyToId: _replyState.id
+            replyToId: replySnapshot.id
         }));
+        // Preview local inmediato con los datos de la respuesta
+        addMessage({
+            id: 'local_' + Date.now(),
+            from: username,
+            to: toUsername || null,
+            message: text || '',
+            imageData: pendingImage ? pendingImage.dataUrl : null,
+            time: new Date(),
+            self: true,
+            avatar: myAvatarDataUrl,
+            replyToId:   replySnapshot.id,
+            replyToFrom: replySnapshot.from === 'T\u00fa' ? username : replySnapshot.from,
+            replyToText: replySnapshot.text
+        });
         if (pendingImage) cancelarImagen();
         cancelarRespuesta();
     } else if (pendingImage) {
@@ -6186,7 +6216,21 @@ function onGroupMessage(data) {
         : data.message;
 
     if (currentChat === chatKey) {
-        addGroupMessage(data);
+        if (data.from === username) {
+            // Mensaje propio: sustituir el bubble local_ más reciente con el ID real
+            const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
+            if (localRows.length > 0) {
+                const lastLocal = localRows[localRows.length - 1];
+                lastLocal.dataset.msgid = data.id;
+                const bubble = lastLocal.querySelector('.bubble');
+                if (bubble) bubble.id = data.id;
+                _attachBubbleClickMenu(lastLocal, data.id, true, false, true);
+            } else {
+                addGroupMessage(data);
+            }
+        } else {
+            addGroupMessage(data);
+        }
     } else {
         unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
         if (data.from !== username) {
@@ -7618,6 +7662,13 @@ function abrirModalReenviar(msgId) {
     const list = document.getElementById('forwardList');
     list.innerHTML = '';
 
+    // Buscar el mensaje original en conversations para el preview local del reenvío
+    let origMsg = null;
+    for (const arr of Object.values(conversations)) {
+        const m = arr.find(m => m.id === msgId);
+        if (m) { origMsg = m; break; }
+    }
+
     // Contactos
     myContacts.forEach((c) => {
         const onlineUsername = getOnlineUsernameByPhone(c.contactPhone);
@@ -7631,6 +7682,22 @@ function abrirModalReenviar(msgId) {
             if (onlineUsername) payload.to = onlineUsername;
             else payload.toPhone = c.contactPhone;
             socket.send(JSON.stringify(payload));
+            // Preview local inmediato solo si el chat destino está abierto
+            const destChatKey = onlineUsername || ('phone:' + c.contactPhone);
+            if (currentChat === destChatKey || currentChat === onlineUsername) {
+                addMessage({
+                    id: 'local_' + Date.now(),
+                    from: username,
+                    to: onlineUsername || null,
+                    message: origMsg ? origMsg.message : '',
+                    imageData: origMsg ? origMsg.imageData : null,
+                    audioData: origMsg ? origMsg.audioData : null,
+                    time: new Date(),
+                    self: true,
+                    avatar: myAvatarDataUrl,
+                    forwardedFrom: origMsg ? origMsg.from : ''
+                });
+            }
             mostrarToast('Reenviado ✓');
             cerrarModalReenviar();
         };
@@ -7644,6 +7711,21 @@ function abrirModalReenviar(msgId) {
         item.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:var(--purple-pale);display:flex;align-items:center;justify-content:center;font-size:18px;">👥</div><span class="forward-item-name">${escapeHTML(g.name)}</span>`;
         item.onclick = () => {
             socket.send(JSON.stringify({ type: 'forwardMessage', id: msgId, groupId: g.groupId }));
+            // Preview local inmediato solo si el chat del grupo está abierto
+            if (currentChat === 'group_' + g.groupId) {
+                addGroupMessage({
+                    id: 'local_' + Date.now(),
+                    from: username,
+                    to: g.groupId,
+                    groupId: g.groupId,
+                    message: origMsg ? origMsg.message : '',
+                    imageData: origMsg ? origMsg.imageData : null,
+                    audioData: origMsg ? origMsg.audioData : null,
+                    time: new Date(),
+                    avatar: myAvatarDataUrl,
+                    forwardedFrom: origMsg ? origMsg.from : ''
+                });
+            }
             mostrarToast('Reenviado ✓');
             cerrarModalReenviar();
         };
