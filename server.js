@@ -121,16 +121,40 @@ const phoneSessions = new Map();
 // Map: pendingContactRequests toPhone → Array<{fromPhone, fromUsername, fromAvatar, id}>
 const pendingContactRequests = new Map();
 
-// ── Heartbeat: detectar clientes desconectados silenciosamente ────────────
-// Cada 30s el servidor hace ping a todos los WS activos.
-// Si en 10s el cliente no responde con pong, se da por desconectado.
+// ── Heartbeat de aplicación (JS-level) ───────────────────────────────────
+// El cliente envía 'kvs_ping' cada 15s desde JS activo.
+// Si no recibimos un ping en 25s → marcamos isAway.
+// Si no recibimos un ping en 55s → desconectamos (app cerrada o sin red).
+// Esto es mucho más fiable que TCP ping/pong, que el SO responde aunque JS esté suspendido.
+const APP_PING_AWAY    = 25000;  // 25s sin ping → ausente
+const APP_PING_OFFLINE = 55000;  // 55s sin ping → desconectar
+
+setInterval(() => {
+    const now = Date.now();
+    users.forEach((ws) => {
+        if (!ws.lastPing) return; // aún no ha enviado su primer ping (acaba de conectar)
+        const elapsed = now - ws.lastPing;
+
+        if (elapsed > APP_PING_OFFLINE) {
+            // Demasiado tiempo sin ping → dar por desconectado
+            try { ws.terminate(); } catch(_) {}
+            return;
+        }
+
+        const shouldBeAway = elapsed > APP_PING_AWAY;
+        if (ws.isAway !== shouldBeAway) {
+            ws.isAway = shouldBeAway;
+            broadcastUsers();
+        }
+    });
+}, 10000); // comprobar cada 10s
+
+// TCP ping/pong (mantiene el socket vivo y detecta caídas de red)
 const HEARTBEAT_INTERVAL = 30000;
-const HEARTBEAT_TIMEOUT  = 10000;
 
 setInterval(() => {
     users.forEach((ws) => {
         if (!ws.isAlive) {
-            // No respondió al ping anterior → desconectar
             ws.terminate();
             return;
         }
@@ -141,7 +165,8 @@ setInterval(() => {
 
 wss.on('connection', (ws) => {
     ws.isAlive = true;
-    ws.isAway  = false;   // true cuando el cliente reporta estar en background
+    ws.isAway  = false;
+    ws.lastPing = Date.now(); // inicializar para que no se marque away antes del primer ping
 
     ws.on('pong', () => {
         ws.isAlive = true;
@@ -940,6 +965,25 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               PING de aplicación (JS-level)
+               El cliente lo envía cada 15s mientras
+               la app está activa en primer plano.
+               Actualiza lastPing y limpia isAway.
+            ────────────────────────────────────── */
+            case 'kvs_ping': {
+                const wasAway = ws.isAway;
+                ws.lastPing = Date.now();
+                ws.isAlive  = true;
+                if (ws.isAway) {
+                    ws.isAway = false;
+                    broadcastUsers(); // avisar a todos que volvió
+                }
+                // Responder con pong para que el cliente sepa que el servidor está vivo
+                try { ws.send(JSON.stringify({ type: 'kvs_pong' })); } catch(_) {}
+                break;
+            }
+
+            /* ──────────────────────────────────────
                PRESENCIA: el cliente informa si está
                en primer plano (active) o en background (away).
                Se rebroadcastea a todos para actualizar los dots.
@@ -947,6 +991,11 @@ wss.on('connection', (ws) => {
             case 'set_presence': {
                 if (!ws.username) break;
                 ws.isAway = (data.status === 'away');
+                if (data.status === 'away') {
+                    // No reseteamos lastPing en away — el timer de APP_PING lo gestiona
+                } else {
+                    ws.lastPing = Date.now(); // volvió al foreground → resetear timer
+                }
                 broadcastUsers();
                 break;
             }

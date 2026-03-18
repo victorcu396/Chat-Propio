@@ -3100,11 +3100,14 @@ html.is-mobile .contact-actions { display: flex; }
     <div class="add-contact-field">
       <label>Número de teléfono</label>
       <div class="add-contact-phone-wrap">
-        <span class="phone-prefix">+34</span>
-        <input type="tel" id="contactPhoneInput" placeholder="612 345 678"
-          maxlength="9" inputmode="numeric"
-          oninput="this.value=this.value.replace(/\D/g,'').slice(0,9)"
+        <span class="phone-prefix">+</span>
+        <input type="tel" id="contactPhoneInput" placeholder="34612345678"
+          maxlength="15" inputmode="numeric"
+          oninput="this.value=this.value.replace(/\D/g,'').slice(0,15)"
           style="font-family:'DM Mono',monospace;letter-spacing:0.5px;">
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
+        Incluye el prefijo del país sin el +. Ej: España → 34612345678
       </div>
     </div>
 
@@ -3640,6 +3643,9 @@ function conectarWS() {
         // Informar presencia inicial (puede haberse conectado desde background)
         if (document.visibilityState === 'hidden') {
             socket.send(JSON.stringify({ type: 'set_presence', status: 'away' }));
+        } else {
+            // Iniciar heartbeat JS inmediatamente
+            _iniciarHeartbeat();
         }
 
         input.disabled = false;
@@ -3661,16 +3667,44 @@ function conectarWS() {
 
     socket.onclose = () => {
         console.log('❌ Desconectado');
-
         conectado = false;
-        
-
+        _pararHeartbeat();
         // Solo programar reconexión automática si la app está visible.
         // Si está en background, el visibilitychange lo hará al volver.
         if (document.visibilityState !== 'hidden') {
             intentarReconexion();
         }
     };
+}
+
+// ── Heartbeat JS: envía kvs_ping cada 15s mientras la app está en primer plano ──
+// El servidor marca al usuario como "ausente" si no recibe ping en 25s,
+// y como "desconectado" si no recibe ping en 55s.
+// Esto es mucho más fiable que el TCP ping/pong porque solo el JS activo puede enviarlo.
+let _heartbeatTimer = null;
+const PING_INTERVAL = 15000; // 15s
+
+function _iniciarHeartbeat() {
+    _pararHeartbeat(); // limpiar cualquier timer previo
+    _heartbeatTimer = setInterval(() => {
+        if (socket && socket.readyState === WebSocket.OPEN
+            && document.visibilityState !== 'hidden') {
+            try {
+                socket.send(JSON.stringify({ type: 'kvs_ping' }));
+            } catch(_) {}
+        }
+    }, PING_INTERVAL);
+    // Enviar uno inmediatamente para resetear el timer del servidor
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        try { socket.send(JSON.stringify({ type: 'kvs_ping' })); } catch(_) {}
+    }
+}
+
+function _pararHeartbeat() {
+    if (_heartbeatTimer) {
+        clearInterval(_heartbeatTimer);
+        _heartbeatTimer = null;
+    }
 }
 function intentarReconexion() {
     if (reconnectTimer) return;
@@ -3695,12 +3729,12 @@ function _actualizarChatStatusPresencia() {
 }
 
 // ── Reconexión limpia + reporte de presencia al volver de background ──────────
-// Al pasar a background:  notificar al servidor estado 'away' si el WS sigue abierto.
-// Al volver al foreground: cancelar timer pendiente, cerrar socket viejo silenciosamente,
-//                          reconectar limpio para evitar el race condition de sesión.
+// Al pasar a background:  parar heartbeat + notificar al servidor estado 'away'.
+// Al volver al foreground: reanudar heartbeat + notificar 'active'.
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-        // App va a background → marcar ausente sin cerrar el WS
+        // App va a background → parar heartbeat y marcar ausente
+        _pararHeartbeat();
         if (socket && socket.readyState === WebSocket.OPEN) {
             try {
                 socket.send(JSON.stringify({ type: 'set_presence', status: 'away' }));
@@ -3716,7 +3750,7 @@ document.addEventListener('visibilitychange', () => {
             reconnectTimer = null;
         }
 
-        // 2. Si el socket no está OPEN, cerrarlo silenciosamente
+        // 2. Si el socket no está OPEN, cerrarlo silenciosamente y reconectar
         if (socket && socket.readyState !== WebSocket.OPEN) {
             socket.onclose = null;
             socket.onerror = null;
@@ -3726,12 +3760,14 @@ document.addEventListener('visibilitychange', () => {
 
         reconnectInterval = 500;
 
-        // 3. Si ya está OPEN, solo actualizar presencia a activo
         if (socket && socket.readyState === WebSocket.OPEN) {
+            // Socket sigue vivo → reanudar heartbeat y marcar activo
             try {
                 socket.send(JSON.stringify({ type: 'set_presence', status: 'active' }));
             } catch(_) {}
+            _iniciarHeartbeat();
         } else {
+            // Socket muerto → reconectar (el onopen iniciará el heartbeat)
             conectarWS();
         }
     }
@@ -3985,6 +4021,7 @@ function handleMessage(data) {
     if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); return; }
     if (data.type === 'read')      { updateEstado(data.id, '✔✔ leído'); return; }
     if (data.type === 'info')      { addInfo(data.message); return; }
+    if (data.type === 'kvs_pong')  { return; } // respuesta al heartbeat, ignorar
 
     // ── WebRTC signaling ──
     if (data.type === 'call_offer')    { recibirLlamada(data); return; }
@@ -5550,7 +5587,8 @@ function cerrarModalVerMiembros() {
 // Abre el modal "Nuevo contacto" con el teléfono del miembro pre-rellenado
 function abrirModalAgregarContactoDesdeGrupo(phone, suggestedName) {
     cerrarModalVerMiembros();
-    const digits = phone.replace(/^\+34/, '').replace(/\D/g, '').slice(0, 9);
+    // Quitar el '+' inicial y poner solo los dígitos (el input ahora asume formato internacional sin '+')
+    const digits = phone.replace(/^\+/, '').replace(/\D/g, '').slice(0, 15);
     document.getElementById('contactPhoneInput').value = digits;
     document.getElementById('contactNameInput').value = suggestedName || '';
     document.getElementById('addContactError').textContent = '';
@@ -5823,8 +5861,8 @@ async function guardarContacto() {
     const customName = document.getElementById('contactNameInput').value.trim();
     const errEl = document.getElementById('addContactError');
 
-    if (rawPhone.length < 9) {
-        errEl.textContent = 'Introduce un número válido de 9 dígitos.';
+    if (rawPhone.length < 7) {
+        errEl.textContent = 'Introduce un número válido con prefijo de país. Ej: 34612345678';
         return;
     }
     if (!customName) {
@@ -5832,7 +5870,7 @@ async function guardarContacto() {
         return;
     }
 
-    const contactPhone = '+34' + rawPhone;
+    const contactPhone = '+' + rawPhone;
 
     if (contactPhone === loginPhone) {
         errEl.textContent = 'No puedes agregarte a ti mismo.';
@@ -5842,14 +5880,15 @@ async function guardarContacto() {
     errEl.textContent = '';
     document.getElementById('btnGuardarContacto').disabled = true;
 
-    // Enviar por WS
+    // Enviar por WS — funciona aunque el contacto no esté registrado aún.
+    // El servidor guarda el contacto; cuando esa persona se registre se hará el recíproco.
     socket.send(JSON.stringify({
         type: 'addContact',
         contactPhone,
         customName
     }));
 
-    // Esperar confirmación (la función onContactAdded la cierra el modal)
+    // Esperar confirmación (la función onContactAdded cierra el modal)
 }
 
 function onContactAdded(contactPhone, customName, avatar, username) {
