@@ -863,6 +863,7 @@ html, body {
 }
 
 .status-dot.offline { background: var(--offline); }
+.status-dot.away    { background: #f59e0b; }  /* amarillo = ausente/background */
 
 .user-info { flex: 1; min-width: 0; }
 
@@ -3636,6 +3637,11 @@ function conectarWS() {
             avatar: myAvatarDataUrl
         }));
 
+        // Informar presencia inicial (puede haberse conectado desde background)
+        if (document.visibilityState === 'hidden') {
+            socket.send(JSON.stringify({ type: 'set_presence', status: 'away' }));
+        }
+
         input.disabled = false;
         input.focus();
         document.getElementById('btnMic').style.display = 'flex';
@@ -3659,7 +3665,11 @@ function conectarWS() {
         conectado = false;
         
 
-        intentarReconexion();
+        // Solo programar reconexión automática si la app está visible.
+        // Si está en background, el visibilitychange lo hará al volver.
+        if (document.visibilityState !== 'hidden') {
+            intentarReconexion();
+        }
     };
 }
 function intentarReconexion() {
@@ -3667,27 +3677,78 @@ function intentarReconexion() {
 
     reconnectTimer = setTimeout(() => {
         console.log('🔄 Intentando reconectar...');
-        conectarWS();
         reconnectTimer = null;
-
         reconnectInterval = Math.min(reconnectInterval * 1.5, 5000);
+        conectarWS();
     }, reconnectInterval);
 }
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
 
-        console.log('👀 Usuario volvió → reconexión inmediata');
+// ── Helper: actualiza el chatStatus del chat abierto cuando cambia presencia ──
+function _actualizarChatStatusPresencia() {
+    if (!currentChat || currentChat.startsWith('group_') || currentChat.startsWith('phone:')) return;
+    const isOnline = lastKnownUsers.includes(currentChat);
+    const isAway   = isOnline && window._awayUsers && window._awayUsers.has(currentChat);
+    const statusText  = !isOnline ? '○ Desconectado' : isAway ? '🌙 Ausente' : '● En línea';
+    const statusColor = !isOnline ? 'var(--text-muted)' : isAway ? '#f59e0b' : 'var(--online)';
+    document.getElementById('chatStatus').textContent = statusText;
+    document.getElementById('chatStatus').style.color = statusColor;
+}
+
+// ── Reconexión limpia + reporte de presencia al volver de background ──────────
+// Al pasar a background:  notificar al servidor estado 'away' si el WS sigue abierto.
+// Al volver al foreground: cancelar timer pendiente, cerrar socket viejo silenciosamente,
+//                          reconectar limpio para evitar el race condition de sesión.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        // App va a background → marcar ausente sin cerrar el WS
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            try {
+                socket.send(JSON.stringify({ type: 'set_presence', status: 'away' }));
+            } catch(_) {}
+        }
+    } else {
+        // App vuelve al foreground
+        console.log('👀 Usuario volvió → reconexión limpia');
+
+        // 1. Cancelar timer de reconexión pendiente
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        // 2. Si el socket no está OPEN, cerrarlo silenciosamente
+        if (socket && socket.readyState !== WebSocket.OPEN) {
+            socket.onclose = null;
+            socket.onerror = null;
+            try { socket.close(); } catch(_) {}
+            socket = null;
+        }
 
         reconnectInterval = 500;
 
-        if (!socket || socket.readyState !== WebSocket.OPEN) {
+        // 3. Si ya está OPEN, solo actualizar presencia a activo
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            try {
+                socket.send(JSON.stringify({ type: 'set_presence', status: 'active' }));
+            } catch(_) {}
+        } else {
             conectarWS();
         }
     }
 });
+
 window.addEventListener('online', () => {
     console.log('🌐 Internet volvió');
-
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (socket && socket.readyState !== WebSocket.OPEN) {
+        socket.onclose = null;
+        socket.onerror = null;
+        try { socket.close(); } catch(_) {}
+        socket = null;
+    }
     reconnectInterval = 500;
     conectarWS();
 });
@@ -3884,9 +3945,11 @@ function handleMessage(data) {
     }
 
     if (data.type === 'users') {
-        // data.online ahora es array de {username, avatar, phone}
+        // data.online es array de {username, avatar, phone, isAway}
         window._phoneToUsername = window._phoneToUsername || {};
-        window._onlinePhones = new Set();
+        window._onlinePhones    = new Set();
+        window._awayUsers       = window._awayUsers || new Set();
+        window._awayUsers.clear();
         const list = data.online.map(u => {
             if (typeof u === 'object') {
                 userAvatars[u.username] = u.avatar;
@@ -3894,6 +3957,7 @@ function handleMessage(data) {
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
                 }
+                if (u.isAway) window._awayUsers.add(u.username);
                 return u.username;
             }
             return u;
@@ -3901,6 +3965,8 @@ function handleMessage(data) {
         lastKnownUsers = list;
         renderUsers(list);
         renderContactsList(); // actualizar estado online de contactos
+        // Actualizar chatStatus si el chat activo es con alguien cuyo estado cambió
+        _actualizarChatStatusPresencia();
         return;
     }
 
@@ -4061,6 +4127,8 @@ function renderUsers(onlineList) {
         usersUl.innerHTML = '<li style="list-style:none;padding:8px 18px;font-size:12px;color:var(--text-muted);font-style:italic;cursor:default;">Nadie más conectado</li>';
     } else {
         usersUl.innerHTML = onlineNotContact.map(u => {
+            const isAway    = window._awayUsers && window._awayUsers.has(u);
+            const dotClass  = isAway ? 'status-dot away' : 'status-dot';
             const avatarUrl = userAvatars[u] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u)}`;
             const phone = window._phoneToUsername
                 ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === u)?.[0]
@@ -4071,7 +4139,7 @@ function renderUsers(onlineList) {
                 <div class="user-avatar-wrap">
                     <img class="user-avatar" src="${avatarUrl}" alt="${u}"
                         onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u)}'">
-                    <span class="status-dot"></span>
+                    <span class="${dotClass}"></span>
                 </div>
                 <div class="user-info">
                     <div class="user-name">${u}</div>
@@ -4162,8 +4230,11 @@ function seleccionarUsuario(user) {
     input.placeholder = 'Escribe un mensaje...';
 
     const isOnline = lastKnownUsers.includes(user);
-    document.getElementById('chatStatus').textContent = isOnline ? '● En línea' : '○ Desconectado';
-    document.getElementById('chatStatus').style.color = isOnline ? 'var(--online)' : 'var(--text-muted)';
+    const isAway   = isOnline && window._awayUsers && window._awayUsers.has(user);
+    const statusText  = !isOnline ? '○ Desconectado' : isAway ? '🌙 Ausente' : '● En línea';
+    const statusColor = !isOnline ? 'var(--text-muted)' : isAway ? '#f59e0b' : 'var(--online)';
+    document.getElementById('chatStatus').textContent = statusText;
+    document.getElementById('chatStatus').style.color = statusColor;
     const btnU = document.getElementById('btnCallUnified');
     btnU.disabled = !isOnline;
     btnU.dataset.mode = '1to1';
@@ -5187,17 +5258,11 @@ function seleccionarGrupo(groupId) {
     document.getElementById('chatStatus').style.color = 'var(--text-muted)';
     document.getElementById('chatPhone').style.display = 'none';
 
-    // Botón unificado: solo admin puede hacer llamada grupal
+    // Botón unificado: cualquier miembro puede iniciar llamada grupal
     const btnU = document.getElementById('btnCallUnified');
-    if (g.ownerPhone === loginPhone) {
-        btnU.disabled = false;
-        btnU.dataset.mode = 'group';
-        btnU.title = 'Llamada grupal';
-    } else {
-        btnU.disabled = true;
-        btnU.dataset.mode = 'group';
-        btnU.title = 'Solo el administrador puede iniciar llamadas grupales';
-    }
+    btnU.disabled = false;
+    btnU.dataset.mode = 'group';
+    btnU.title = 'Llamada grupal';
 
     if (conversations[chatKey]) {
         let lastDay = '';
@@ -5691,7 +5756,10 @@ function renderContactsList() {
             }
         }
 
-        const dotClass = onlineUsername ? 'status-dot' : 'status-dot contact-offline';
+        const isAway   = onlineUsername && window._awayUsers && window._awayUsers.has(onlineUsername);
+        const dotClass = onlineUsername
+            ? (isAway ? 'status-dot away' : 'status-dot')
+            : 'status-dot contact-offline';
         const isActive = (onlineUsername && currentChat === onlineUsername)
             || (!onlineUsername && currentChat === 'phone:' + c.contactPhone)
             ? 'active' : '';
@@ -5703,6 +5771,9 @@ function renderContactsList() {
         const clickFn = onlineUsername
             ? `seleccionarUsuario('${onlineUsername}')`
             : `seleccionarContactoOffline('${escapedPhone}')`;
+        const statusPreview = onlineUsername
+            ? (isAway ? '🌙 Ausente' : (preview || ''))
+            : '● Desconectado';
 
         return `<li class="${isActive}" onclick="${clickFn}" data-phone="${escapedPhone}">
             <div class="user-avatar-wrap">
@@ -5711,7 +5782,7 @@ function renderContactsList() {
             </div>
             <div class="user-info">
                 <div class="user-name">${displayName}</div>
-                <div class="user-preview">${preview || (onlineUsername ? '' : '● Desconectado')}</div>
+                <div class="user-preview">${preview || statusPreview}</div>
             </div>
             ${badge}
             <div class="contact-actions">
@@ -5978,7 +6049,8 @@ function iniciarLlamadaGrupal() {
     if (!currentChat || !currentChat.startsWith('group_')) return;
     const groupId = currentChat.replace('group_', '');
     const g = myGroups.get(groupId);
-    if (!g || g.ownerPhone !== loginPhone) return;
+    if (!g) return;
+    // Cualquier miembro puede iniciar la llamada
 
     // Obtener miembros online (excluir al propio admin)
     const onlineMembers = g.members.filter(phone => {

@@ -118,11 +118,34 @@ const userPhones = new Map();
 // Map: phone → WebSocket  (para control de sesión única por número)
 const phoneSessions = new Map();
 
-// Map: toPhone → Array<{fromPhone, fromUsername, fromAvatar, id}>
-// Solicitudes de contacto pendientes para usuarios offline
+// Map: pendingContactRequests toPhone → Array<{fromPhone, fromUsername, fromAvatar, id}>
 const pendingContactRequests = new Map();
 
+// ── Heartbeat: detectar clientes desconectados silenciosamente ────────────
+// Cada 30s el servidor hace ping a todos los WS activos.
+// Si en 10s el cliente no responde con pong, se da por desconectado.
+const HEARTBEAT_INTERVAL = 30000;
+const HEARTBEAT_TIMEOUT  = 10000;
+
+setInterval(() => {
+    users.forEach((ws) => {
+        if (!ws.isAlive) {
+            // No respondió al ping anterior → desconectar
+            ws.terminate();
+            return;
+        }
+        ws.isAlive = false;
+        try { ws.ping(); } catch(_) {}
+    });
+}, HEARTBEAT_INTERVAL);
+
 wss.on('connection', (ws) => {
+    ws.isAlive = true;
+    ws.isAway  = false;   // true cuando el cliente reporta estar en background
+
+    ws.on('pong', () => {
+        ws.isAlive = true;
+    });
 
     ws.on('message', async (rawMsg) => {
 
@@ -507,16 +530,18 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
-               LLAMADA GRUPAL: el admin envía oferta
-               a todos los miembros online del grupo
+               LLAMADA GRUPAL: cualquier miembro puede
+               iniciar. Envía oferta a todos los demás
+               miembros online del grupo.
             ────────────────────────────────────── */
             case 'group_call_offer': {
                 if (!data.groupId || !data.sdp) break;
                 if (!ws.phone) break;
                 try {
                     const grp = await Group.findOne({ groupId: data.groupId });
-                    if (!grp || grp.ownerPhone !== ws.phone) break;
-                    // Reenviar la oferta a cada miembro online (excepto el admin)
+                    if (!grp) break;
+                    if (!grp.members.includes(ws.phone)) break; // debe ser miembro
+                    // Reenviar la oferta a cada miembro online (excepto el que llama)
                     grp.members.forEach(memberPhone => {
                         if (memberPhone === ws.phone) return;
                         const memberWs = [...users.values()].find(u => u.phone === memberPhone);
@@ -915,6 +940,18 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               PRESENCIA: el cliente informa si está
+               en primer plano (active) o en background (away).
+               Se rebroadcastea a todos para actualizar los dots.
+            ────────────────────────────────────── */
+            case 'set_presence': {
+                if (!ws.username) break;
+                ws.isAway = (data.status === 'away');
+                broadcastUsers();
+                break;
+            }
+
+            /* ──────────────────────────────────────
                SOLICITUD DE CONTACTO
                El remitente la envía; si el destinatario
                está online la recibe al momento, si no
@@ -1147,7 +1184,8 @@ function broadcastUsers() {
     const onlineWithAvatars = [...users.entries()].map(([name, ws]) => ({
         username: name,
         avatar:   ws.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-        phone:    ws.phone || null
+        phone:    ws.phone || null,
+        isAway:   ws.isAway || false
     }));
     broadcast({
         type:   'users',
