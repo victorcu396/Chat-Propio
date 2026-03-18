@@ -3406,7 +3406,7 @@ html.is-mobile .contact-actions { display: flex; }
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
         <textarea id="mensaje" placeholder="Escribe un mensaje..." rows="1" disabled lang="es"></textarea>
         <button class="icon-btn" id="btnMic" onclick="toggleGrabacion()" title="Grabar audio" style="display:none">🎙️</button>
-        <button id="btnEnviar" onclick="enviar()" disabled title="Enviar">
+        <button id="btnEnviar" disabled title="Enviar">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
@@ -4049,6 +4049,9 @@ const emojiPicker = document.getElementById('emojiPicker');
 const imgPreviewContainer = document.getElementById('imgPreviewContainer');
 const imgPreviewEl = document.getElementById('imgPreview');
 
+// Inicializar onclick del botón enviar
+btnEnviar.onclick = enviar;
+
 // ============================================================
 // WEBSOCKET
 // ============================================================
@@ -4371,7 +4374,8 @@ chat.addEventListener('scroll', () => {
 }, { passive: true });
 
 function actualizarBtnEnviar() {
-    btnEnviar.disabled = (input.value.trim() === '' && !pendingImage);
+    // Habilitado si: hay texto, hay imagen pendiente, o estamos editando con texto
+    btnEnviar.disabled = (input.value.trim() === '' && !pendingImage && !_editState);
 }
 
 // ============================================================
@@ -4445,21 +4449,42 @@ function handleMessage(data) {
 
         if (currentChat === chatKey || currentChat === otherUser) {
             if (data.from === username) {
-                // Propio mensaje: buscar y actualizar el bubble local_ más reciente
-                // para que su data-msgid pase al ID real (permite borrar/editar)
+                // Propio mensaje: buscar el bubble local_ que corresponde a ESTE mensaje
+                // Comparar por contenido para evitar asignar el ID al mensaje equivocado
+                // cuando se envían varios mensajes rápido.
                 const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
-                if (localRows.length > 0) {
-                    const lastLocal = localRows[localRows.length - 1];
-                    const oldLocalId = lastLocal.dataset.msgid;
-                    lastLocal.dataset.msgid = data.id;
-                    const bubble = lastLocal.querySelector('.bubble');
+                let matchedRow = null;
+                // Intentar match por texto/imagen del mensaje
+                for (const lr of localRows) {
+                    const bubble = lr.querySelector('.bubble');
+                    if (!bubble) continue;
+                    const textEl = bubble.querySelector('.msg-text');
+                    const imgEl  = bubble.querySelector('.img-msg');
+                    const rowText = textEl ? textEl.textContent.trim() : '';
+                    const rowHasImg = !!imgEl;
+                    if (data.imageData && rowHasImg) { matchedRow = lr; break; }
+                    if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
+                    if (data.audioData && bubble.querySelector('.audio-msg-wrap')) { matchedRow = lr; break; }
+                }
+                // Fallback: usar el último local_ si no encontramos match por contenido
+                if (!matchedRow && localRows.length > 0) {
+                    matchedRow = localRows[localRows.length - 1];
+                }
+                if (matchedRow) {
+                    const oldLocalId = matchedRow.dataset.msgid;
+                    matchedRow.dataset.msgid = data.id;
+                    const bubble = matchedRow.querySelector('.bubble');
                     if (bubble) bubble.id = data.id;
-                    // Actualizar el id en conversations para que editar/borrar funcionen
+                    // Actualizar estado visual (✔ → ✔✔)
+                    const estadoEl = bubble ? bubble.querySelector(`#estado_${oldLocalId}`) : null;
+                    if (estadoEl) estadoEl.id = `estado_${data.id}`;
+                    // Actualizar el id en TODOS los arrays de conversations (alias incluidos)
                     for (const arr of Object.values(conversations)) {
                         const m = arr.find(m => m.id === oldLocalId);
-                        if (m) { m.id = data.id; break; }
+                        if (m) { m.id = data.id; m.delivered = true; }
                     }
-                    _attachBubbleClickMenu(lastLocal, data.id, true, false,
+                    // Reasignar el menú contextual con el ID real
+                    _attachBubbleClickMenu(matchedRow, data.id, true, false,
                         currentChat.startsWith('group_'));
                 } else {
                     addMessage(data);
@@ -4748,21 +4773,39 @@ function onBtnCall() {
 // ============================================================
 // SELECCIONAR USUARIO
 // ============================================================
+// Limpia todos los estados transitorios al cambiar de chat
+function _limpiarEstadoChat() {
+    // Cerrar menú contextual abierto
+    cerrarMenuMensaje();
+    // Cancelar edición o respuesta activa sin pedir confirmación
+    if (_editState || _replyState) {
+        _editState  = null;
+        _replyState = null;
+        input.value = '';
+        input.style.height = 'auto';
+        btnEnviar.onclick = enviar;
+        btnEnviar.disabled = true;
+        document.getElementById('replyBar').classList.remove('visible');
+        document.getElementById('replyBarName').textContent = '';
+        document.getElementById('replyBarText').textContent = '';
+    }
+    // Cerrar panel de emojis/favoritos
+    cerrarSGPanel();
+    // Cerrar panel de hilo si está abierto
+    if (_threadId) cerrarHilo();
+}
+
 function seleccionarUsuario(user) {
     if (!user) return;
 
     // ── Bloquear chat con desconocidos ───────────────────────────────────
-    // Solo se puede abrir chat con alguien que esté en myContacts.
-    // Los desconocidos solo aparecen con botón "+Agregar" en la lista.
     const phoneOfUser = window._phoneToUsername
         ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
         : null;
-    if (phoneOfUser && !myContacts.has(phoneOfUser)) {
-        // No es contacto → no abrir chat
-        return;
-    }
+    if (phoneOfUser && !myContacts.has(phoneOfUser)) return;
 
     if (currentChat === user) return;
+    _limpiarEstadoChat();
     currentChat = user;
     unreadCounts[user] = 0;
     chat.innerHTML = '';
@@ -4836,6 +4879,7 @@ function seleccionarUsuario(user) {
 function seleccionarContactoOffline(phone) {
     const chatKey = 'phone:' + phone;
     if (currentChat === chatKey) return;
+    _limpiarEstadoChat();
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
     chat.innerHTML = '';
@@ -4903,6 +4947,9 @@ function seleccionarContactoOffline(phone) {
 // ENVIAR MENSAJE
 // ============================================================
 function enviar() {
+    // Si estamos en modo edición, delegar a guardarEdicion
+    if (_editState) { guardarEdicion(); return; }
+
     const text = input.value.trim();
     if (!text && !pendingImage) return;
     if (!currentChat) return;
@@ -4918,7 +4965,6 @@ function enviar() {
     // ── Mensaje de grupo ──────────────────────────────
     if (currentChat.startsWith('group_')) {
         const groupId = currentChat.replace('group_', '');
-        // ¿Es una respuesta?
         if (_replyState && _replyState.id) {
             const replySnap = { ..._replyState };
             socket.send(JSON.stringify({
@@ -4952,7 +4998,7 @@ function enviar() {
         input.value = '';
         input.style.height = 'auto';
         btnEnviar.disabled = true;
-        emojiPicker.classList.remove('visible');
+        cerrarSGPanel();
         return;
     }
 
@@ -4961,7 +5007,6 @@ function enviar() {
     const toPhone    = isOfflineChat ? currentChat.replace('phone:', '') : null;
     const toUsername = isOfflineChat ? null : currentChat;
 
-    // ¿Es una respuesta?
     if (_replyState && _replyState.id) {
         const replySnap = { ..._replyState };
         socket.send(JSON.stringify({
@@ -4993,7 +5038,7 @@ function enviar() {
             message: text || '',
             imageData: pendingImage.dataUrl
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text || '', time: new Date(), self: true, avatar: myAvatarDataUrl });
         cancelarImagen();
     } else {
         socket.send(JSON.stringify({
@@ -5001,13 +5046,13 @@ function enviar() {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, time: new Date(), self: true, avatar: myAvatarDataUrl });
     }
 
     input.value = '';
     input.style.height = 'auto';
     btnEnviar.disabled = true;
-    emojiPicker.classList.remove('visible');
+    cerrarSGPanel();
 }
 
 // ============================================================
@@ -5032,12 +5077,8 @@ input.addEventListener('input', () => {
 input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        // Si estamos en modo edición, guardar la edición en lugar de enviar
-        if (_editState) {
-            guardarEdicion();
-        } else {
-            enviar();
-        }
+        // enviar() ya detecta internamente si hay _editState activo
+        enviar();
     }
 });
 
@@ -5906,6 +5947,7 @@ function seleccionarGrupo(groupId) {
     const chatKey = 'group_' + groupId;
     if (currentChat === chatKey) return;
 
+    _limpiarEstadoChat();
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
     chat.innerHTML = '';
@@ -6038,16 +6080,34 @@ function onGroupMessage(data) {
 
     if (currentChat === chatKey) {
         if (data.from === username) {
+            // Match por contenido igual que en 1:1
             const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
-            if (localRows.length > 0) {
-                const lastLocal = localRows[localRows.length - 1];
-                const oldLocalId = lastLocal.dataset.msgid;
-                lastLocal.dataset.msgid = data.id;
-                const bubble = lastLocal.querySelector('.bubble');
+            let matchedRow = null;
+            for (const lr of localRows) {
+                const bubble = lr.querySelector('.bubble');
+                if (!bubble) continue;
+                const textEl = bubble.querySelector('.msg-text');
+                const imgEl  = bubble.querySelector('.img-msg');
+                const rowText = textEl ? textEl.textContent.trim() : '';
+                if (data.imageData && imgEl) { matchedRow = lr; break; }
+                if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
+                if (data.audioData && bubble.querySelector('.audio-msg-wrap')) { matchedRow = lr; break; }
+            }
+            if (!matchedRow && localRows.length > 0) matchedRow = localRows[localRows.length - 1];
+
+            if (matchedRow) {
+                const oldLocalId = matchedRow.dataset.msgid;
+                matchedRow.dataset.msgid = data.id;
+                const bubble = matchedRow.querySelector('.bubble');
                 if (bubble) bubble.id = data.id;
+                const estadoEl = bubble ? bubble.querySelector(`#estado_${oldLocalId}`) : null;
+                if (estadoEl) estadoEl.id = `estado_${data.id}`;
                 const convArr = conversations[chatKey];
-                if (convArr) { const m = convArr.find(m => m.id === oldLocalId); if (m) m.id = data.id; }
-                _attachBubbleClickMenu(lastLocal, data.id, true, false, true);
+                if (convArr) {
+                    const m = convArr.find(m => m.id === oldLocalId);
+                    if (m) { m.id = data.id; m.delivered = true; }
+                }
+                _attachBubbleClickMenu(matchedRow, data.id, true, false, true);
             } else {
                 addGroupMessage(data);
             }
@@ -7262,13 +7322,24 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
 
     bubbleWrap.appendChild(menu);
 
-    // Cerrar al pulsar fuera con un pequeño delay para no cerrar en el mismo click
-    setTimeout(() => {
-        document.addEventListener('click', cerrarMenuMensaje, { once: true });
-    }, 50);
+    // Cerrar al pulsar fuera — esperar dos frames para que el evento actual termine
+    // completamente antes de añadir el listener global, evitando cierres inmediatos.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            document.addEventListener('click', _onClickOutsideMenu);
+        });
+    });
+}
+
+function _onClickOutsideMenu(ev) {
+    const menu = document.getElementById('msgCtxMenu');
+    if (menu && menu.contains(ev.target)) return; // click dentro del menú — no cerrar
+    document.removeEventListener('click', _onClickOutsideMenu);
+    cerrarMenuMensaje();
 }
 
 function cerrarMenuMensaje() {
+    document.removeEventListener('click', _onClickOutsideMenu);
     const existing = document.getElementById('msgCtxMenu');
     if (existing) existing.remove();
     if (_openMenuRow) { _openMenuRow.classList.remove('menu-open'); _openMenuRow = null; }
@@ -7318,13 +7389,14 @@ function iniciarRespuesta(msgId) {
 
 function cancelarRespuesta() {
     _replyState = null;
-    // Si estábamos en modo edición, también cancelar
+    // Si estábamos en modo edición, cancelar la edición completamente
     if (_editState) {
         _editState = null;
         input.value = '';
         input.style.height = 'auto';
+        actualizarBtnEnviar();
+        // Restaurar onclick al enviar normal
         btnEnviar.onclick = enviar;
-        btnEnviar.disabled = true;
     }
     document.getElementById('replyBar').classList.remove('visible');
     document.getElementById('replyBarName').textContent = '';
@@ -7333,41 +7405,63 @@ function cancelarRespuesta() {
 
 /* ─── EDITAR ────────────────────────────────────────────────── */
 function iniciarEdicion(msgId) {
-    const bubble = document.getElementById(msgId);
-    if (!bubble) return;
-    const textEl = bubble.querySelector('.msg-text');
-    const currentText = textEl ? textEl.textContent.trim() : '';
+    // Leer el texto original de conversations (fuente de verdad), no del DOM
+    let currentText = '';
+    for (const arr of Object.values(conversations)) {
+        const m = arr.find(m => m.id === msgId);
+        if (m && !m.deletedAt) { currentText = m.message || ''; break; }
+    }
+    // Fallback al DOM si el mensaje no está en conversations aún (local reciente)
+    if (!currentText) {
+        const bubble = document.getElementById(msgId);
+        const textEl = bubble ? bubble.querySelector('.msg-text') : null;
+        if (textEl) currentText = textEl.textContent.trim();
+    }
+
+    // Cancelar cualquier respuesta pendiente sin borrar el input (lo ponemos nosotros)
+    if (_replyState) {
+        _replyState = null;
+        document.getElementById('replyBar').classList.remove('visible');
+    }
 
     _editState = { id: msgId };
     input.value = currentText;
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    // Mover cursor al final
+    input.selectionStart = input.selectionEnd = input.value.length;
     input.focus();
 
-    // Cambiar el botón enviar a "guardar edición"
     document.getElementById('replyBarName').textContent = '✏️ Editando mensaje';
-    document.getElementById('replyBarText').textContent = currentText.slice(0, 60);
+    document.getElementById('replyBarText').textContent = currentText.slice(0, 60) || '(sin texto)';
     document.getElementById('replyBar').classList.add('visible');
 
-    // Override de enviar → guardarEdicion
+    actualizarBtnEnviar();
+    // Override de enviar → guardarEdicion (solo onclick; keydown Enter ya lo maneja)
     btnEnviar.onclick = guardarEdicion;
-    btnEnviar.disabled = false;
 }
 
 function guardarEdicion() {
     if (!_editState) return;
     const newText = input.value.trim();
-    if (!newText) return;
+    if (!newText) {
+        // Texto vacío: simplemente cancelar sin enviar
+        cancelarRespuesta();
+        return;
+    }
 
     socket.send(JSON.stringify({ type: 'editMessage', id: _editState.id, newText }));
 
-    // Reset
+    // Reset limpio del estado
     _editState = null;
+    _replyState = null;
     input.value = '';
     input.style.height = 'auto';
-    btnEnviar.onclick = enviar;
-    btnEnviar.disabled = true;
-    cancelarRespuesta();
+    btnEnviar.onclick = enviar;  // restaurar al comportamiento por defecto (keydown Enter y onclick genérico)
+    actualizarBtnEnviar();
+    document.getElementById('replyBar').classList.remove('visible');
+    document.getElementById('replyBarName').textContent = '';
+    document.getElementById('replyBarText').textContent = '';
 }
 
 function onMensajeEditado(msgId, newText, editedAt) {
@@ -7376,13 +7470,27 @@ function onMensajeEditado(msgId, newText, editedAt) {
         const m = arr.find(m => m.id === msgId);
         if (m) { m.message = newText; m.editedAt = editedAt; }
     });
-    // Actualizar en DOM
+    // Actualizar en DOM — solo el span.msg-text, preservando reply-preview si existe
     const bubble = document.getElementById(msgId);
     if (!bubble) return;
     const textEl = bubble.querySelector('.msg-text');
-    if (textEl) textEl.innerHTML = escapeHTML(newText);
-    // Añadir/actualizar label "editado"
-    let meta = bubble.querySelector('.meta');
+    if (textEl) {
+        // Si hay reply-preview dentro del msg-text, preservarlo
+        const replyPreview = textEl.querySelector('.reply-preview');
+        if (replyPreview) {
+            // Reconstruir: reply-preview + nuevo texto
+            textEl.innerHTML = '';
+            textEl.appendChild(replyPreview);
+            const textNode = document.createTextNode('');
+            const span = document.createElement('span');
+            span.innerHTML = escapeHTML(newText);
+            textEl.appendChild(span);
+        } else {
+            textEl.innerHTML = escapeHTML(newText);
+        }
+    }
+    // Añadir/actualizar label "(editado)" en .meta
+    const meta = bubble.querySelector('.meta');
     if (meta && !meta.querySelector('.edited-label')) {
         meta.insertAdjacentHTML('beforeend', '<span class="edited-label">(editado)</span>');
     }
@@ -7390,7 +7498,13 @@ function onMensajeEditado(msgId, newText, editedAt) {
 
 /* ─── ELIMINAR ──────────────────────────────────────────────── */
 function eliminarMensaje(msgId) {
+    // Cerrar el menú antes del confirm para evitar estados sucios
+    cerrarMenuMensaje();
     if (!confirm('¿Eliminar este mensaje para todos?')) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        mostrarToast('Sin conexión. Inténtalo de nuevo.', true);
+        return;
+    }
     socket.send(JSON.stringify({ type: 'deleteMessage', id: msgId }));
 }
 
@@ -7406,19 +7520,16 @@ function onMensajeEliminado(msgId) {
     bubble.classList.add('deleted');
     const textEl = bubble.querySelector('.msg-text');
     if (textEl) textEl.innerHTML = '🗑 Mensaje eliminado';
-    // Quitar reacciones e hilo del mensaje eliminado
+    // Quitar reacciones e hilo
     const reactEl = document.getElementById('react_' + msgId);
     if (reactEl) reactEl.innerHTML = '';
-    // Ocultar botón de acciones
-    const row = bubble.closest('.msg-row');
-    if (row) {
-        // Desactivar el click del menú en burbujas eliminadas
-        const bubbleEl = row.querySelector('.bubble');
-        if (bubbleEl) {
-            bubbleEl.style.cursor = 'default';
-            bubbleEl.onclick = null;
-        }
-    }
+    // Desactivar click del menú en la burbuja eliminada
+    const newBubble = bubble.cloneNode(true);
+    bubble.parentNode.replaceChild(newBubble, bubble);
+    newBubble.style.cursor = 'default';
+    // Si el menú estaba abierto para este mensaje, cerrarlo
+    const openMenu = document.getElementById('msgCtxMenu');
+    if (openMenu && openMenu.dataset.formsgid === msgId) cerrarMenuMensaje();
 }
 
 /* ─── REACCIONAR ────────────────────────────────────────────── */
@@ -7475,11 +7586,31 @@ function abrirModalReenviar(msgId) {
     const list = document.getElementById('forwardList');
     list.innerHTML = '';
 
-    // Buscar mensaje original para el preview
+    // Buscar mensaje original: primero en conversations, luego en el DOM
     let origMsg = null;
     for (const arr of Object.values(conversations)) {
         const m = arr.find(m => m.id === msgId);
-        if (m) { origMsg = m; break; }
+        if (m) { origMsg = { ...m }; break; }
+    }
+    // Fallback al DOM si no está en conversations (puede ser un id real recién llegado
+    // cuyo entry en conversations aún tiene el id local antiguo)
+    if (!origMsg) {
+        const bubble = document.getElementById(msgId);
+        if (bubble) {
+            const row = bubble.closest('.msg-row');
+            const textEl = bubble.querySelector('.msg-text');
+            origMsg = {
+                id: msgId,
+                message: textEl ? textEl.textContent.trim() : '',
+                imageData: null,
+                audioData: null,
+                from: row ? (row.querySelector('.msg-avatar')?.alt || username) : username,
+                forwardedFrom: null
+            };
+            // Si hay imagen en la burbuja, recuperarla
+            const imgEl = bubble.querySelector('.img-msg');
+            if (imgEl) origMsg.imageData = imgEl.src;
+        }
     }
 
     // Contactos
@@ -7495,23 +7626,23 @@ function abrirModalReenviar(msgId) {
             if (onlineUsername) payload.to = onlineUsername;
             else payload.toPhone = c.contactPhone;
             socket.send(JSON.stringify(payload));
-            // Preview local inmediato
-            const fwdPreview = {
-                id: 'local_' + Date.now(),
-                from: username,
-                to: onlineUsername || null,
-                message: origMsg ? origMsg.message : '',
-                imageData: origMsg ? origMsg.imageData : null,
-                audioData: origMsg ? origMsg.audioData : null,
-                time: new Date(),
-                self: true,
-                avatar: myAvatarDataUrl,
-                forwardedFrom: origMsg ? origMsg.from : ''
-            };
+            // Preview local inmediato solo si el destino es el chat activo
             const destKey = onlineUsername || ('phone:' + c.contactPhone);
-            if (!conversations[destKey]) conversations[destKey] = [];
-            conversations[destKey].push(fwdPreview);
             if (currentChat === destKey || (onlineUsername && currentChat === onlineUsername)) {
+                const fwdPreview = {
+                    id: 'local_fwd_' + Date.now(),
+                    from: username,
+                    to: onlineUsername || null,
+                    message: origMsg ? (origMsg.message || '') : '',
+                    imageData: origMsg ? origMsg.imageData : null,
+                    audioData: origMsg ? origMsg.audioData : null,
+                    time: new Date(),
+                    self: true,
+                    avatar: myAvatarDataUrl,
+                    forwardedFrom: origMsg ? origMsg.from : username
+                };
+                if (!conversations[destKey]) conversations[destKey] = [];
+                conversations[destKey].push(fwdPreview);
                 addMessage(fwdPreview);
             }
             mostrarToast('Reenviado ✓');
@@ -7527,28 +7658,33 @@ function abrirModalReenviar(msgId) {
         item.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:var(--purple-pale);display:flex;align-items:center;justify-content:center;font-size:18px;">👥</div><span class="forward-item-name">${escapeHTML(g.name)}</span>`;
         item.onclick = () => {
             socket.send(JSON.stringify({ type: 'forwardMessage', id: msgId, groupId: g.groupId }));
-            // Preview local inmediato en el grupo
-            const fwdGrpPreview = {
-                id: 'local_' + Date.now(),
-                from: username,
-                to: g.groupId,
-                groupId: g.groupId,
-                message: origMsg ? origMsg.message : '',
-                imageData: origMsg ? origMsg.imageData : null,
-                audioData: origMsg ? origMsg.audioData : null,
-                time: new Date(),
-                avatar: myAvatarDataUrl,
-                forwardedFrom: origMsg ? origMsg.from : ''
-            };
             const grpKey = 'group_' + g.groupId;
-            if (!conversations[grpKey]) conversations[grpKey] = [];
-            conversations[grpKey].push(fwdGrpPreview);
-            if (currentChat === grpKey) addGroupMessage(fwdGrpPreview);
+            if (currentChat === grpKey) {
+                const fwdGrpPreview = {
+                    id: 'local_fwd_' + Date.now(),
+                    from: username,
+                    to: g.groupId,
+                    groupId: g.groupId,
+                    message: origMsg ? (origMsg.message || '') : '',
+                    imageData: origMsg ? origMsg.imageData : null,
+                    audioData: origMsg ? origMsg.audioData : null,
+                    time: new Date(),
+                    avatar: myAvatarDataUrl,
+                    forwardedFrom: origMsg ? origMsg.from : username
+                };
+                if (!conversations[grpKey]) conversations[grpKey] = [];
+                conversations[grpKey].push(fwdGrpPreview);
+                addGroupMessage(fwdGrpPreview);
+            }
             mostrarToast('Reenviado ✓');
             cerrarModalReenviar();
         };
         list.appendChild(item);
     });
+
+    if (list.children.length === 0) {
+        list.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:13px;text-align:center;">No tienes contactos ni grupos para reenviar.</div>';
+    }
 
     document.getElementById('forwardModal').classList.add('visible');
 }
