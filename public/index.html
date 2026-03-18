@@ -1514,32 +1514,52 @@ html, body {
 /* Stickers: grid de emojis grandes */
 .sticker-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-    gap: 4px;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 6px;
+    padding: 4px 0;
 }
 .sticker-btn {
-    width: 52px; height: 52px;
+    width: 64px; height: 64px;
     border: none; background: none;
-    border-radius: 10px;
-    font-size: 32px; line-height: 1;
+    border-radius: 14px;
+    font-size: 40px; line-height: 1;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: background var(--transition), transform .1s;
+    transition: background .15s, transform .15s;
     touch-action: manipulation;
     position: relative;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.10));
 }
-.sticker-btn:hover { background: var(--purple-pale); transform: scale(1.15); }
-/* Botón de guardar favorito dentro de cada sticker */
+.sticker-btn:hover {
+    background: var(--purple-pale);
+    transform: scale(1.22) rotate(-5deg);
+    filter: drop-shadow(0 4px 10px rgba(79,70,229,0.25));
+}
+.sticker-btn:active { transform: scale(0.9); }
+/* Botón de guardar favorito */
 .sticker-fav-btn {
     position: absolute; top: 0; right: 0;
-    width: 16px; height: 16px;
-    border: none; background: none;
+    width: 18px; height: 18px;
+    border: none; background: rgba(255,255,255,0.85);
+    border-radius: 50%;
     font-size: 10px; cursor: pointer;
     display: none; align-items: center; justify-content: center;
     line-height: 1; padding: 0;
     touch-action: manipulation;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 .sticker-btn:hover .sticker-fav-btn { display: flex; }
+
+/* Pack header con icono grande */
+.sticker-pack-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 2px 4px;
+    font-size: 12px; font-weight: 700;
+    color: var(--text-dark);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+.sticker-pack-icon { font-size: 20px; }
 
 .sticker-category-label {
     font-size: 11px; font-weight: 600; text-transform: uppercase;
@@ -1581,14 +1601,68 @@ html, body {
 
 /* Mensaje de sticker en el chat — entrada animada */
 .sticker-msg {
-    font-size: 64px;
+    font-size: 80px;
     line-height: 1;
-    display: block;
-    animation: stickerPop .35s cubic-bezier(.34,1.56,.64,1) both;
+    display: inline-block;
+    animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both;
+    cursor: pointer;
+    user-select: none;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.18));
 }
 @keyframes stickerPop {
-    from { transform: scale(0.3) rotate(-8deg); opacity: 0; }
-    to   { transform: scale(1)   rotate(0deg);  opacity: 1; }
+    0%   { transform: scale(0.1) rotate(-20deg); opacity: 0; }
+    60%  { transform: scale(1.15) rotate(5deg);  opacity: 1; }
+    80%  { transform: scale(0.95) rotate(-2deg); }
+    100% { transform: scale(1)    rotate(0deg);  opacity: 1; }
+}
+/* Animaciones únicas por categoría (asignadas al renderizar) */
+.sa-wiggle  { animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both, saWiggle 2.4s ease-in-out 0.8s infinite; }
+.sa-beat    { animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both, saBeat 1.1s ease-in-out 0.8s infinite; }
+.sa-bounce  { animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both, saBounce 1.2s cubic-bezier(.36,.07,.19,.97) 0.8s infinite; }
+.sa-shake   { animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both, saShake 2.2s ease-in-out 0.8s infinite; }
+.sa-spin    { animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both, saSpin 3s ease-in-out 0.8s infinite; }
+.sa-float   { animation: stickerPop .4s cubic-bezier(.34,1.56,.64,1) both, saFloat 3.5s ease-in-out 0.8s infinite; }
+@keyframes saWiggle {
+    0%,85%,100%{ transform:rotate(0) scale(1); }
+    87%{ transform:rotate(-12deg) scale(1.06); }
+    90%{ transform:rotate(10deg) scale(1.06); }
+    93%{ transform:rotate(-7deg) scale(1.03); }
+    96%{ transform:rotate(5deg) scale(1.01); }
+    98%{ transform:rotate(-2deg); }
+}
+@keyframes saBeat {
+    0%,70%,100%{ transform:scale(1); }
+    15%{ transform:scale(1.18); }
+    35%{ transform:scale(0.97); }
+    50%{ transform:scale(1.13); }
+}
+@keyframes saBounce {
+    0%,100%{ transform:translateY(0) scale(1); }
+    25%{ transform:translateY(-16px) scale(1.08); }
+    50%{ transform:translateY(4px) scale(0.94); }
+    70%{ transform:translateY(-8px) scale(1.04); }
+    85%{ transform:translateY(2px) scale(0.98); }
+}
+@keyframes saShake {
+    0%,75%,100%{ transform:translateX(0); }
+    78%{ transform:translateX(-7px) rotate(-3deg); }
+    82%{ transform:translateX(7px) rotate(3deg); }
+    86%{ transform:translateX(-4px) rotate(-2deg); }
+    90%{ transform:translateX(4px) rotate(2deg); }
+    94%{ transform:translateX(-2px); }
+}
+@keyframes saSpin {
+    0%,100%{ transform:rotate(0) scale(1); }
+    20%{ transform:rotate(18deg) scale(1.1); }
+    40%{ transform:rotate(-12deg) scale(1.05); }
+    60%{ transform:rotate(8deg) scale(1.02); }
+    80%{ transform:rotate(-4deg); }
+}
+@keyframes saFloat {
+    0%,100%{ transform:translateY(0) rotate(0deg); }
+    30%{ transform:translateY(-12px) rotate(4deg); }
+    60%{ transform:translateY(6px) rotate(-3deg); }
+    80%{ transform:translateY(-5px) rotate(2deg); }
 }
 
 /* Mensaje de gift animado */
@@ -4870,6 +4944,8 @@ function seleccionarUsuario(user) {
 
     // Restaurar placeholder normal
     input.placeholder = 'Escribe un mensaje...';
+    input.disabled = false;
+    document.getElementById('btnMic').style.display = 'flex';
 
     const isOnline = lastKnownUsers.includes(user);
     const isAway   = isOnline && window._awayUsers && window._awayUsers.has(user);
@@ -4947,6 +5023,7 @@ function seleccionarContactoOffline(phone) {
     // Habilitar escritura
     input.disabled = false;
     input.placeholder = 'Escribe un mensaje… (se entregará al conectarse)';
+    document.getElementById('btnMic').style.display = 'flex';
 
     renderContactsList();
     renderGroupsList();
@@ -5254,7 +5331,8 @@ function addMessage(msg) {
         if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
     } else if (typeof msg.message === 'string' && msg.message.startsWith('__sticker__')) {
         const emoji = msg.message.replace('__sticker__', '');
-        content = `<span class="sticker-msg">${emoji}</span>`;
+        const animCls = _getStickerAnimClass(emoji);
+        content = `<span class="sticker-msg ${animCls}" title="Sticker">${emoji}</span>`;
     } else if (typeof msg.message === 'string' && msg.message.startsWith('__gift__')) {
         const parts = msg.message.replace('__gift__', '').split('||');
         const gEmoji = parts[0] || '🎁';
@@ -5980,6 +6058,11 @@ function seleccionarGrupo(groupId) {
     document.getElementById('chatStatus').style.color = 'var(--text-muted)';
     document.getElementById('chatPhone').style.display = 'none';
 
+    // Habilitar escritura
+    input.disabled = false;
+    input.placeholder = 'Escribe un mensaje...';
+    document.getElementById('btnMic').style.display = 'flex';
+
     // Botón unificado: cualquier miembro puede iniciar llamada grupal
     const btnU = document.getElementById('btnCallUnified');
     btnU.disabled = false;
@@ -6047,7 +6130,8 @@ function addGroupMessage(msg) {
         if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
     } else if (typeof msg.message === 'string' && msg.message.startsWith('__sticker__')) {
         const emoji = msg.message.replace('__sticker__', '');
-        content = `<span class="sticker-msg">${emoji}</span>`;
+        const animCls = _getStickerAnimClass(emoji);
+        content = `<span class="sticker-msg ${animCls}" title="Sticker">${emoji}</span>`;
     } else if (typeof msg.message === 'string' && msg.message.startsWith('__gift__')) {
         const parts = msg.message.replace('__gift__', '').split('||');
         const gEmoji = parts[0] || '🎁';
@@ -7807,12 +7891,14 @@ function renderSGPanel(tab) {
         let html = '';
         const favs = _getFavoritos();
         STICKER_CATEGORIES.forEach(cat => {
-            html += `<div class="sticker-category-label">${cat.name}</div><div class="sticker-grid">`;
+            html += `<div class="sticker-pack-header"><span class="sticker-pack-icon">${cat.name.split(' ')[0]}</span><span>${cat.name.split(' ').slice(1).join(' ')}</span></div>`;
+            html += `<div class="sticker-grid">`;
             cat.items.forEach(emoji => {
                 const isFav = favs.includes(emoji);
-                html += `<button class="sticker-btn" onclick="enviarSticker('${emoji}')">
-                    ${emoji}
-                    <button class="sticker-fav-btn" onclick="toggleFavorito('${emoji}',event)" title="${isFav ? 'Quitar favorito' : 'Guardar favorito'}">${isFav ? '★' : '☆'}</button>
+                const animCls = _getStickerAnimClass(emoji);
+                html += `<button class="sticker-btn" onclick="enviarSticker('${emoji}')" title="Enviar ${emoji}">
+                    <span class="${animCls}" style="font-size:40px;line-height:1;display:block;">${emoji}</span>
+                    <button class="sticker-fav-btn" onclick="toggleFavorito('${emoji}',event)" title="${isFav ? 'Quitar favorito' : 'Guardar en favoritos'}">${isFav ? '★' : '☆'}</button>
                 </button>`;
             });
             html += `</div>`;
@@ -7827,10 +7913,11 @@ function renderSGPanel(tab) {
             content.innerHTML = `<div class="sg-empty"><span class="sg-empty-icon">⭐</span>Aún no tienes favoritos.<br>Pasa el cursor sobre un sticker y pulsa ☆ para guardarlo.</div>`;
             return;
         }
-        let html = '<div class="sticker-category-label">Mis favoritos</div><div class="sticker-grid">';
+        let html = '<div class="sticker-pack-header"><span class="sticker-pack-icon">⭐</span><span>Mis favoritos</span></div><div class="sticker-grid">';
         favs.forEach(emoji => {
+            const animCls = _getStickerAnimClass(emoji);
             html += `<button class="sticker-btn" onclick="enviarSticker('${emoji}')">
-                ${emoji}
+                <span class="${animCls}" style="font-size:40px;line-height:1;display:block;">${emoji}</span>
                 <button class="sticker-fav-btn" onclick="toggleFavorito('${emoji}',event)" title="Quitar de favoritos">★</button>
             </button>`;
         });
@@ -7864,6 +7951,7 @@ function enviarSticker(emoji) {
     const msgText   = '__sticker__' + emoji;
 
     if (isGroup) {
+        // Grupos: NO añadir preview local — el servidor lo echará de vuelta con ID real
         socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: msgText }));
     } else {
         socket.send(JSON.stringify({
@@ -7871,6 +7959,7 @@ function enviarSticker(emoji) {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: msgText
         }));
+        // Preview local solo para 1:1 (se reemplaza con ID real cuando llega el echo)
         addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
     }
 }
@@ -7888,6 +7977,7 @@ function enviarGift(idx) {
     const msgText   = `__gift__${g.emoji}||${g.label}||${g.sub}`;
 
     if (isGroup) {
+        // Grupos: NO añadir preview local
         socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: msgText }));
     } else {
         socket.send(JSON.stringify({
@@ -7897,6 +7987,22 @@ function enviarGift(idx) {
         }));
         addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
     }
+}
+
+function _getStickerAnimClass(emoji) {
+    // Map emoji to animation class based on pack category
+    const packs = [
+        { anim: 'sa-wiggle', items: ['😂','🤣','😭','😅','🥲','🤩','🥳','😤','🤯','🥺','😎','🤓','🥸','😏','😒','🙄','😬','🤔','🫡','🤫','😇','😈','🤠','🥹','😍','🥰','😘','🫣','🤭','😶‍🌫️','🫠','🤗','🫶','💪','🙌'] },
+        { anim: 'sa-beat',   items: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','💕','💞','💓','💗','💖','💘','💝','💟','❣️','🫶','🤝','👫','🫂','💌','💍','💒','🌹','🌷','💐','🥀'] },
+        { anim: 'sa-bounce', items: ['🎉','🎊','🎈','🎁','🎂','🎆','🎇','✨','🌟','⭐','🏆','🥇','🥈','🥉','🎖️','🏅','👑','🎯','🎪','🎠','🥂','🍾','🎵','🎶','🎤','🪄','🎭','🎨','🎬','🎡','🎢','🪩','🕺','💃','🥳'] },
+        { anim: 'sa-shake',  items: ['🐶','🐱','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🦋','🐝','🐧','🦉','🐙','🦈','🐳','🦭','🦦','🦥','🐿️','🦔','🦝','🦌','🐺','🐾','🌿'] },
+        { anim: 'sa-spin',   items: ['🔥','💥','⚡','🌈','💯','✅','🆒','🆙','🚨','💡','🔔','📣','🎙️','📸','💻','📱','🎮','🕹️','🎲','🃏','💎','👀','🫀','🧠','🦾','👁️','💪','🤌','✌️','🤙'] },
+        { anim: 'sa-float',  items: ['✈️','🚀','🛸','🚂','🚢','🏖️','🏝️','🗺️','🗼','🏯','🏰','🗽','⛩️','🌅','🌄','🌃','🌆','🌇','🌉','🗻','🏔️','🌋','🏕️','🌊','🏜️','🌲','🌴','🌵','🎑','🌌'] },
+    ];
+    for (const pack of packs) {
+        if (pack.items.includes(emoji)) return pack.anim;
+    }
+    return 'sa-wiggle'; // default
 }
 
 // ============================================================
