@@ -1565,7 +1565,11 @@ html, body {
     touch-action: manipulation;
 }
 .gift-card:hover { border-color: var(--purple-deep); background: var(--purple-pale); transform: scale(1.03); }
-.gift-emoji { font-size: 36px; line-height: 1; display: block; }
+.gift-emoji {
+    font-size: 36px; line-height: 1; display: block;
+    animation: giftBounce 1.8s ease-in-out infinite;
+}
+.gift-card:hover .gift-emoji { animation-play-state: running; }
 .gift-label { font-size: 11px; font-weight: 600; color: var(--text-mid); }
 
 /* Favoritos vacíos */
@@ -1575,23 +1579,76 @@ html, body {
 }
 .sg-empty-icon { font-size: 36px; display: block; margin-bottom: 8px; }
 
-/* Mensaje de sticker en el chat */
-.sticker-msg { font-size: 56px; line-height: 1; display: block; }
-
-/* Mensaje de gift en el chat */
-.gift-msg {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 10px 14px;
-    background: linear-gradient(135deg, #fdf4ff, #eef2ff);
-    border-radius: 14px; border: 1.5px solid #c4b5fd;
-    text-align: center; min-width: 120px;
+/* Mensaje de sticker en el chat — entrada animada */
+.sticker-msg {
+    font-size: 64px;
+    line-height: 1;
+    display: block;
+    animation: stickerPop .35s cubic-bezier(.34,1.56,.64,1) both;
 }
-.bubble.me .gift-msg { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.4); }
-.gift-msg-emoji { font-size: 44px; line-height: 1; }
-.gift-msg-label { font-size: 13px; font-weight: 600; color: #7c3aed; }
+@keyframes stickerPop {
+    from { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+    to   { transform: scale(1)   rotate(0deg);  opacity: 1; }
+}
+
+/* Mensaje de gift animado */
+.gift-msg {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 14px 18px 12px;
+    border-radius: 18px;
+    text-align: center; min-width: 140px;
+    position: relative; overflow: hidden;
+    border: 2px solid rgba(124,58,237,0.3);
+    background: linear-gradient(135deg, #fdf4ff 0%, #eef2ff 100%);
+    animation: giftAppear .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes giftAppear {
+    from { transform: scale(0.5) translateY(20px); opacity: 0; }
+    to   { transform: scale(1)   translateY(0);    opacity: 1; }
+}
+.bubble.me .gift-msg {
+    background: linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.1) 100%);
+    border-color: rgba(255,255,255,0.35);
+}
+.gift-msg-anim {
+    font-size: 52px; line-height: 1;
+    display: block;
+    animation: giftBounce 1.8s ease-in-out infinite;
+}
+@keyframes giftBounce {
+    0%,100% { transform: translateY(0) scale(1);    }
+    20%      { transform: translateY(-10px) scale(1.08); }
+    40%      { transform: translateY(0) scale(0.96); }
+    60%      { transform: translateY(-5px) scale(1.03);  }
+    80%      { transform: translateY(0) scale(1);    }
+}
+.gift-msg-label { font-size: 13px; font-weight: 700; color: #7c3aed; }
 .bubble.me .gift-msg-label { color: #e9d5ff; }
-.gift-msg-sub { font-size: 11px; color: var(--text-muted); }
-.bubble.me .gift-msg-sub { color: rgba(255,255,255,0.7); }
+.gift-msg-sub { font-size: 11px; color: #a78bfa; }
+.bubble.me .gift-msg-sub { color: rgba(255,255,255,0.75); }
+
+/* Partículas del gift */
+.gift-particles {
+    position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+}
+.gift-particle {
+    position: absolute;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    animation: particleFly 2.5s ease-in-out infinite;
+}
+@keyframes particleFly {
+    0%   { transform: translateY(100%) scale(0); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { transform: translateY(-120%) scale(1) rotate(360deg); opacity: 0; }
+}
+.gift-particle:nth-child(1) { left:10%; background:#f59e0b; animation-delay:0s;    animation-duration:2.2s; }
+.gift-particle:nth-child(2) { left:25%; background:#ec4899; animation-delay:0.3s;  animation-duration:1.9s; }
+.gift-particle:nth-child(3) { left:45%; background:#8b5cf6; animation-delay:0.6s;  animation-duration:2.5s; width:4px; height:4px; border-radius:2px; }
+.gift-particle:nth-child(4) { left:65%; background:#06b6d4; animation-delay:0.2s;  animation-duration:2.1s; }
+.gift-particle:nth-child(5) { left:80%; background:#10b981; animation-delay:0.5s;  animation-duration:2.3s; width:5px; height:5px; border-radius:1px; }
+.gift-particle:nth-child(6) { left:55%; background:#f97316; animation-delay:0.8s;  animation-duration:1.8s; }
+.gift-particle:nth-child(7) { left:35%; background:#e11d48; animation-delay:0.15s; animation-duration:2.4s; width:4px; height:4px; }
 
 /* ═══════════════════════════════════════════
    AJUSTES: selector de idioma del teclado
@@ -4425,7 +4482,6 @@ function handleMessage(data) {
 
     if (data.type === 'message') {
         mostrarMensaje(data);
-        addMessage(data);
         // Ignorar mensajes de llamada perdida aquí — se tratan por separado
         if (data.message === '__missed_call__') {
             mostrarLlamadaPerdida(data);
@@ -4473,7 +4529,24 @@ function handleMessage(data) {
         lastMessages[otherUser] = preview;
 
         if (currentChat === chatKey || currentChat === otherUser) {
-            addMessage(data);
+            if (data.from === username) {
+                // Propio mensaje: buscar y actualizar el bubble local_ más reciente
+                // para que su data-msgid pase al ID real (permite borrar/editar)
+                const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
+                if (localRows.length > 0) {
+                    const lastLocal = localRows[localRows.length - 1];
+                    lastLocal.dataset.msgid = data.id;
+                    const bubble = lastLocal.querySelector('.bubble');
+                    if (bubble) bubble.id = data.id;
+                    // Re-adjuntar el menú contextual con el ID real
+                    _attachBubbleClickMenu(lastLocal, data.id, true, false,
+                        currentChat.startsWith('group_'));
+                } else {
+                    addMessage(data);
+                }
+            } else {
+                addMessage(data);
+            }
         } else {
             unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
             if (data.from !== username) {
@@ -4962,7 +5035,7 @@ function enviar() {
             message: text || '',
             imageData: pendingImage.dataUrl
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
         cancelarImagen();
     } else {
         socket.send(JSON.stringify({
@@ -4970,7 +5043,7 @@ function enviar() {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
     }
 
     input.value = '';
@@ -5188,7 +5261,8 @@ function addMessage(msg) {
         const gLabel = escapeHTML(parts[1] || 'Regalo');
         const gSub   = escapeHTML(parts[2] || '');
         content = `<div class="gift-msg">
-            <span class="gift-msg-emoji">${gEmoji}</span>
+            <div class="gift-particles"><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span></div>
+            <span class="gift-msg-anim">${gEmoji}</span>
             <span class="gift-msg-label">${gLabel}</span>
             ${gSub ? `<span class="gift-msg-sub">${gSub}</span>` : ''}
         </div>`;
@@ -5980,7 +6054,8 @@ function addGroupMessage(msg) {
         const gLabel = escapeHTML(parts[1] || 'Regalo');
         const gSub   = escapeHTML(parts[2] || '');
         content = `<div class="gift-msg">
-            <span class="gift-msg-emoji">${gEmoji}</span>
+            <div class="gift-particles"><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span><span class="gift-particle"></span></div>
+            <span class="gift-msg-anim">${gEmoji}</span>
             <span class="gift-msg-label">${gLabel}</span>
             ${gSub ? `<span class="gift-msg-sub">${gSub}</span>` : ''}
         </div>`;
@@ -7214,6 +7289,16 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
 
     // Opciones del menú
     const ops = [];
+    // Detectar si es un sticker para ofrecer guardarlo en favoritos
+    const bubbleForSticker = document.getElementById(msgId);
+    const msgTextEl = bubbleForSticker ? bubbleForSticker.querySelector('.msg-text') : null;
+    const isStickerMsg = msgTextEl && msgTextEl.querySelector('.sticker-msg');
+    if (isStickerMsg) {
+        const stickerEmoji = isStickerMsg.textContent.trim();
+        const favs = _getFavoritos();
+        const alreadyFav = favs.includes(stickerEmoji);
+        ops.push({ icon: alreadyFav ? '★' : '☆', label: alreadyFav ? 'Quitar de favoritos' : 'Guardar sticker', fn: () => toggleFavorito(stickerEmoji, null) });
+    }
     if (!isDeleted) ops.push({ icon: '↩', label: 'Responder',  fn: () => iniciarRespuesta(msgId) });
     if (!isDeleted) ops.push({ icon: '🧵', label: 'Ver hilo',   fn: () => abrirHilo(msgId) });
     if (!isDeleted) ops.push({ icon: '↗', label: 'Reenviar',   fn: () => abrirModalReenviar(msgId) });
@@ -7603,25 +7688,31 @@ function cambiarIdiomaInput(lang) {
 // ============================================================
 
 const STICKER_CATEGORIES = [
-    { name: 'Caras',       items: ['😀','😂','🥹','😍','🥰','😎','🤩','😜','🤪','😏','😒','😭','😱','🤯','🥳','😴','🤔','🫡','😇','🤗','🫶','💪','👏','🙌','👍','❤️','🔥','✨','💯','🎉'] },
-    { name: 'Animales',    items: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🐔','🐧','🐦','🦆','🦅','🦉','🦋','🐝','🌸','🌺','🌻','🌹','🍀','🌈','⭐','🌙'] },
-    { name: 'Comida',      items: ['🍕','🍔','🌮','🍜','🍣','🍩','🎂','🍰','🧁','🍫','🍬','🍭','🍦','🥤','☕','🧋','🍺','🥂','🎁','🎊'] },
-    { name: 'Actividades', items: ['⚽','🏀','🎾','🏈','⚾','🎱','🏓','🎮','🎯','🎪','🎭','🎨','🎬','🎤','🎧','🎸','🎹','🎺','🎻','🥁','🎲','♟️','🎠','🎡','🎢','🏆','🥇','🎖️','🏅','🚀'] }
+    { name: '🎭 Expresiones', items: ['😂','🤣','😭','😅','🥲','🤩','🥳','😤','🤯','🥺','😎','🤓','🥸','😏','😒','🙄','😬','🤔','🫡','🤫','😇','😈','🤠','🥹','😍','🥰','😘','🫶','💪','🙌'] },
+    { name: '❤️ Amor',         items: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','💕','💞','💓','💗','💖','💘','💝','🫶','🤝','🫂','💌','🌹','🌷','💐','😘','🥰','😍','💏','👫','💑','💒','🎁'] },
+    { name: '🎉 Celebración',   items: ['🎉','🎊','🎈','🎁','🎂','🎆','🎇','✨','🌟','⭐','🏆','🥇','👑','🎯','🥂','🍾','🎵','🎶','🎤','🪄','🎭','🎨','🎬','🎡','🎢','🎠','🪩','🕺','💃','🥳'] },
+    { name: '😺 Animales',     items: ['🐶','🐱','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🦋','🐝','🐧','🦉','🐙','🦈','🐳','🦭','🦦','🦥','🐿️','🦔','🦝','🦌','🐺','🦊','🐾','🌿'] },
+    { name: '🔥 Vibes',        items: ['🔥','💥','⚡','🌈','💯','✅','🆒','🆙','🚨','💡','🔔','📣','🎙️','📸','💻','📱','🎮','🕹️','🎲','🃏','💎','👀','🫀','🧠','🦾','👁️','💪','🤌','✌️','🤙'] },
+    { name: '🌍 Mundo',        items: ['✈️','🚀','🛸','🚂','🚢','🏖️','🏝️','🗺️','🗼','🏯','🏰','🗽','⛩️','🌅','🌄','🌃','🌆','🌇','🌉','🗻','🏔️','🌋','🏕️','🌊','🏜️','🌲','🌴','🌵','🎑','🌌'] }
 ];
 
 const GIFT_ITEMS = [
-    { emoji: '🎁', label: '¡Regalo!',      sub: 'Un abrazo virtual' },
-    { emoji: '💝', label: 'Con amor',      sub: 'Te quiero mucho' },
-    { emoji: '🌹', label: 'Una rosa',      sub: 'Para ti' },
-    { emoji: '🎂', label: '¡Cumpleaños!', sub: 'Feliz cumple 🎉' },
-    { emoji: '🏆', label: 'Campeón',       sub: '¡Lo conseguiste!' },
-    { emoji: '⭐', label: 'Estrella',      sub: 'Eres genial' },
-    { emoji: '🍕', label: 'Pizza gratis',  sub: 'Te invito 🍕' },
-    { emoji: '✈️', label: 'Viaje',         sub: '¡Nos vamos!' },
-    { emoji: '🎮', label: 'A jugar',       sub: 'GG fácil' },
-    { emoji: '💎', label: 'Diamante',      sub: 'Eres un tesoro' },
-    { emoji: '🌟', label: 'Superestrella', sub: '¡Eres increíble!' },
-    { emoji: '🎵', label: 'Tu canción',    sub: 'Pensé en ti' },
+    { emoji: '🎁', label: '¡Regalo!',         sub: 'Un abrazo virtual' },
+    { emoji: '💝', label: 'Con amor',          sub: 'Te quiero mucho ❤️' },
+    { emoji: '🌹', label: 'Una rosa',          sub: 'Solo para ti 🌹' },
+    { emoji: '🎂', label: '¡Cumpleaños!',     sub: 'Feliz cumple 🎉🎈' },
+    { emoji: '🏆', label: '¡Campeón!',        sub: '¡Lo conseguiste! 🥇' },
+    { emoji: '⭐', label: 'Eres una estrella', sub: 'Brillas con luz propia' },
+    { emoji: '🍕', label: 'Pizza party',       sub: '¡Te invito! 🍕🍕' },
+    { emoji: '✈️', label: '¡Nos vamos!',      sub: 'Aventura asegurada 🌍' },
+    { emoji: '🎮', label: 'GG!',               sub: 'A destruirles 🎮' },
+    { emoji: '💎', label: 'Diamante',          sub: 'Vales un tesoro 💎' },
+    { emoji: '🎵', label: 'Tu canción',        sub: 'Pensé en ti 🎶' },
+    { emoji: '🌈', label: '¡Todo bien!',       sub: '¡Saldrá genial!' },
+    { emoji: '🦋', label: 'Libre como tú',    sub: 'Sin límites 🦋' },
+    { emoji: '🚀', label: '¡Al infinito!',     sub: 'Nada te detiene 🚀' },
+    { emoji: '🍀', label: 'Buena suerte',      sub: '¡Hoy es tu día!' },
+    { emoji: '🤝', label: 'Trato hecho',       sub: '¡Somos equipo! 💪' },
 ];
 
 let _sgTab    = 'emojis';
@@ -7780,7 +7871,7 @@ function enviarSticker(emoji) {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: msgText
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
     }
 }
 
@@ -7804,7 +7895,7 @@ function enviarGift(idx) {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: msgText
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true, avatar: myAvatarDataUrl });
     }
 }
 
