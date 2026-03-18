@@ -3448,7 +3448,7 @@ let reconnectTimer = null;
 
 function conectarWS() {
 
-    // 🚫 Evitar múltiples conexiones
+    // 🚫 Evitar múltiples conexiones simultáneas
     if (socket && (
         socket.readyState === WebSocket.OPEN ||
         socket.readyState === WebSocket.CONNECTING
@@ -3498,9 +3498,12 @@ function conectarWS() {
         console.log('❌ Desconectado');
 
         conectado = false;
-        
 
-        intentarReconexion();
+        // Solo programar reconexión automática si la app está visible.
+        // Si está en background, el visibilitychange lo hará al volver.
+        if (document.visibilityState !== 'hidden') {
+            intentarReconexion();
+        }
     };
 }
 function intentarReconexion() {
@@ -3508,27 +3511,62 @@ function intentarReconexion() {
 
     reconnectTimer = setTimeout(() => {
         console.log('🔄 Intentando reconectar...');
-        conectarWS();
         reconnectTimer = null;
-
         reconnectInterval = Math.min(reconnectInterval * 1.5, 5000);
+        conectarWS();
     }, reconnectInterval);
 }
+
+// ── Reconexión limpia al volver de background ─────────────────────────────
+// Problema en móvil: cuando el SO suspende la app el socket se cierra, pero
+// al volver el onclose ya programó un timer Y el visibilitychange también
+// intenta conectar → dos conexiones casi simultáneas → el servidor ve la
+// primera como "sesión activa" y puede enviar session_kicked erróneamente.
+// Solución: al volver cancelamos cualquier timer pendiente, cerramos el socket
+// viejo SILENCIOSAMENTE (sin disparar onclose/intentarReconexion), y abrimos
+// una conexión limpia.
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+        console.log('👀 Usuario volvió → reconexión limpia');
 
-        console.log('👀 Usuario volvió → reconexión inmediata');
+        // 1. Cancelar timer de reconexión automática pendiente
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
 
-        reconnectInterval = 500;
+        // 2. Si hay un socket que no está OPEN, cerrarlo silenciosamente
+        //    para que el servidor no lo cuente como sesión activa
+        if (socket && socket.readyState !== WebSocket.OPEN) {
+            socket.onclose = null; // evitar que dispare intentarReconexion
+            socket.onerror = null;
+            try { socket.close(); } catch(_) {}
+            socket = null;
+        }
 
+        reconnectInterval = 500; // reset backoff
+
+        // 3. Conectar solo si no hay socket OPEN ya
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             conectarWS();
         }
     }
 });
+
 window.addEventListener('online', () => {
     console.log('🌐 Internet volvió');
 
+    // Mismo tratamiento que visibilitychange
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (socket && socket.readyState !== WebSocket.OPEN) {
+        socket.onclose = null;
+        socket.onerror = null;
+        try { socket.close(); } catch(_) {}
+        socket = null;
+    }
     reconnectInterval = 500;
     conectarWS();
 });

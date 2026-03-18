@@ -141,16 +141,27 @@ wss.on('connection', (ws) => {
 
                 // ── Sesión única por número de teléfono ──────────────────
                 // Si ya hay otra sesión activa con el mismo teléfono, la cerramos.
+                // IMPORTANTE: solo enviamos session_kicked si el socket existente está
+                // genuinamente OPEN (readyState===1). Si está en CLOSING (readyState===2)
+                // o ya cerrado, es una reconexión legítima del mismo dispositivo (p.ej.
+                // el móvil suspendió la app) → no hacemos kick, simplemente reemplazamos.
                 if (ws.phone) {
                     const existingWs = phoneSessions.get(ws.phone);
-                    if (existingWs && existingWs !== ws && existingWs.readyState === 1 /* OPEN */) {
-                        try {
-                            existingWs.send(JSON.stringify({
-                                type: 'session_kicked',
-                                message: 'Tu sesión fue iniciada en otro dispositivo o pestaña.'
-                            }));
-                        } catch(_) {}
-                        existingWs.close(4001, 'session_replaced');
+                    if (existingWs && existingWs !== ws) {
+                        if (existingWs.readyState === 1 /* OPEN */) {
+                            // Otro dispositivo/pestaña diferente está activo → kick
+                            try {
+                                existingWs.send(JSON.stringify({
+                                    type: 'session_kicked',
+                                    message: 'Tu sesión fue iniciada en otro dispositivo o pestaña.'
+                                }));
+                            } catch(_) {}
+                            existingWs.close(4001, 'session_replaced');
+                        } else {
+                            // Socket en CLOSING o ya cerrado → es reconexión del mismo
+                            // dispositivo tras suspensión. Cerramos limpiamente sin kick.
+                            try { existingWs.terminate(); } catch(_) {}
+                        }
                     }
                     phoneSessions.set(ws.phone, ws);
                 }
