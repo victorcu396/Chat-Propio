@@ -4263,12 +4263,34 @@ function conectarWS() {
         conectado = true;
         reconnectInterval = 500; // reset
 
+        // Invalidar caché de conversaciones para que se recarguen del servidor
+        // (pueden haber llegado mensajes mientras estábamos offline)
+        const _chatAnterior = currentChat; // guardar antes de limpiar
+        Object.keys(conversations).forEach(k => delete conversations[k]);
+
         socket.send(JSON.stringify({
             type: 'join',
             username,
             phone: loginPhone,
             avatar: myAvatarDataUrl
         }));
+
+        // Si había un chat abierto, recargar su historial tras reconectar
+        // (el servidor lo entregará una vez procesado el join)
+        if (_chatAnterior) {
+            setTimeout(() => {
+                if (!currentChat) return; // chat cerrado antes del timeout
+                if (currentChat.startsWith('group_')) {
+                    const gid = currentChat.replace('group_', '');
+                    socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId: gid }));
+                } else if (currentChat.startsWith('phone:')) {
+                    const ph = currentChat.replace('phone:', '');
+                    socket.send(JSON.stringify({ type: 'loadConversation', withPhone: ph }));
+                } else {
+                    socket.send(JSON.stringify({ type: 'loadConversation', with: currentChat }));
+                }
+            }, 400); // pequeño delay para que el join se procese primero
+        }
 
         // Informar presencia inicial (puede haberse conectado desde background)
         if (document.visibilityState === 'hidden') {
@@ -4349,9 +4371,20 @@ function intentarReconexion() {
 
 // ── Helper: actualiza el chatStatus del chat abierto cuando cambia presencia ──
 function _actualizarChatStatusPresencia() {
-    if (!currentChat || currentChat.startsWith('group_') || currentChat.startsWith('phone:')) return;
-    const isOnline = lastKnownUsers.includes(currentChat);
-    const isAway   = isOnline && window._awayUsers && window._awayUsers.has(currentChat);
+    if (!currentChat || currentChat.startsWith('group_')) return;
+
+    let targetUsername = null;
+    if (currentChat.startsWith('phone:')) {
+        // Chat abierto por teléfono: buscar si ese phone está online
+        const phone = currentChat.replace('phone:', '');
+        targetUsername = window._phoneToUsername ? window._phoneToUsername[phone] : null;
+        if (!targetUsername) return; // contacto offline, el header ya dice Desconectado
+    } else {
+        targetUsername = currentChat;
+    }
+
+    const isOnline = lastKnownUsers.includes(targetUsername);
+    const isAway   = isOnline && window._awayUsers && window._awayUsers.has(targetUsername);
     const statusText  = !isOnline ? '○ Desconectado' : isAway ? '🌙 Ausente' : '● En línea';
     const statusColor = !isOnline ? 'var(--text-muted)' : isAway ? '#f59e0b' : 'var(--online)';
     document.getElementById('chatStatus').textContent = statusText;
@@ -4608,9 +4641,15 @@ function handleMessage(data) {
                 const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
                 if (localRows.length > 0) {
                     const lastLocal = localRows[localRows.length - 1];
+                    const oldLocalId = lastLocal.dataset.msgid;
                     lastLocal.dataset.msgid = data.id;
                     const bubble = lastLocal.querySelector('.bubble');
                     if (bubble) bubble.id = data.id;
+                    // Actualizar también el id en conversations (el local_ pasa a ser el id real)
+                    for (const arr of Object.values(conversations)) {
+                        const m = arr.find(m => m.id === oldLocalId);
+                        if (m) { m.id = data.id; break; }
+                    }
                     // Re-adjuntar el menú contextual con el ID real
                     _attachBubbleClickMenu(lastLocal, data.id, true, false,
                         currentChat.startsWith('group_'));
@@ -4629,6 +4668,7 @@ function handleMessage(data) {
         }
         renderUsers(lastKnownUsers);
         renderContactsList();
+        _actualizarChatStatusPresencia();
         return;
     }
 
@@ -4672,7 +4712,13 @@ function handleMessage(data) {
 
     if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); return; }
     if (data.type === 'read')      { updateEstado(data.id, '✔✔ leído'); return; }
-    if (data.type === 'info')      { addInfo(data.message); return; }
+    if (data.type === 'info') {
+        // Suprimir mensajes de sistema de conexión/desconexión de usuarios
+        const infoText = data.message || '';
+        const esSistema = /se ha unido al chat|sali[oó] del chat/.test(infoText);
+        if (!esSistema) addInfo(infoText);
+        return;
+    }
     if (data.type === 'kvs_pong')  { return; } // respuesta al heartbeat, ignorar
 
     // ── Acciones sobre mensajes ──────────────────────────────────────────
@@ -4953,7 +4999,12 @@ function seleccionarUsuario(user) {
     document.getElementById('chatStatus').textContent = statusText;
     document.getElementById('chatStatus').style.color = statusColor;
     const btnU = document.getElementById('btnCallUnified');
-    btnU.disabled = !isOnline;
+    // Habilitar llamada solo si es contacto y está online
+    const _chatPhone2 = window._phoneToUsername
+        ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
+        : null;
+    const _isContact2 = _chatPhone2 && myContacts.has(_chatPhone2);
+    btnU.disabled = !isOnline || !_isContact2;
     btnU.dataset.mode = '1to1';
     btnU.title = 'Llamada de voz';
 
@@ -6221,9 +6272,16 @@ function onGroupMessage(data) {
             const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
             if (localRows.length > 0) {
                 const lastLocal = localRows[localRows.length - 1];
+                const oldLocalId = lastLocal.dataset.msgid;
                 lastLocal.dataset.msgid = data.id;
                 const bubble = lastLocal.querySelector('.bubble');
                 if (bubble) bubble.id = data.id;
+                // Actualizar también el id en conversations
+                const convArr = conversations[chatKey];
+                if (convArr) {
+                    const m = convArr.find(m => m.id === oldLocalId);
+                    if (m) m.id = data.id;
+                }
                 _attachBubbleClickMenu(lastLocal, data.id, true, false, true);
             } else {
                 addGroupMessage(data);
@@ -7682,21 +7740,28 @@ function abrirModalReenviar(msgId) {
             if (onlineUsername) payload.to = onlineUsername;
             else payload.toPhone = c.contactPhone;
             socket.send(JSON.stringify(payload));
-            // Preview local inmediato solo si el chat destino está abierto
-            const destChatKey = onlineUsername || ('phone:' + c.contactPhone);
-            if (currentChat === destChatKey || currentChat === onlineUsername) {
-                addMessage({
-                    id: 'local_' + Date.now(),
-                    from: username,
-                    to: onlineUsername || null,
-                    message: origMsg ? origMsg.message : '',
-                    imageData: origMsg ? origMsg.imageData : null,
-                    audioData: origMsg ? origMsg.audioData : null,
-                    time: new Date(),
-                    self: true,
-                    avatar: myAvatarDataUrl,
-                    forwardedFrom: origMsg ? origMsg.from : ''
-                });
+
+            // Construir preview local del mensaje reenviado
+            const fwdLocalId = 'local_' + Date.now();
+            const fwdPreview = {
+                id: fwdLocalId,
+                from: username,
+                to: onlineUsername || null,
+                message: origMsg ? origMsg.message : '',
+                imageData: origMsg ? origMsg.imageData : null,
+                audioData: origMsg ? origMsg.audioData : null,
+                time: new Date(),
+                self: true,
+                avatar: myAvatarDataUrl,
+                forwardedFrom: origMsg ? origMsg.from : ''
+            };
+            // Guardar en conversations del destino para que aparezca al abrir ese chat
+            const destKey = onlineUsername || ('phone:' + c.contactPhone);
+            if (!conversations[destKey]) conversations[destKey] = [];
+            conversations[destKey].push(fwdPreview);
+            // Si el destino ya está abierto, mostrarlo ahora mismo
+            if (currentChat === destKey || (onlineUsername && currentChat === onlineUsername)) {
+                addMessage(fwdPreview);
             }
             mostrarToast('Reenviado ✓');
             cerrarModalReenviar();
@@ -7711,20 +7776,28 @@ function abrirModalReenviar(msgId) {
         item.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:var(--purple-pale);display:flex;align-items:center;justify-content:center;font-size:18px;">👥</div><span class="forward-item-name">${escapeHTML(g.name)}</span>`;
         item.onclick = () => {
             socket.send(JSON.stringify({ type: 'forwardMessage', id: msgId, groupId: g.groupId }));
-            // Preview local inmediato solo si el chat del grupo está abierto
-            if (currentChat === 'group_' + g.groupId) {
-                addGroupMessage({
-                    id: 'local_' + Date.now(),
-                    from: username,
-                    to: g.groupId,
-                    groupId: g.groupId,
-                    message: origMsg ? origMsg.message : '',
-                    imageData: origMsg ? origMsg.imageData : null,
-                    audioData: origMsg ? origMsg.audioData : null,
-                    time: new Date(),
-                    avatar: myAvatarDataUrl,
-                    forwardedFrom: origMsg ? origMsg.from : ''
-                });
+
+            // Construir preview local del mensaje reenviado al grupo
+            const fwdGrpLocalId = 'local_' + Date.now();
+            const fwdGrpPreview = {
+                id: fwdGrpLocalId,
+                from: username,
+                to: g.groupId,
+                groupId: g.groupId,
+                message: origMsg ? origMsg.message : '',
+                imageData: origMsg ? origMsg.imageData : null,
+                audioData: origMsg ? origMsg.audioData : null,
+                time: new Date(),
+                avatar: myAvatarDataUrl,
+                forwardedFrom: origMsg ? origMsg.from : ''
+            };
+            // Guardar en conversations del grupo para que aparezca al abrir ese chat
+            const grpChatKey = 'group_' + g.groupId;
+            if (!conversations[grpChatKey]) conversations[grpChatKey] = [];
+            conversations[grpChatKey].push(fwdGrpPreview);
+            // Si el grupo ya está abierto, mostrarlo ahora mismo
+            if (currentChat === grpChatKey) {
+                addGroupMessage(fwdGrpPreview);
             }
             mostrarToast('Reenviado ✓');
             cerrarModalReenviar();
