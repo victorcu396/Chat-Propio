@@ -952,6 +952,14 @@ html, body {
     margin-top: 2px;
 }
 
+#chatPhone {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    margin-top: 1px;
+    opacity: 0.75;
+}
+
 .call-btns {
     display: flex;
     gap: 8px;
@@ -2944,6 +2952,7 @@ html.is-mobile .contact-actions { display: flex; }
         <div class="chat-header-info">
           <div id="chatName" style="color:var(--text-muted);font-weight:400;font-size:14px;">Selecciona un usuario para empezar</div>
           <div id="chatStatus"></div>
+          <div id="chatPhone" style="display:none"></div>
         </div>
         <div class="call-btns">
           <button class="btn-call audio" id="btnCallUnified" title="Llamada" onclick="onBtnCall()" disabled>📞</button>
@@ -3059,6 +3068,11 @@ html.is-mobile .contact-actions { display: flex; }
   <div class="rename-contact-card">
     <h3>✏️ Editar contacto</h3>
     <p class="rename-hint">Solo tú verás este nombre. Los demás seguirán viéndole con su nombre original.</p>
+
+    <div class="add-contact-field">
+      <label>Teléfono</label>
+      <div id="renameContactPhone" style="font-family:'DM Mono',monospace;font-size:14px;color:var(--text-mid);padding:4px 0;letter-spacing:0.3px;"></div>
+    </div>
 
     <div class="add-contact-field">
       <label>Nuevo nombre</label>
@@ -3213,6 +3227,28 @@ html.is-mobile .contact-actions { display: flex; }
     <div class="incoming-actions">
       <button class="btn-accept" onclick="aceptarLlamadaGrupal()" title="Aceptar">📞</button>
       <button class="btn-decline" onclick="rechazarLlamadaGrupal()" title="Rechazar">📵</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL SOLICITUD DE CONTACTO ENTRANTE
+============================================================ -->
+<div id="contactRequestModal">
+  <div class="contact-request-card">
+    <img id="crAvatar" class="contact-request-avatar" src="" alt=""
+         onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=?'">
+    <h3>Solicitud de contacto</h3>
+    <p id="crText"></p>
+    <div class="add-contact-field" style="width:100%">
+      <label>Guardar como</label>
+      <input class="contact-request-name-input" type="text" id="crNameInput"
+             maxlength="30" placeholder="Nombre del contacto">
+    </div>
+    <div class="add-contact-error" id="crError"></div>
+    <div class="contact-request-actions">
+      <button class="btn-contact-cancel" onclick="rechazarSolicitudContacto()">Rechazar</button>
+      <button class="btn-contact-save"   id="btnAceptarSolicitud" onclick="aceptarSolicitudContacto()">Aceptar</button>
     </div>
   </div>
 </div>
@@ -4110,6 +4146,15 @@ function seleccionarUsuario(user) {
     av.src = userAvatars[user] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user)}`;
     av.style.display = 'block';
 
+    // Mostrar teléfono del contacto si lo tenemos
+    const chatPhoneEl = document.getElementById('chatPhone');
+    if (phone) {
+        chatPhoneEl.textContent = phone;
+        chatPhoneEl.style.display = 'block';
+    } else {
+        chatPhoneEl.style.display = 'none';
+    }
+
     // Ocultar avatar de grupo; configurar botón unificado para llamada 1:1
     document.getElementById('chatGroupAvatar').classList.remove('visible');
 
@@ -4170,6 +4215,11 @@ function seleccionarContactoOffline(phone) {
     av.src = avatarUrl;
     av.style.display = 'block';
     document.getElementById('chatGroupAvatar').classList.remove('visible');
+
+    // Mostrar teléfono siempre en chats offline (tenemos el phone directamente)
+    const chatPhoneEl = document.getElementById('chatPhone');
+    chatPhoneEl.textContent = phone;
+    chatPhoneEl.style.display = 'block';
 
     document.getElementById('chatStatus').textContent = '○ Desconectado';
     document.getElementById('chatStatus').style.color = 'var(--text-muted)';
@@ -5135,6 +5185,7 @@ function seleccionarGrupo(groupId) {
 
     document.getElementById('chatStatus').textContent = `${g.members.length} miembros`;
     document.getElementById('chatStatus').style.color = 'var(--text-muted)';
+    document.getElementById('chatPhone').style.display = 'none';
 
     // Botón unificado: solo admin puede hacer llamada grupal
     const btnU = document.getElementById('btnCallUnified');
@@ -5274,6 +5325,7 @@ function onGroupDeleted(groupId) {
         document.getElementById('chatName').style.color = 'var(--text-muted)';
         document.getElementById('chatAvatar').style.display = 'none';
         document.getElementById('chatStatus').textContent = '';
+        document.getElementById('chatPhone').style.display = 'none';
     }
     renderGroupsList();
 }
@@ -5730,13 +5782,12 @@ async function guardarContacto() {
 }
 
 function onContactAdded(contactPhone, customName, avatar, username) {
-    // Si este contacto viene de aceptar una solicitud y el usuario puso un nombre personalizado,
-    // usarlo en lugar del username automático que manda el servidor.
+    // Si viene de aceptar una solicitud y el usuario puso nombre personalizado, usarlo
     let finalName = customName;
     if (window._pendingCustomName && window._pendingCustomName.phone === contactPhone) {
         finalName = window._pendingCustomName.name;
         window._pendingCustomName = null;
-        // Renombrar también en BD para que persista
+        // Persistir el nombre personalizado en BD
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
                 type:         'renameContact',
@@ -5745,6 +5796,7 @@ function onContactAdded(contactPhone, customName, avatar, username) {
             }));
         }
     }
+    const esNuevo = !myContacts.has(contactPhone);
     myContacts.set(contactPhone, { contactPhone, customName: finalName, avatar: avatar || null, username: username || null });
     // Cachear avatar para uso offline
     if (avatar) {
@@ -5754,6 +5806,10 @@ function onContactAdded(contactPhone, customName, avatar, username) {
     renderContactsList();
     renderUsers(lastKnownUsers); // quitar al usuario de "Conectados ahora" si estaba ahí
     cerrarModalContacto();
+    // Toast solo si es un contacto nuevo (no al recibirlo como recíproco sin abrir modal)
+    if (esNuevo) {
+        mostrarToast(finalName + ' añadido a contactos ✓');
+    }
 }
 
 function onContactRemoved(contactPhone) {
@@ -5778,6 +5834,7 @@ let _renamePhone = null; // teléfono del contacto que se está renombrando
 
 function abrirModalRenombrar(phone, currentName) {
     _renamePhone = phone;
+    document.getElementById('renameContactPhone').textContent = phone;
     document.getElementById('renameContactInput').value = currentName;
     document.getElementById('renameContactError').textContent = '';
     document.getElementById('btnGuardarRenombre').disabled = false;
@@ -6306,14 +6363,14 @@ document.getElementById('contactRequestModal').addEventListener('click', (e) => 
     que la entrega inmediatamente; si la otra persona la acepta, ambos se agregan) */
 function aceptarDesconocidoDirecto(phone, uname) {
     if (!phone || !socket) return;
-    // Enviar solicitud de contacto al otro usuario
+    // Usar addContact directo: el servidor agrega a ambos lados de forma inmediata
+    // y recíproca. El nombre por defecto es el username del otro usuario (editable después).
     socket.send(JSON.stringify({
-        type:    'sendContactRequest',
-        toPhone: phone
+        type:         'addContact',
+        contactPhone: phone,
+        customName:   uname
     }));
-    // Feedback visual inmediato en la lista
-    renderUsers(lastKnownUsers);
-    mostrarToast('Solicitud enviada a ' + uname + ' ✓');
+    mostrarToast('Agregando a ' + uname + '…');
 }
 
 // ============================================================
@@ -6458,26 +6515,6 @@ function logoutConfirmado() { cerrarAjustes(); logout(); }
         <button class="btn-logout-cancel"  onclick="ocultarConfirmLogout()">Cancelar</button>
         <button class="btn-logout-confirm" onclick="logoutConfirmado()">Cerrar sesión</button>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============================================================
-     MODAL SOLICITUD DE CONTACTO ENTRANTE
-============================================================ -->
-<div id="contactRequestModal">
-  <div class="contact-request-card">
-    <img id="crAvatar" class="contact-request-avatar" src="" alt="">
-    <h3>Solicitud de contacto</h3>
-    <p id="crText"></p>
-    <div class="add-contact-field" style="width:100%">
-      <label>Guardar como</label>
-      <input class="contact-request-name-input" type="text" id="crNameInput" maxlength="30" placeholder="Nombre del contacto">
-    </div>
-    <div class="add-contact-error" id="crError"></div>
-    <div class="contact-request-actions">
-      <button class="btn-contact-cancel" onclick="rechazarSolicitudContacto()">Rechazar</button>
-      <button class="btn-contact-save" id="btnAceptarSolicitud" onclick="aceptarSolicitudContacto()">Aceptar</button>
     </div>
   </div>
 </div>
