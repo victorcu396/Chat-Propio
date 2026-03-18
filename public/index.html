@@ -5802,6 +5802,8 @@ function addGroupMessage(msg) {
     _attachBubbleClickMenu(row, msg.id, isMe, isDeleted, true);
     if (autoScroll) scrollChat();
 }
+
+function onGroupMessage(data) {
     const chatKey = 'group_' + data.groupId;
     if (!conversations[chatKey]) conversations[chatKey] = [];
     if (!conversations[chatKey].some(m => m.id === data.id)) {
@@ -5820,7 +5822,7 @@ function addGroupMessage(msg) {
         }
     }
     renderGroupsList();
-
+}
 
 function onGroupHistory(data) {
     const chatKey = 'group_' + data.groupId;
