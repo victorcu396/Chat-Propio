@@ -1032,6 +1032,7 @@ html, body {
     flex-direction: column;
     align-items: flex-start;
     min-width: 0;
+    position: relative;
 }
 
 .msg-row.me .bubble-wrap { align-items: flex-end; }
@@ -1121,6 +1122,309 @@ html, body {
     font-style: italic;
     list-style: none;
 }
+
+/* ═══════════════════════════════════════════
+   MENSAJE: ACCIONES (menú contextual)
+═══════════════════════════════════════════ */
+.msg-row { position: relative; }
+
+/* bubble-wrap necesita position:relative para anclar el menú */
+.bubble-wrap { position: relative; }
+
+/* Botón "⋯" — en desktop solo aparece al hacer click (clase .menu-open),
+   en móvil siempre visible pero transparente hasta activar */
+.msg-actions-btn {
+    position: absolute;
+    top: 4px;
+    right: -30px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: var(--white);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-mid);
+    z-index: 10;
+    transition: background var(--transition), opacity var(--transition);
+    touch-action: manipulation;
+    flex-shrink: 0;
+}
+/* Desktop: solo mostrar cuando el row tiene clase .menu-open (por click) */
+.msg-row.menu-open .msg-actions-btn { display: flex; }
+/* Al hacer hover sobre el botón mismo, cambiar fondo */
+.msg-actions-btn:hover { background: var(--purple-pale); }
+
+/* El botón está dentro de bubble-wrap, posicionado relativo a él */
+.msg-row.me .bubble-wrap .msg-actions-btn  { right: auto; left: -30px; }
+.msg-row:not(.me) .bubble-wrap .msg-actions-btn { left: auto; right: -30px; }
+
+/* Menú contextual flotante — ancla al bubble-wrap */
+.msg-ctx-menu {
+    position: absolute;
+    z-index: 9000;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    padding: 6px;
+    display: none;
+    flex-direction: column;
+    min-width: 170px;
+    animation: loginIn .15s ease;
+}
+.msg-ctx-menu.visible { display: flex; }
+.msg-row.me .bubble-wrap .msg-ctx-menu  { right: 0; top: calc(100% + 4px); }
+.msg-row:not(.me) .bubble-wrap .msg-ctx-menu { left: 0; top: calc(100% + 4px); }
+
+.ctx-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    border-radius: 9px;
+    font-size: 13.5px; font-weight: 500;
+    color: var(--text-dark);
+    cursor: pointer;
+    border: none; background: none;
+    width: 100%; text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    transition: background var(--transition);
+    touch-action: manipulation;
+}
+.ctx-item:hover { background: var(--purple-pale); }
+.ctx-item.danger { color: #ef4444; }
+.ctx-item.danger:hover { background: rgba(239,68,68,0.08); }
+.ctx-sep { height: 1px; background: var(--border); margin: 3px 6px; }
+
+/* Emoji picker rápido (reacciones) */
+.react-quick-bar {
+    display: flex; gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+.react-quick-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px; border: none;
+    background: none; font-size: 18px;
+    cursor: pointer; line-height: 1;
+    transition: background var(--transition), transform .1s;
+    touch-action: manipulation;
+}
+.react-quick-btn:hover { background: var(--purple-pale); transform: scale(1.2); }
+
+/* ═══════════════════════════════════════════
+   RESPONDER: barra encima del input
+═══════════════════════════════════════════ */
+#replyBar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px 6px;
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+}
+#replyBar.visible { display: flex; }
+#replyBar .reply-icon { font-size: 16px; color: var(--purple-deep); flex-shrink: 0; }
+#replyBar .reply-content { flex: 1; min-width: 0; }
+#replyBar .reply-name { font-weight: 600; color: var(--purple-deep); font-size: 12px; }
+#replyBar .reply-text { color: var(--text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+#replyBar .reply-cancel { flex-shrink: 0; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 18px; line-height: 1; padding: 2px 4px; touch-action: manipulation; }
+
+/* Preview de respuesta dentro de la burbuja */
+.reply-preview {
+    border-left: 3px solid var(--purple-deep);
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    border-radius: 0 6px 6px 0;
+    background: rgba(79,70,229,0.08);
+    font-size: 12px;
+    cursor: pointer;
+}
+.bubble.me .reply-preview { border-color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.15); }
+.reply-preview .rp-name { font-weight: 600; margin-bottom: 1px; opacity: 0.9; }
+.reply-preview .rp-text { opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Burbuja de mensaje reenviado */
+.forward-label {
+    font-size: 11px; opacity: 0.65; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 4px;
+}
+
+/* Mensaje editado */
+.edited-label {
+    font-size: 10px; opacity: 0.6; margin-left: 4px; font-style: italic;
+}
+
+/* Mensaje eliminado */
+.bubble.deleted .msg-text {
+    font-style: italic; opacity: 0.5;
+}
+
+/* ═══════════════════════════════════════════
+   REACCIONES: chips bajo la burbuja
+═══════════════════════════════════════════ */
+.reactions-row {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin-top: 3px;
+}
+.reaction-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 12px;
+    font-size: 13px; line-height: 1.4;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+    touch-action: manipulation;
+}
+.reaction-chip:hover { border-color: var(--purple-deep); background: var(--purple-pale); }
+.reaction-chip.mine { border-color: var(--purple-deep); background: var(--purple-pale); }
+.reaction-chip .rc-count { font-size: 11px; color: var(--text-mid); font-weight: 600; }
+
+/* ═══════════════════════════════════════════
+   DESTACADOS: star badge
+═══════════════════════════════════════════ */
+.star-badge {
+    font-size: 12px; margin-left: 3px; opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════
+   HILO (THREAD)
+═══════════════════════════════════════════ */
+.thread-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 4px; padding: 3px 10px 3px 6px;
+    border-radius: 12px; border: 1.5px solid var(--border);
+    background: var(--white); font-size: 12px;
+    color: var(--purple-deep); cursor: pointer;
+    font-weight: 600; transition: background var(--transition);
+    touch-action: manipulation;
+}
+.thread-btn:hover { background: var(--purple-pale); }
+
+/* Panel de hilo lateral */
+#threadPanel {
+    position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
+    background: var(--white); border-left: 1px solid var(--border);
+    z-index: 8000; display: flex; flex-direction: column;
+    transition: right .28s cubic-bezier(.4,0,.2,1);
+    box-shadow: -4px 0 24px rgba(0,0,0,0.10);
+}
+#threadPanel.open { right: 0; }
+
+.thread-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.thread-header h3 { flex: 1; font-size: 15px; font-weight: 700; margin: 0; }
+.thread-header-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); padding: 0 4px; touch-action: manipulation; }
+
+.thread-root-msg {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-sidebar);
+    font-size: 13.5px; flex-shrink: 0;
+}
+.thread-root-from { font-weight: 600; color: var(--purple-deep); font-size: 12px; margin-bottom: 3px; }
+
+#threadMessages {
+    flex: 1; overflow-y: auto; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.thread-msg-item {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 6px 4px;
+}
+.thread-msg-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.thread-msg-body { flex: 1; min-width: 0; }
+.thread-msg-from { font-size: 11px; font-weight: 600; color: var(--purple-deep); margin-bottom: 2px; }
+.thread-msg-text { font-size: 13.5px; line-height: 1.4; color: var(--text-dark); word-break: break-word; }
+.thread-msg-time { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+.thread-input-area {
+    padding: 10px 12px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
+}
+.thread-input {
+    flex: 1; min-height: 38px; max-height: 90px;
+    padding: 9px 12px; border: 1.5px solid var(--border);
+    border-radius: 18px; resize: none; outline: none;
+    font-size: 14px; font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark); background: var(--white);
+    transition: border-color var(--transition);
+    overflow-y: auto;
+}
+.thread-input:focus { border-color: var(--purple-deep); }
+.thread-send-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: none;
+    background: var(--bubble-me); color: white; cursor: pointer;
+    font-size: 16px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: opacity var(--transition); touch-action: manipulation;
+}
+.thread-send-btn:hover { opacity: 0.88; }
+
+/* ═══════════════════════════════════════════
+   MODAL REENVIAR
+═══════════════════════════════════════════ */
+#forwardModal {
+    display: none; position: fixed; inset: 0; z-index: 9700;
+    align-items: center; justify-content: center;
+    padding: 16px; background: rgba(15,10,40,0.7); backdrop-filter: blur(6px);
+}
+#forwardModal.visible { display: flex; }
+.forward-card {
+    background: var(--white); border-radius: 20px;
+    padding: 22px 20px 18px; width: 100%; max-width: 360px;
+    box-shadow: var(--shadow-card); animation: loginIn .2s ease;
+}
+.forward-card h3 { font-size: 16px; font-weight: 700; margin: 0 0 14px; }
+.forward-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.forward-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 10px; cursor: pointer;
+    transition: background var(--transition); touch-action: manipulation;
+}
+.forward-item:hover { background: var(--purple-pale); }
+.forward-item img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.forward-item-name { font-size: 14px; font-weight: 500; }
+.forward-cancel-btn {
+    margin-top: 12px; width: 100%; padding: 10px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-md);
+    background: none; font-size: 14px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; color: var(--text-mid);
+    touch-action: manipulation;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    #threadPanel { width: 100%; right: -100%; }
+    /* En móvil el botón ⋯ siempre visible (táctil) pero semitransparente */
+    .msg-actions-btn { display: flex !important; opacity: 0.35; }
+    .msg-row.menu-open .msg-actions-btn { opacity: 1; }
+    /* Menú en posición fija para no ser cortado por overflow */
+    .msg-ctx-menu {
+        position: fixed;
+        bottom: 80px;
+        left: 10px; right: 10px;
+        top: auto; width: auto;
+        max-width: none;
+    }
+    .msg-row.me .bubble-wrap .msg-ctx-menu,
+    .msg-row:not(.me) .bubble-wrap .msg-ctx-menu {
+        position: fixed;
+        bottom: 80px;
+        left: 10px; right: 10px;
+        top: auto;
+    }
+}
+
+
 
 /* ---- Typing ---- */
 #typing {
@@ -2985,6 +3289,16 @@ html.is-mobile .contact-actions { display: flex; }
         <button class="btn-rec-send" onclick="enviarAudio()" title="Enviar audio">▶</button>
       </div>
 
+      <!-- Reply bar (aparece al responder un mensaje) -->
+      <div id="replyBar">
+        <span class="reply-icon">↩</span>
+        <div class="reply-content">
+          <div class="reply-name" id="replyBarName"></div>
+          <div class="reply-text" id="replyBarText"></div>
+        </div>
+        <button class="reply-cancel" onclick="cancelarRespuesta()" title="Cancelar">×</button>
+      </div>
+
       <!-- Input -->
       <div class="input-area">
         <emoji-picker id="emojiPicker"></emoji-picker>
@@ -3232,6 +3546,39 @@ html.is-mobile .contact-actions { display: flex; }
       <button class="btn-accept" onclick="aceptarLlamadaGrupal()" title="Aceptar">📞</button>
       <button class="btn-decline" onclick="rechazarLlamadaGrupal()" title="Rechazar">📵</button>
     </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     PANEL HILO (THREAD)
+============================================================ -->
+<div id="threadPanel">
+  <div class="thread-header">
+    <h3>🧵 Hilo</h3>
+    <button class="thread-header-close" onclick="cerrarHilo()">×</button>
+  </div>
+  <div class="thread-root-msg" id="threadRootMsg">
+    <div class="thread-root-from" id="threadRootFrom"></div>
+    <div id="threadRootText"></div>
+  </div>
+  <ul id="threadMessages" style="list-style:none;margin:0;padding:10px 12px;"></ul>
+  <div class="thread-input-area">
+    <textarea class="thread-input" id="threadInput" placeholder="Responder en el hilo…" rows="1"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"></textarea>
+    <button class="thread-send-btn" onclick="enviarEnHilo()" title="Enviar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL REENVIAR MENSAJE
+============================================================ -->
+<div id="forwardModal">
+  <div class="forward-card">
+    <h3>↗ Reenviar a…</h3>
+    <div class="forward-list" id="forwardList"></div>
+    <button class="forward-cancel-btn" onclick="cerrarModalReenviar()">Cancelar</button>
   </div>
 </div>
 
@@ -4023,6 +4370,32 @@ function handleMessage(data) {
     if (data.type === 'info')      { addInfo(data.message); return; }
     if (data.type === 'kvs_pong')  { return; } // respuesta al heartbeat, ignorar
 
+    // ── Acciones sobre mensajes ──────────────────────────────────────────
+    if (data.type === 'message_edited') {
+        onMensajeEditado(data.id, data.newText, data.editedAt);
+        return;
+    }
+    if (data.type === 'message_deleted') {
+        onMensajeEliminado(data.id);
+        return;
+    }
+    if (data.type === 'message_reaction') {
+        onReaccionActualizada(data.id, data.reactions);
+        return;
+    }
+    if (data.type === 'message_starred') {
+        onMensajeDestacado(data.id, data.starred);
+        return;
+    }
+    if (data.type === 'thread_message') {
+        onMensajeHilo(data);
+        return;
+    }
+    if (data.type === 'thread_history') {
+        onHistorialHilo(data);
+        return;
+    }
+
     // ── WebRTC signaling ──
     if (data.type === 'call_offer')    { recibirLlamada(data); return; }
     if (data.type === 'call_answer')   { recibirRespuesta(data); return; }
@@ -4384,20 +4757,21 @@ function enviar() {
     // ── Mensaje de grupo ──────────────────────────────
     if (currentChat.startsWith('group_')) {
         const groupId = currentChat.replace('group_', '');
-        if (pendingImage) {
+        // ¿Es una respuesta?
+        if (_replyState && _replyState.id) {
             socket.send(JSON.stringify({
-                type: 'groupMessage',
+                type: 'replyMessage',
                 groupId,
                 message: text || '',
-                imageData: pendingImage.dataUrl
+                imageData: pendingImage ? pendingImage.dataUrl : undefined,
+                replyToId: _replyState.id
             }));
+            cancelarRespuesta();
+        } else if (pendingImage) {
+            socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text || '', imageData: pendingImage.dataUrl }));
             cancelarImagen();
         } else {
-            socket.send(JSON.stringify({
-                type: 'groupMessage',
-                groupId,
-                message: text
-            }));
+            socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text }));
         }
         input.value = '';
         input.style.height = 'auto';
@@ -4407,27 +4781,29 @@ function enviar() {
     }
 
     // ── Mensaje 1:1 (online o offline) ───────────────────────
-    // currentChat puede ser un username (online) o 'phone:XXXXX' (offline)
     const isOfflineChat = currentChat.startsWith('phone:');
-    const toPhone = isOfflineChat ? currentChat.replace('phone:', '') : null;
+    const toPhone    = isOfflineChat ? currentChat.replace('phone:', '') : null;
     const toUsername = isOfflineChat ? null : currentChat;
 
-    if (pendingImage) {
+    // ¿Es una respuesta?
+    if (_replyState && _replyState.id) {
+        socket.send(JSON.stringify({
+            type: 'replyMessage',
+            ...(toUsername ? { to: toUsername } : { toPhone }),
+            message: text || '',
+            imageData: pendingImage ? pendingImage.dataUrl : undefined,
+            replyToId: _replyState.id
+        }));
+        if (pendingImage) cancelarImagen();
+        cancelarRespuesta();
+    } else if (pendingImage) {
         socket.send(JSON.stringify({
             type: 'message',
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text || '',
             imageData: pendingImage.dataUrl
         }));
-        addMessage({
-            id: 'local_' + Date.now(),
-            from: username,
-            to: toUsername,
-            toPhone: toPhone,
-            message: text,
-            timestamp: Date.now(),
-            self: true
-        });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true });
         cancelarImagen();
     } else {
         socket.send(JSON.stringify({
@@ -4435,15 +4811,7 @@ function enviar() {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text
         }));
-        addMessage({
-            id: 'local_' + Date.now(),
-            from: username,
-            to: toUsername,
-            toPhone: toPhone,
-            message: text,
-            timestamp: Date.now(),
-            self: true
-        });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, timestamp: Date.now(), self: true });
     }
 
     input.value = '';
@@ -4472,17 +4840,40 @@ input.addEventListener('input', () => {
 input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        enviar();
+        // Si estamos en modo edición, guardar la edición en lugar de enviar
+        if (_editState) {
+            guardarEdicion();
+        } else {
+            enviar();
+        }
     }
 });
 
 // ============================================================
 // ADD MESSAGE AL DOM
 // ============================================================
+function _buildReactionsHtml(reactions, msgId) {
+    if (!reactions || typeof reactions !== 'object') return '';
+    const entries = reactions instanceof Map ? [...reactions.entries()] : Object.entries(reactions);
+    if (!entries.length) return '';
+    const chips = entries.map(([emoji, users]) => {
+        if (!users || !users.length) return '';
+        const mine = users.includes(username);
+        return `<span class="reaction-chip${mine ? ' mine' : ''}" onclick="toggleReaccion('${msgId}','${emoji}')" title="${users.join(', ')}">
+            ${emoji}<span class="rc-count">${users.length}</span>
+        </span>`;
+    }).join('');
+    return chips ? `<div class="reactions-row">${chips}</div>` : '';
+}
+
+function _buildMsgActionsBtn(msgId, isMe, isDeleted, isGroup) {
+    return `<button class="msg-actions-btn" onclick="abrirMenuMensaje(event,'${msgId}',${isMe},${isDeleted},${isGroup})" title="Opciones">⋯</button>`;
+}
+
 function addMessage(msg) {
     const isMe = msg.self || msg.from === username;
 
-    // ── Caso LLAMADA PERDIDA ──
+    // ── Llamada perdida ──
     if (msg.message === '__missed_call__') {
         const li = document.createElement('li');
         li.className = 'info-msg';
@@ -4495,30 +4886,64 @@ function addMessage(msg) {
         return;
     }
 
+    const isDeleted  = !!msg.deletedAt;
+    const isEdited   = !!msg.editedAt && !isDeleted;
+    const isForward  = !!msg.forwardedFrom;
+    const isGroup    = !!(msg.groupId || (currentChat && currentChat.startsWith('group_')));
+    const isStarred  = msg.starredBy && msg.starredBy.includes(username);
     const row = document.createElement('li');
     row.className = `msg-row ${isMe ? 'me' : ''}`;
+    row.dataset.msgid = msg.id;
 
-    const avatarSrc = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.from}`;
-
+    const avatarSrc  = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.from}`;
     const estadoHtml = isMe
         ? `<span class="estado" id="estado_${msg.id}">${msg.read ? '✔✔ leído' : msg.delivered ? '✔✔' : '✔'}</span>`
         : '';
+    const onlyImage  = msg.imageData && !msg.message && !msg.audioData && !isDeleted;
+    const bubbleClass = `bubble ${isMe ? 'me' : 'other'}${onlyImage ? ' img-only' : ''}${isDeleted ? ' deleted' : ''}`;
 
-    const onlyImage = msg.imageData && !msg.message && !msg.audioData;
-    const bubbleClass = `bubble ${isMe ? 'me' : 'other'}${onlyImage ? ' img-only' : ''}`;
+    // Reply preview
+    let replyHtml = '';
+    if (msg.replyToId && !isDeleted) {
+        const rpName = msg.replyToFrom || '';
+        const rpText = escapeHTML(msg.replyToText || '');
+        replyHtml = `<div class="reply-preview" onclick="scrollToMsg('${msg.replyToId}')">
+            <div class="rp-name">${escapeHTML(rpName)}</div>
+            <div class="rp-text">${rpText}</div>
+        </div>`;
+    }
 
-    // ── Caso AUDIO ──
-    if (msg.audioData) {
-        // ID único y estable para este mensaje
+    // Forward label
+    const forwardHtml = isForward && !isDeleted
+        ? `<div class="forward-label">↗ Reenviado de <b>${escapeHTML(msg.forwardedFrom)}</b></div>` : '';
+
+    // Edited label
+    const editedHtml  = isEdited ? `<span class="edited-label">(editado)</span>` : '';
+
+    // Star badge
+    const starHtml    = isStarred ? `<span class="star-badge">⭐</span>` : '';
+
+    // Thread button
+    const threadHtml  = (!isDeleted && !isGroup && msg.threadCount)
+        ? `<button class="thread-btn" onclick="abrirHilo('${msg.id}')">🧵 ${msg.threadCount} respuesta${msg.threadCount > 1 ? 's' : ''}</button>`
+        : '';
+
+    // Reactions
+    const reactHtml = _buildReactionsHtml(msg.reactions, msg.id);
+
+    // ── Audio ──
+    if (msg.audioData && !isDeleted) {
         const audioId = 'aud_' + (msg.id || ('r' + Math.random().toString(36).slice(2)));
-
         const waveHeights = [10,16,8,20,14,18,10,22,12,16];
         const bars = waveHeights.map(h => `<span style="height:${h}px"></span>`).join('');
 
         row.innerHTML = `
+            ${_buildMsgActionsBtn(msg.id, isMe, false, isGroup)}
             <img class="msg-avatar" src="${avatarSrc}" alt="${msg.from}">
             <div class="bubble-wrap">
+                ${forwardHtml}
                 <div class="${bubbleClass}" id="${msg.id || audioId}">
+                    ${replyHtml}
                     <span class="msg-text">
                         <div class="audio-msg-wrap">
                             <button class="btn-play-audio" id="playbtn_${audioId}">▶</button>
@@ -4531,34 +4956,24 @@ function addMessage(msg) {
                         ${msg.message ? `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>` : ''}
                     </span>
                     <span class="meta">
-                        <span class="hora">${horaActual(msg.time)}</span>
-                        ${estadoHtml}
+                        ${starHtml}<span class="hora">${horaActual(msg.time)}</span>${editedHtml}${estadoHtml}
                     </span>
                 </div>
-            </div>
-        `;
+                ${reactHtml ? `<div class="reactions-outer" id="react_${msg.id}">${reactHtml}</div>` : `<div class="reactions-outer" id="react_${msg.id}"></div>`}
+                ${threadHtml ? `<div id="thread_${msg.id}">${threadHtml}</div>` : `<div id="thread_${msg.id}"></div>`}
+            </div>`;
 
-        // Crear el elemento <audio> y añadirlo al row (fuera del innerHTML)
         const audioEl = document.createElement('audio');
-        audioEl.id = audioId;
-        audioEl.src = msg.audioData;
-        audioEl.preload = 'metadata';
-        audioEl.style.display = 'none';
+        audioEl.id = audioId; audioEl.src = msg.audioData; audioEl.preload = 'metadata'; audioEl.style.display = 'none';
         row.appendChild(audioEl);
 
-        // Referencias usando row.querySelector porque el row aún no está en el documento
         const playBtn = row.querySelector('#playbtn_' + audioId);
         const progEl  = row.querySelector('#prog_'    + audioId);
         const waveEl  = row.querySelector('#wave_'    + audioId);
         const durEl   = row.querySelector('#dur_'     + audioId);
-
-        // Eventos del botón play
         playBtn.addEventListener('click', () => toggleAudioPlay(audioId));
-        progEl.addEventListener('input', () => seekAudio(audioId, progEl.value));
-
-        audioEl.addEventListener('loadedmetadata', () => {
-            if (durEl) durEl.textContent = formatAudioTime(audioEl.duration);
-        });
+        progEl.addEventListener('input',  () => seekAudio(audioId, progEl.value));
+        audioEl.addEventListener('loadedmetadata', () => { if (durEl) durEl.textContent = formatAudioTime(audioEl.duration); });
         audioEl.addEventListener('timeupdate', () => {
             if (audioEl.duration) {
                 if (progEl) progEl.value = (audioEl.currentTime / audioEl.duration) * 100;
@@ -4571,16 +4986,17 @@ function addMessage(msg) {
             if (progEl)  progEl.value = 0;
             if (durEl && audioEl.duration) durEl.textContent = formatAudioTime(audioEl.duration);
         });
-
         chat.appendChild(row);
         if (autoScroll) scrollChat();
         if (!isMe && socket) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
         return;
     }
 
-    // ── Caso IMAGEN o TEXTO ──
+    // ── Imagen / Texto / Eliminado ──
     let content = '';
-    if (msg.imageData) {
+    if (isDeleted) {
+        content = '🗑 Mensaje eliminado';
+    } else if (msg.imageData) {
         content = `<img class="img-msg" src="${msg.imageData}" alt="imagen">`;
         if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
     } else {
@@ -4588,29 +5004,30 @@ function addMessage(msg) {
     }
 
     row.innerHTML = `
+        ${_buildMsgActionsBtn(msg.id, isMe, isDeleted, isGroup)}
         <img class="msg-avatar" src="${avatarSrc}" alt="${msg.from}">
         <div class="bubble-wrap">
+            ${forwardHtml}
             <div class="${bubbleClass}" id="${msg.id}">
+                ${replyHtml}
                 <span class="msg-text">${content}</span>
                 <span class="meta">
-                    <span class="hora">${horaActual(msg.time)}</span>
-                    ${estadoHtml}
+                    ${starHtml}<span class="hora">${horaActual(msg.time)}</span>${editedHtml}${estadoHtml}
                 </span>
             </div>
+            <div class="reactions-outer" id="react_${msg.id}">${reactHtml}</div>
+            <div id="thread_${msg.id}">${threadHtml}</div>
         </div>
     `;
 
-    if (msg.imageData) {
+    if (!isDeleted && msg.imageData) {
         const imgEl = row.querySelector('.img-msg');
-        imgEl.addEventListener('click', () => openLightbox(msg.imageData));
+        if (imgEl) imgEl.addEventListener('click', () => openLightbox(msg.imageData));
     }
 
     chat.appendChild(row);
     if (autoScroll) scrollChat();
-
-    if (!isMe && socket) {
-        socket.send(JSON.stringify({ type: 'read', id: msg.id }));
-    }
+    if (!isMe && socket && !isDeleted) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
 }
 
 function escapeHTML(str) {
@@ -5324,44 +5741,62 @@ function seleccionarGrupo(groupId) {
 
 function addGroupMessage(msg) {
     const isMe = msg.from === username;
+    if (msg.audioData) { addMessage(msg); return; } // delegar audio
+
+    const isDeleted = !!msg.deletedAt;
+    const isEdited  = !!msg.editedAt && !isDeleted;
+    const isForward = !!msg.forwardedFrom;
+    const isStarred = msg.starredBy && msg.starredBy.includes(username);
     const row = document.createElement('li');
     row.className = `msg-row ${isMe ? 'me' : ''}`;
+    row.dataset.msgid = msg.id;
 
-    const avatarSrc = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.from}`;
+    const avatarSrc  = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${msg.from}`;
     const estadoHtml = isMe
         ? `<span class="estado" id="estado_${msg.id}">${msg.read ? '✔✔ leído' : msg.delivered ? '✔✔' : '✔'}</span>`
         : '';
-
-    // Nombre del remitente encima del burbuja (para mensajes ajenos)
     const senderLabel = !isMe ? `<div style="font-size:11px;font-weight:600;color:var(--purple-deep);margin-bottom:2px;">${escapeHTML(msg.from)}</div>` : '';
+    const forwardHtml = isForward && !isDeleted ? `<div class="forward-label">↗ Reenviado de <b>${escapeHTML(msg.forwardedFrom)}</b></div>` : '';
+    const editedHtml  = isEdited ? `<span class="edited-label">(editado)</span>` : '';
+    const starHtml    = isStarred ? `<span class="star-badge">⭐</span>` : '';
+    const reactHtml   = _buildReactionsHtml(msg.reactions, msg.id);
+    const threadHtml  = (!isDeleted && msg.threadCount)
+        ? `<button class="thread-btn" onclick="abrirHilo('${msg.id}')">🧵 ${msg.threadCount} respuesta${msg.threadCount > 1 ? 's' : ''}</button>` : '';
+
+    let replyHtml = '';
+    if (msg.replyToId && !isDeleted) {
+        replyHtml = `<div class="reply-preview" onclick="scrollToMsg('${msg.replyToId}')">
+            <div class="rp-name">${escapeHTML(msg.replyToFrom || '')}</div>
+            <div class="rp-text">${escapeHTML(msg.replyToText || '')}</div>
+        </div>`;
+    }
 
     let content = '';
-    if (msg.imageData) {
+    if (isDeleted) {
+        content = '🗑 Mensaje eliminado';
+    } else if (msg.imageData) {
         content = `<img class="img-msg" src="${msg.imageData}" alt="imagen">`;
         if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
-    } else if (msg.audioData) {
-        // Reusar la misma lógica que mensajes 1:1 — delegamos a addMessage
-        addMessage(msg);
-        return;
     } else {
         content = escapeHTML(msg.message);
     }
 
     row.innerHTML = `
+        ${_buildMsgActionsBtn(msg.id, isMe, isDeleted, true)}
         <img class="msg-avatar" src="${avatarSrc}" alt="${msg.from}">
         <div class="bubble-wrap">
-            ${senderLabel}
-            <div class="bubble ${isMe ? 'me' : 'other'}" id="${msg.id}">
+            ${senderLabel}${forwardHtml}
+            <div class="bubble ${isMe ? 'me' : 'other'}${isDeleted ? ' deleted' : ''}" id="${msg.id}">
+                ${replyHtml}
                 <span class="msg-text">${content}</span>
-                <span class="meta">
-                    <span class="hora">${horaActual(msg.time)}</span>
-                    ${estadoHtml}
-                </span>
+                <span class="meta">${starHtml}<span class="hora">${horaActual(msg.time)}</span>${editedHtml}${estadoHtml}</span>
             </div>
+            <div class="reactions-outer" id="react_${msg.id}">${reactHtml}</div>
+            <div id="thread_${msg.id}">${threadHtml}</div>
         </div>
     `;
 
-    if (msg.imageData) {
+    if (!isDeleted && msg.imageData) {
         const imgEl = row.querySelector('.img-msg');
         if (imgEl) imgEl.addEventListener('click', () => openLightbox(msg.imageData));
     }
@@ -6509,6 +6944,404 @@ function mostrarToast(msg, esError = false) {
     toast.style.opacity = '1';
     if (_toastTimer) clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+// ============================================================
+// ACCIONES SOBRE MENSAJES
+// ============================================================
+
+// Estado de respuesta activa
+let _replyState = null; // { id, from, text }
+// Estado de edición activa
+let _editState  = null; // { id }
+// Menú contextual abierto
+let _openMenuRow = null;
+
+/* ─── Menú contextual ──────────────────────────────────────── */
+const QUICK_EMOJIS = ['👍','❤️','😂','😮','😢','🔥'];
+
+function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
+    e.stopPropagation();
+
+    // Si el menú ya está abierto para este mensaje, cerrarlo (toggle)
+    const existingMenu = document.getElementById('msgCtxMenu');
+    if (existingMenu) {
+        const wasThisMsg = existingMenu.dataset.formsgid === msgId;
+        cerrarMenuMensaje();
+        if (wasThisMsg) return; // toggle off
+    }
+
+    const row = document.querySelector(`[data-msgid="${msgId}"]`);
+    if (!row) return;
+    const bubbleWrap = row.querySelector('.bubble-wrap');
+    if (!bubbleWrap) return;
+
+    row.classList.add('menu-open');
+    _openMenuRow = row;
+
+    // Construir menú
+    const menu = document.createElement('div');
+    menu.className = 'msg-ctx-menu visible';
+    menu.id = 'msgCtxMenu';
+    menu.dataset.formsgid = msgId;
+
+    // Barra de reacciones rápidas (solo si no eliminado)
+    if (!isDeleted) {
+        const reactBar = document.createElement('div');
+        reactBar.className = 'react-quick-bar';
+        QUICK_EMOJIS.forEach(emoji => {
+            const btn = document.createElement('button');
+            btn.className = 'react-quick-btn';
+            btn.textContent = emoji;
+            btn.title = emoji;
+            btn.onclick = (ev) => { ev.stopPropagation(); toggleReaccion(msgId, emoji); cerrarMenuMensaje(); };
+            reactBar.appendChild(btn);
+        });
+        menu.appendChild(reactBar);
+    }
+
+    // Opciones del menú
+    const ops = [];
+    if (!isDeleted) ops.push({ icon: '↩', label: 'Responder',  fn: () => iniciarRespuesta(msgId) });
+    if (!isDeleted) ops.push({ icon: '🧵', label: 'Ver hilo',   fn: () => abrirHilo(msgId) });
+    if (!isDeleted) ops.push({ icon: '↗', label: 'Reenviar',   fn: () => abrirModalReenviar(msgId) });
+    if (!isDeleted) ops.push({ icon: '⭐', label: 'Destacar',   fn: () => destacarMensaje(msgId) });
+    if (!isDeleted && isMe) ops.push({ icon: '✏️', label: 'Editar',   fn: () => iniciarEdicion(msgId) });
+    if (isMe)               ops.push({ icon: '🗑',  label: 'Eliminar', fn: () => eliminarMensaje(msgId), danger: true });
+
+    ops.forEach((op, i) => {
+        if (op.danger && i > 0) {
+            const sep = document.createElement('div');
+            sep.className = 'ctx-sep';
+            menu.appendChild(sep);
+        }
+        const btn = document.createElement('button');
+        btn.className = 'ctx-item' + (op.danger ? ' danger' : '');
+        btn.innerHTML = `<span>${op.icon}</span><span>${op.label}</span>`;
+        btn.onclick = (ev) => { ev.stopPropagation(); cerrarMenuMensaje(); op.fn(); };
+        menu.appendChild(btn);
+    });
+
+    bubbleWrap.appendChild(menu);
+
+    // Cerrar al pulsar fuera con un pequeño delay para no cerrar en el mismo click
+    setTimeout(() => {
+        document.addEventListener('click', cerrarMenuMensaje, { once: true });
+    }, 50);
+}
+
+function cerrarMenuMensaje() {
+    const existing = document.getElementById('msgCtxMenu');
+    if (existing) existing.remove();
+    if (_openMenuRow) { _openMenuRow.classList.remove('menu-open'); _openMenuRow = null; }
+}
+
+/* ─── Scroll a mensaje referenciado ────────────────────────── */
+function scrollToMsg(msgId) {
+    const el = document.getElementById(msgId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.transition = 'background .2s';
+        el.style.background = 'rgba(79,70,229,0.18)';
+        setTimeout(() => { el.style.background = ''; }, 1200);
+    }
+}
+
+/* ─── RESPONDER ─────────────────────────────────────────────── */
+function iniciarRespuesta(msgId) {
+    // Buscar el mensaje en conversations para obtener datos fiables
+    let msgFrom = '', msgText = '';
+    for (const arr of Object.values(conversations)) {
+        const m = arr.find(m => m.id === msgId);
+        if (m) {
+            msgFrom = m.from === username ? 'Tú' : m.from;
+            if (m.deletedAt) { msgText = '🗑 Mensaje eliminado'; }
+            else if (m.imageData) { msgText = '📷 Imagen'; }
+            else if (m.audioData) { msgText = '🎙 Audio'; }
+            else { msgText = (m.message || '').trim().slice(0, 80); }
+            break;
+        }
+    }
+    // Fallback al DOM si no está en conversations (mensaje local)
+    if (!msgFrom) {
+        const bubble = document.getElementById(msgId);
+        const row = bubble ? bubble.closest('.msg-row') : null;
+        msgFrom = row ? (row.querySelector('.msg-avatar')?.alt || 'Mensaje') : 'Mensaje';
+        const textEl = bubble ? bubble.querySelector('.msg-text') : null;
+        msgText = textEl ? (textEl.textContent || '').trim().slice(0, 80) : '';
+    }
+
+    _replyState = { id: msgId, from: msgFrom, text: msgText };
+    document.getElementById('replyBarName').textContent = msgFrom;
+    document.getElementById('replyBarText').textContent = msgText || '📷 Imagen';
+    document.getElementById('replyBar').classList.add('visible');
+    input.focus();
+}
+
+function cancelarRespuesta() {
+    _replyState = null;
+    document.getElementById('replyBar').classList.remove('visible');
+    document.getElementById('replyBarName').textContent = '';
+    document.getElementById('replyBarText').textContent = '';
+}
+
+/* ─── EDITAR ────────────────────────────────────────────────── */
+function iniciarEdicion(msgId) {
+    const bubble = document.getElementById(msgId);
+    if (!bubble) return;
+    const textEl = bubble.querySelector('.msg-text');
+    const currentText = textEl ? textEl.textContent.trim() : '';
+
+    _editState = { id: msgId };
+    input.value = currentText;
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    input.focus();
+
+    // Cambiar el botón enviar a "guardar edición"
+    document.getElementById('replyBarName').textContent = '✏️ Editando mensaje';
+    document.getElementById('replyBarText').textContent = currentText.slice(0, 60);
+    document.getElementById('replyBar').classList.add('visible');
+
+    // Override de enviar → guardarEdicion
+    btnEnviar.onclick = guardarEdicion;
+    btnEnviar.disabled = false;
+}
+
+function guardarEdicion() {
+    if (!_editState) return;
+    const newText = input.value.trim();
+    if (!newText) return;
+
+    socket.send(JSON.stringify({ type: 'editMessage', id: _editState.id, newText }));
+
+    // Reset
+    _editState = null;
+    input.value = '';
+    input.style.height = 'auto';
+    btnEnviar.onclick = enviar;
+    btnEnviar.disabled = true;
+    cancelarRespuesta();
+}
+
+function onMensajeEditado(msgId, newText, editedAt) {
+    // Actualizar en conversations
+    Object.values(conversations).forEach(arr => {
+        const m = arr.find(m => m.id === msgId);
+        if (m) { m.message = newText; m.editedAt = editedAt; }
+    });
+    // Actualizar en DOM
+    const bubble = document.getElementById(msgId);
+    if (!bubble) return;
+    const textEl = bubble.querySelector('.msg-text');
+    if (textEl) textEl.innerHTML = escapeHTML(newText);
+    // Añadir/actualizar label "editado"
+    let meta = bubble.querySelector('.meta');
+    if (meta && !meta.querySelector('.edited-label')) {
+        meta.insertAdjacentHTML('beforeend', '<span class="edited-label">(editado)</span>');
+    }
+}
+
+/* ─── ELIMINAR ──────────────────────────────────────────────── */
+function eliminarMensaje(msgId) {
+    if (!confirm('¿Eliminar este mensaje para todos?')) return;
+    socket.send(JSON.stringify({ type: 'deleteMessage', id: msgId }));
+}
+
+function onMensajeEliminado(msgId) {
+    // Actualizar conversations
+    Object.values(conversations).forEach(arr => {
+        const m = arr.find(m => m.id === msgId);
+        if (m) { m.deletedAt = new Date(); m.message = ''; m.imageData = null; m.audioData = null; }
+    });
+    // Actualizar DOM
+    const bubble = document.getElementById(msgId);
+    if (!bubble) return;
+    bubble.classList.add('deleted');
+    const textEl = bubble.querySelector('.msg-text');
+    if (textEl) textEl.innerHTML = '🗑 Mensaje eliminado';
+    // Quitar reacciones e hilo del mensaje eliminado
+    const reactEl = document.getElementById('react_' + msgId);
+    if (reactEl) reactEl.innerHTML = '';
+    // Ocultar botón de acciones
+    const row = bubble.closest('.msg-row');
+    if (row) {
+        const actBtn = row.querySelector('.msg-actions-btn');
+        if (actBtn) actBtn.style.display = 'none';
+    }
+}
+
+/* ─── REACCIONAR ────────────────────────────────────────────── */
+function toggleReaccion(msgId, emoji) {
+    if (!socket || !emoji) return;
+    socket.send(JSON.stringify({ type: 'addReaction', id: msgId, emoji }));
+}
+
+function onReaccionActualizada(msgId, reactions) {
+    // Actualizar conversations
+    Object.values(conversations).forEach(arr => {
+        const m = arr.find(m => m.id === msgId);
+        if (m) m.reactions = reactions;
+    });
+    // Actualizar DOM
+    const reactEl = document.getElementById('react_' + msgId);
+    if (!reactEl) return;
+    reactEl.innerHTML = _buildReactionsHtml(reactions, msgId);
+}
+
+/* ─── DESTACAR ──────────────────────────────────────────────── */
+function destacarMensaje(msgId) {
+    socket.send(JSON.stringify({ type: 'starMessage', id: msgId }));
+}
+
+function onMensajeDestacado(msgId, starred) {
+    const bubble = document.getElementById(msgId);
+    if (!bubble) return;
+    const meta = bubble.querySelector('.meta');
+    if (!meta) return;
+    const existing = meta.querySelector('.star-badge');
+    if (starred && !existing) {
+        meta.insertAdjacentHTML('afterbegin', '<span class="star-badge">⭐</span>');
+    } else if (!starred && existing) {
+        existing.remove();
+    }
+    // Actualizar conversations
+    Object.values(conversations).forEach(arr => {
+        const m = arr.find(m => m.id === msgId);
+        if (m) {
+            if (!m.starredBy) m.starredBy = [];
+            const idx = m.starredBy.indexOf(username);
+            if (starred && idx < 0) m.starredBy.push(username);
+            if (!starred && idx >= 0) m.starredBy.splice(idx, 1);
+        }
+    });
+}
+
+/* ─── REENVIAR ──────────────────────────────────────────────── */
+let _forwardMsgId = null;
+
+function abrirModalReenviar(msgId) {
+    _forwardMsgId = msgId;
+    const list = document.getElementById('forwardList');
+    list.innerHTML = '';
+
+    // Contactos
+    myContacts.forEach((c) => {
+        const onlineUsername = getOnlineUsernameByPhone(c.contactPhone);
+        const avatarUrl = c.avatar || userAvatars['__phone__' + c.contactPhone]
+            || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.customName)}`;
+        const item = document.createElement('div');
+        item.className = 'forward-item';
+        item.innerHTML = `<img src="${avatarUrl}" alt="${escapeHTML(c.customName)}"><span class="forward-item-name">${escapeHTML(c.customName)}</span>`;
+        item.onclick = () => {
+            const payload = { type: 'forwardMessage', id: msgId };
+            if (onlineUsername) payload.to = onlineUsername;
+            else payload.toPhone = c.contactPhone;
+            socket.send(JSON.stringify(payload));
+            mostrarToast('Reenviado ✓');
+            cerrarModalReenviar();
+        };
+        list.appendChild(item);
+    });
+
+    // Grupos
+    myGroups.forEach((g) => {
+        const item = document.createElement('div');
+        item.className = 'forward-item';
+        item.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:var(--purple-pale);display:flex;align-items:center;justify-content:center;font-size:18px;">👥</div><span class="forward-item-name">${escapeHTML(g.name)}</span>`;
+        item.onclick = () => {
+            socket.send(JSON.stringify({ type: 'forwardMessage', id: msgId, groupId: g.groupId }));
+            mostrarToast('Reenviado ✓');
+            cerrarModalReenviar();
+        };
+        list.appendChild(item);
+    });
+
+    document.getElementById('forwardModal').classList.add('visible');
+}
+
+function cerrarModalReenviar() {
+    _forwardMsgId = null;
+    document.getElementById('forwardModal').classList.remove('visible');
+}
+
+document.getElementById('forwardModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('forwardModal')) cerrarModalReenviar();
+});
+
+/* ─── HILO (THREAD) ─────────────────────────────────────────── */
+let _threadId   = null;
+
+function abrirHilo(msgId) {
+    _threadId = msgId;
+    // Mostrar el mensaje raíz
+    const bubble = document.getElementById(msgId);
+    const row    = bubble ? bubble.closest('.msg-row') : null;
+    const from   = row ? (row.querySelector('.msg-avatar')?.alt || '') : '';
+    const text   = bubble ? (bubble.querySelector('.msg-text')?.textContent || '').trim() : '';
+    document.getElementById('threadRootFrom').textContent = from;
+    document.getElementById('threadRootText').textContent = text.slice(0, 200);
+
+    // Limpiar mensajes anteriores del hilo
+    document.getElementById('threadMessages').innerHTML = '';
+    document.getElementById('threadPanel').classList.add('open');
+
+    // Pedir historial del hilo
+    socket.send(JSON.stringify({ type: 'loadThread', threadId: msgId }));
+}
+
+function cerrarHilo() {
+    _threadId = null;
+    document.getElementById('threadPanel').classList.remove('open');
+}
+
+function enviarEnHilo() {
+    const text = document.getElementById('threadInput').value.trim();
+    if (!text || !_threadId || !socket) return;
+    socket.send(JSON.stringify({ type: 'threadMessage', threadId: _threadId, message: text }));
+    document.getElementById('threadInput').value = '';
+}
+
+document.getElementById('threadInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarEnHilo(); }
+});
+
+function _renderThreadMsg(msg) {
+    const avatarSrc = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.from)}`;
+    const li = document.createElement('li');
+    li.className = 'thread-msg-item';
+    li.id = 'thread_item_' + msg.id;
+    li.innerHTML = `
+        <img class="thread-msg-avatar" src="${avatarSrc}" alt="${escapeHTML(msg.from)}">
+        <div class="thread-msg-body">
+            <div class="thread-msg-from">${escapeHTML(msg.from)}</div>
+            <div class="thread-msg-text">${escapeHTML(msg.message)}</div>
+            <div class="thread-msg-time">${horaActual(msg.time)}</div>
+        </div>`;
+    return li;
+}
+
+function onHistorialHilo(data) {
+    if (data.threadId !== _threadId) return;
+    const ul = document.getElementById('threadMessages');
+    ul.innerHTML = '';
+    (data.messages || []).forEach(msg => ul.appendChild(_renderThreadMsg(msg)));
+    ul.scrollTop = ul.scrollHeight;
+}
+
+function onMensajeHilo(data) {
+    // Actualizar threadCount en el botón del mensaje raíz
+    const threadDiv = document.getElementById('thread_' + data.threadId);
+    if (threadDiv) {
+        const count = data.threadCount;
+        threadDiv.innerHTML = `<button class="thread-btn" onclick="abrirHilo('${data.threadId}')">🧵 ${count} respuesta${count > 1 ? 's' : ''}</button>`;
+    }
+    // Si el panel está abierto para este hilo, añadir el mensaje
+    if (_threadId === data.threadId) {
+        const ul = document.getElementById('threadMessages');
+        ul.appendChild(_renderThreadMsg(data.msg));
+        ul.scrollTop = ul.scrollHeight;
+    }
 }
 
 // ============================================================

@@ -1145,6 +1145,261 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               EDITAR MENSAJE
+            ────────────────────────────────────── */
+            case 'editMessage': {
+                if (!data.id || !data.newText) break;
+                try {
+                    const msg = await Message.findOne({ id: data.id });
+                    if (!msg || msg.from !== ws.username) break;
+                    if (msg.deletedAt) break;
+                    msg.message = data.newText;
+                    msg.editedAt = new Date();
+                    await msg.save();
+                    const payload = JSON.stringify({ type: 'message_edited', id: data.id, newText: data.newText, editedAt: msg.editedAt });
+                    broadcastToConversation(msg.conversationId, payload, msg.from, msg.to);
+                } catch(e) { console.error('editMessage error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               BORRAR MENSAJE (borrado suave)
+            ────────────────────────────────────── */
+            case 'deleteMessage': {
+                if (!data.id) break;
+                try {
+                    const msg = await Message.findOne({ id: data.id });
+                    if (!msg || msg.from !== ws.username) break;
+                    msg.deletedAt = new Date();
+                    msg.message   = '';
+                    msg.imageData = null;
+                    msg.audioData = null;
+                    await msg.save();
+                    const payload = JSON.stringify({ type: 'message_deleted', id: data.id });
+                    broadcastToConversation(msg.conversationId, payload, msg.from, msg.to);
+                } catch(e) { console.error('deleteMessage error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               REACCIÓN A MENSAJE
+            ────────────────────────────────────── */
+            case 'addReaction': {
+                if (!data.id || !data.emoji) break;
+                try {
+                    const msg = await Message.findOne({ id: data.id });
+                    if (!msg || msg.deletedAt) break;
+                    const reactions = msg.reactions || new Map();
+                    const users_reacted = reactions.get(data.emoji) || [];
+                    const idx = users_reacted.indexOf(ws.username);
+                    if (idx >= 0) {
+                        users_reacted.splice(idx, 1); // toggle off
+                    } else {
+                        users_reacted.push(ws.username); // toggle on
+                    }
+                    if (users_reacted.length === 0) {
+                        reactions.delete(data.emoji);
+                    } else {
+                        reactions.set(data.emoji, users_reacted);
+                    }
+                    msg.reactions = reactions;
+                    msg.markModified('reactions');
+                    await msg.save();
+                    const reactObj = {};
+                    msg.reactions.forEach((v, k) => { reactObj[k] = v; });
+                    const payload = JSON.stringify({ type: 'message_reaction', id: data.id, reactions: reactObj });
+                    broadcastToConversation(msg.conversationId, payload, msg.from, msg.to);
+                } catch(e) { console.error('addReaction error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               DESTACAR / QUITAR DESTAQUE
+            ────────────────────────────────────── */
+            case 'starMessage': {
+                if (!data.id) break;
+                try {
+                    const msg = await Message.findOne({ id: data.id });
+                    if (!msg) break;
+                    const idx = (msg.starredBy || []).indexOf(ws.username);
+                    if (idx >= 0) {
+                        msg.starredBy.splice(idx, 1);
+                    } else {
+                        msg.starredBy.push(ws.username);
+                    }
+                    await msg.save();
+                    ws.send(JSON.stringify({ type: 'message_starred', id: data.id, starred: msg.starredBy.includes(ws.username) }));
+                } catch(e) { console.error('starMessage error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               REENVIAR MENSAJE
+               Crea un nuevo mensaje en la conversación
+               destino con referencia al original.
+            ────────────────────────────────────── */
+            case 'forwardMessage': {
+                if (!data.id) break;
+                if (!data.to && !data.toPhone && !data.groupId) break;
+                try {
+                    const orig = await Message.findOne({ id: data.id });
+                    if (!orig || orig.deletedAt) break;
+
+                    let recipientUsername = data.to || null;
+                    let recipientPhone    = data.toPhone || null;
+                    let conversationId;
+                    let groupId = data.groupId || null;
+
+                    if (groupId) {
+                        conversationId = 'group_' + groupId;
+                    } else {
+                        if (!recipientUsername && recipientPhone) {
+                            const u = await User.findOne({ phone: recipientPhone }).lean();
+                            if (u) recipientUsername = u.username;
+                        }
+                        if (!recipientUsername) break;
+                        conversationId = [ws.username, recipientUsername].sort().join('_');
+                    }
+
+                    const newId = crypto.randomUUID();
+                    const fwdMsg = new Message({
+                        id:             newId,
+                        conversationId,
+                        from:           ws.username,
+                        to:             recipientUsername || groupId,
+                        message:        orig.message,
+                        imageData:      orig.imageData,
+                        audioData:      orig.audioData,
+                        avatar:         ws.avatar,
+                        forwardedFrom:  orig.from,
+                        delivered:      false,
+                        read:           false
+                    });
+                    await fwdMsg.save();
+
+                    if (groupId) {
+                        const grp = await Group.findOne({ groupId });
+                        if (!grp) break;
+                        const gmPayload = JSON.stringify({ type: 'groupMessage', ...fwdMsg._doc, groupId, groupName: grp.name });
+                        grp.members.forEach(mp => {
+                            const mws = [...users.values()].find(u => u.phone === mp);
+                            if (mws && mws.readyState === WebSocket.OPEN) mws.send(gmPayload);
+                        });
+                    } else {
+                        sendMessage(fwdMsg);
+                    }
+                } catch(e) { console.error('forwardMessage error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               RESPONDER A MENSAJE
+               Igual que 'message' pero con replyToId.
+            ────────────────────────────────────── */
+            case 'replyMessage': {
+                if (!data.replyToId) break;
+                let recipientUsername = data.to || null;
+                let recipientPhone    = data.toPhone || null;
+                const groupId         = data.groupId || null;
+
+                try {
+                    const orig = await Message.findOne({ id: data.replyToId }).lean();
+                    if (!orig) break;
+
+                    let conversationId;
+                    if (groupId) {
+                        conversationId = 'group_' + groupId;
+                    } else {
+                        if (!recipientUsername && recipientPhone) {
+                            const u = await User.findOne({ phone: recipientPhone }).lean();
+                            if (u) recipientUsername = u.username;
+                        }
+                        if (!recipientUsername) break;
+                        conversationId = [ws.username, recipientUsername].sort().join('_');
+                    }
+
+                    let imageData = null;
+                    if (data.imageData && /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) imageData = data.imageData;
+
+                    const newId = crypto.randomUUID();
+                    const replyMsg = new Message({
+                        id:           newId,
+                        conversationId,
+                        from:         ws.username,
+                        to:           recipientUsername || groupId,
+                        message:      data.message || '',
+                        imageData,
+                        avatar:       ws.avatar,
+                        replyToId:    data.replyToId,
+                        replyToFrom:  orig.from,
+                        replyToText:  orig.deletedAt ? '🗑 Mensaje eliminado' : (orig.imageData ? '📷 Imagen' : orig.audioData ? '🎙 Audio' : (orig.message || '').slice(0, 80)),
+                        delivered:    false,
+                        read:         false
+                    });
+                    await replyMsg.save();
+
+                    if (groupId) {
+                        const grp = await Group.findOne({ groupId });
+                        if (!grp || !grp.members.includes(ws.phone)) break;
+                        const gmPayload = JSON.stringify({ type: 'groupMessage', ...replyMsg._doc, groupId, groupName: grp.name });
+                        grp.members.forEach(mp => {
+                            const mws = [...users.values()].find(u => u.phone === mp);
+                            if (mws && mws.readyState === WebSocket.OPEN) mws.send(gmPayload);
+                        });
+                    } else {
+                        sendMessage(replyMsg);
+                    }
+                } catch(e) { console.error('replyMessage error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               HILO (THREAD)
+               Crea un mensaje dentro del hilo de otro.
+               El mensaje raíz incrementa threadCount.
+            ────────────────────────────────────── */
+            case 'threadMessage': {
+                if (!data.threadId || !data.message) break;
+                try {
+                    const root = await Message.findOne({ id: data.threadId });
+                    if (!root || root.deletedAt) break;
+
+                    const newId = crypto.randomUUID();
+                    const threadMsg = new Message({
+                        id:             newId,
+                        conversationId: root.conversationId,
+                        from:           ws.username,
+                        to:             root.to,
+                        message:        data.message,
+                        avatar:         ws.avatar,
+                        threadId:       data.threadId,
+                        delivered:      true,
+                        read:           false
+                    });
+                    await threadMsg.save();
+
+                    root.threadCount = (root.threadCount || 0) + 1;
+                    await root.save();
+
+                    const payload = JSON.stringify({ type: 'thread_message', msg: threadMsg._doc, threadId: data.threadId, threadCount: root.threadCount });
+                    broadcastToConversation(root.conversationId, payload, root.from, root.to);
+                } catch(e) { console.error('threadMessage error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               CARGAR HILO
+            ────────────────────────────────────── */
+            case 'loadThread': {
+                if (!data.threadId) break;
+                try {
+                    const replies = await Message.find({ threadId: data.threadId }).sort({ time: 1 });
+                    ws.send(JSON.stringify({ type: 'thread_history', threadId: data.threadId, messages: replies }));
+                } catch(e) { console.error('loadThread error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
                RENOMBRAR CONTACTO
                Solo actualiza el customName del dueño.
                El contacto no se entera: cada uno ve
@@ -1249,4 +1504,35 @@ function broadcast(data) {
             ws.send(payload);
         }
     });
+}
+
+// Enviar a todos los usuarios de una conversación (1:1 o grupo)
+// Para 1:1: busca el mensaje en BD para obtener from/to, luego envía a ambos si están online.
+// Para grupos: envía a todos los miembros online.
+async function broadcastToConversationAsync(conversationId, payload, msgFrom, msgTo) {
+    if (conversationId.startsWith('group_')) {
+        const groupId = conversationId.replace('group_', '');
+        try {
+            const grp = await Group.findOne({ groupId });
+            if (!grp) return;
+            grp.members.forEach(memberPhone => {
+                const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                    try { memberWs.send(payload); } catch(_) {}
+                }
+            });
+        } catch(_) {}
+    } else {
+        // 1:1: enviar a from y to (ambos pueden estar online)
+        [msgFrom, msgTo].filter(Boolean).forEach(uname => {
+            const uWs = users.get(uname);
+            if (uWs && uWs.readyState === WebSocket.OPEN) {
+                try { uWs.send(payload); } catch(_) {}
+            }
+        });
+    }
+}
+
+function broadcastToConversation(conversationId, payload, msgFrom, msgTo) {
+    broadcastToConversationAsync(conversationId, payload, msgFrom, msgTo).catch(() => {});
 }

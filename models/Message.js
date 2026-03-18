@@ -58,6 +58,64 @@ const MessageSchema = new mongoose.Schema({
     read: {
         type: Boolean,
         default: false
+    },
+
+    // ── Edición ──────────────────────────────────────────────
+    editedAt: {
+        type: Date,
+        default: null
+    },
+
+    // ── Borrado ──────────────────────────────────────────────
+    // Borrado suave: se conserva en BD pero el contenido se oculta
+    deletedAt: {
+        type: Date,
+        default: null
+    },
+
+    // ── Respuesta (reply) ─────────────────────────────────────
+    replyToId: {
+        type: String,
+        default: null
+    },
+    replyToFrom: {
+        type: String,
+        default: null
+    },
+    replyToText: {
+        type: String,
+        default: null
+    },
+
+    // ── Reenvío ───────────────────────────────────────────────
+    forwardedFrom: {
+        type: String,
+        default: null
+    },
+
+    // ── Reacciones ────────────────────────────────────────────
+    // { emoji: [username, username, ...] }
+    reactions: {
+        type: Map,
+        of: [String],
+        default: {}
+    },
+
+    // ── Destacado ─────────────────────────────────────────────
+    // Array de usernames que han destacado este mensaje
+    starredBy: {
+        type: [String],
+        default: []
+    },
+
+    // ── Hilo (thread) ─────────────────────────────────────────
+    threadId: {
+        type: String,
+        default: null  // null = mensaje normal; valor = ID del mensaje raíz del hilo
+    },
+    threadCount: {
+        type: Number,
+        default: 0
     }
 
 });
