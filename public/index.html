@@ -183,7 +183,6 @@ html, body {
     color: var(--text-dark);
     overflow: hidden;
     overscroll-behavior: none;
-    -webkit-overflow-scrolling: touch;
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -819,7 +818,6 @@ html, body {
     overflow-y: auto;
     list-style: none;
     padding: 4px 8px 10px;
-    -webkit-overflow-scrolling: touch;
 }
 
 #users li {
@@ -1003,7 +1001,7 @@ html, body {
     background:
         url('https://www.transparenttextures.com/patterns/cubes.png'),
         var(--bg-chat);
-    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
 }
 
 .msg-row {
@@ -1476,7 +1474,6 @@ html, body {
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
 }
 .sg-tab {
     flex: 1; padding: 10px 6px;
@@ -1724,29 +1721,7 @@ html, body {
 .gift-particle:nth-child(6) { left:55%; background:#f97316; animation-delay:0.8s;  animation-duration:1.8s; }
 .gift-particle:nth-child(7) { left:35%; background:#e11d48; animation-delay:0.15s; animation-duration:2.4s; width:4px; height:4px; }
 
-/* ═══════════════════════════════════════════
-   AJUSTES: selector de idioma del teclado
-═══════════════════════════════════════════ */
-.settings-lang-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 0; gap: 14px;
-}
-.settings-lang-row label {
-    font-size: 14px; font-weight: 600; color: var(--text-dark);
-    display: flex; align-items: center; gap: 8px;
-}
-.settings-lang-select {
-    padding: 8px 12px; border: 1.5px solid var(--border);
-    border-radius: var(--radius-sm); font-size: 14px;
-    font-family: 'DM Sans', sans-serif; color: var(--text-dark);
-    background: var(--white); outline: none; cursor: pointer;
-    transition: border-color var(--transition), box-shadow var(--transition);
-    min-width: 140px; flex-shrink: 0;
-}
-.settings-lang-select:focus {
-    border-color: var(--purple-deep);
-    box-shadow: 0 0 0 3px rgba(79,70,229,0.12);
-}
+
 
 
 .input-area .icon-btn {
@@ -1787,6 +1762,7 @@ html, body {
     overflow-y: auto;
     line-height: 1.4;
     min-width: 0;
+    overscroll-behavior: contain;
 }
 
 #mensaje:focus    { border-color: var(--purple-deep); background: white; }
@@ -2361,7 +2337,6 @@ emoji-picker.visible { display: block; }
     flex-shrink: 0;
     max-height: 35%;
     min-height: 0;
-    -webkit-overflow-scrolling: touch;
 }
 
 #contactsList li {
@@ -3172,7 +3147,6 @@ emoji-picker.visible { display: block; }
         box-shadow: 4px 0 32px rgba(0,0,0,0.22);
         background: var(--bg-sidebar);
         overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
         height: 100%;
         height: 100dvh;
     }
@@ -3340,7 +3314,6 @@ html.is-mobile .sidebar {
     box-shadow: 4px 0 32px rgba(0,0,0,0.22);
     background: var(--bg-sidebar);
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
 }
 
 html.is-mobile .sidebar.visible { left: 0; }
@@ -3591,7 +3564,7 @@ html.is-mobile .contact-actions { display: flex; }
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
-        <textarea id="mensaje" placeholder="Escribe un mensaje..." rows="1" disabled lang="es" spellcheck="true" autocorrect="on" autocapitalize="sentences" autocomplete="off" dir="ltr"></textarea>
+        <textarea id="mensaje" placeholder="Escribe un mensaje..." rows="1" disabled lang="es"></textarea>
         <button class="icon-btn" id="btnMic" onclick="toggleGrabacion()" title="Grabar audio" style="display:none">🎙️</button>
         <button id="btnEnviar" onclick="enviar()" disabled title="Enviar">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -3850,8 +3823,7 @@ html.is-mobile .contact-actions { display: flex; }
   <ul id="threadMessages" style="list-style:none;margin:0;padding:10px 12px;"></ul>
   <div class="thread-input-area">
     <textarea class="thread-input" id="threadInput" placeholder="Responder en el hilo…" rows="1"
-      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"
-      spellcheck="true" autocorrect="on" autocapitalize="sentences" autocomplete="off" dir="ltr"></textarea>
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"></textarea>
     <button class="thread-send-btn" onclick="enviarEnHilo()" title="Enviar">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
     </button>
@@ -4267,9 +4239,8 @@ function conectarWS() {
         conectado = true;
         reconnectInterval = 500; // reset
 
-        // Invalidar caché de conversaciones para que se recarguen del servidor
-        // (pueden haber llegado mensajes mientras estábamos offline)
-        const _chatAnterior = currentChat; // guardar antes de limpiar
+        // Invalidar caché para que se recarguen mensajes recibidos offline
+        const _chatAnterior = currentChat;
         Object.keys(conversations).forEach(k => delete conversations[k]);
 
         socket.send(JSON.stringify({
@@ -4280,20 +4251,17 @@ function conectarWS() {
         }));
 
         // Si había un chat abierto, recargar su historial tras reconectar
-        // (el servidor lo entregará una vez procesado el join)
         if (_chatAnterior) {
             setTimeout(() => {
-                if (!currentChat) return; // chat cerrado antes del timeout
+                if (!currentChat || !socket || socket.readyState !== WebSocket.OPEN) return;
                 if (currentChat.startsWith('group_')) {
-                    const gid = currentChat.replace('group_', '');
-                    socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId: gid }));
+                    socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId: currentChat.replace('group_', '') }));
                 } else if (currentChat.startsWith('phone:')) {
-                    const ph = currentChat.replace('phone:', '');
-                    socket.send(JSON.stringify({ type: 'loadConversation', withPhone: ph }));
+                    socket.send(JSON.stringify({ type: 'loadConversation', withPhone: currentChat.replace('phone:', '') }));
                 } else {
                     socket.send(JSON.stringify({ type: 'loadConversation', with: currentChat }));
                 }
-            }, 400); // pequeño delay para que el join se procese primero
+            }, 400);
         }
 
         // Informar presencia inicial (puede haberse conectado desde background)
@@ -4376,17 +4344,12 @@ function intentarReconexion() {
 // ── Helper: actualiza el chatStatus del chat abierto cuando cambia presencia ──
 function _actualizarChatStatusPresencia() {
     if (!currentChat || currentChat.startsWith('group_')) return;
-
-    let targetUsername = null;
+    let targetUsername = currentChat;
     if (currentChat.startsWith('phone:')) {
-        // Chat abierto por teléfono: buscar si ese phone está online
-        const phone = currentChat.replace('phone:', '');
-        targetUsername = window._phoneToUsername ? window._phoneToUsername[phone] : null;
-        if (!targetUsername) return; // contacto offline, el header ya dice Desconectado
-    } else {
-        targetUsername = currentChat;
+        const ph = currentChat.replace('phone:', '');
+        targetUsername = window._phoneToUsername ? window._phoneToUsername[ph] : null;
+        if (!targetUsername) return;
     }
-
     const isOnline = lastKnownUsers.includes(targetUsername);
     const isAway   = isOnline && window._awayUsers && window._awayUsers.has(targetUsername);
     const statusText  = !isOnline ? '○ Desconectado' : isAway ? '🌙 Ausente' : '● En línea';
@@ -4558,10 +4521,14 @@ function scrollChat() {
     chat.scrollTop = chat.scrollHeight;
 }
 
+let _scrollRafId = null;
 chat.addEventListener('scroll', () => {
-    const diff = chat.scrollHeight - chat.scrollTop - chat.clientHeight;
-    autoScroll = diff < 50;
-});
+    if (_scrollRafId) return;
+    _scrollRafId = requestAnimationFrame(() => {
+        autoScroll = (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 50;
+        _scrollRafId = null;
+    });
+}, { passive: true });
 
 function actualizarBtnEnviar() {
     btnEnviar.disabled = (input.value.trim() === '' && !pendingImage);
@@ -4649,12 +4616,11 @@ function handleMessage(data) {
                     lastLocal.dataset.msgid = data.id;
                     const bubble = lastLocal.querySelector('.bubble');
                     if (bubble) bubble.id = data.id;
-                    // Actualizar también el id en conversations (el local_ pasa a ser el id real)
+                    // Actualizar el id en conversations para que editar/borrar funcionen
                     for (const arr of Object.values(conversations)) {
                         const m = arr.find(m => m.id === oldLocalId);
                         if (m) { m.id = data.id; break; }
                     }
-                    // Re-adjuntar el menú contextual con el ID real
                     _attachBubbleClickMenu(lastLocal, data.id, true, false,
                         currentChat.startsWith('group_'));
                 } else {
@@ -4717,7 +4683,6 @@ function handleMessage(data) {
     if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); return; }
     if (data.type === 'read')      { updateEstado(data.id, '✔✔ leído'); return; }
     if (data.type === 'info') {
-        // Suprimir mensajes de sistema de conexión/desconexión de usuarios
         const infoText = data.message || '';
         const esSistema = /se ha unido al chat|sali[oó] del chat/.test(infoText);
         if (!esSistema) addInfo(infoText);
@@ -5003,12 +4968,7 @@ function seleccionarUsuario(user) {
     document.getElementById('chatStatus').textContent = statusText;
     document.getElementById('chatStatus').style.color = statusColor;
     const btnU = document.getElementById('btnCallUnified');
-    // Habilitar llamada solo si es contacto y está online
-    const _chatPhone2 = window._phoneToUsername
-        ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
-        : null;
-    const _isContact2 = _chatPhone2 && myContacts.has(_chatPhone2);
-    btnU.disabled = !isOnline || !_isContact2;
+    btnU.disabled = !isOnline;
     btnU.dataset.mode = '1to1';
     btnU.title = 'Llamada de voz';
 
@@ -5122,15 +5082,14 @@ function enviar() {
         const groupId = currentChat.replace('group_', '');
         // ¿Es una respuesta?
         if (_replyState && _replyState.id) {
-            const replySnapshot = { ..._replyState }; // guardar antes de cancelar
+            const replySnap = { ..._replyState };
             socket.send(JSON.stringify({
                 type: 'replyMessage',
                 groupId,
                 message: text || '',
                 imageData: pendingImage ? pendingImage.dataUrl : undefined,
-                replyToId: replySnapshot.id
+                replyToId: replySnap.id
             }));
-            // Preview local inmediato en el grupo
             addGroupMessage({
                 id: 'local_' + Date.now(),
                 from: username,
@@ -5140,9 +5099,9 @@ function enviar() {
                 imageData: pendingImage ? pendingImage.dataUrl : null,
                 time: new Date(),
                 avatar: myAvatarDataUrl,
-                replyToId:   replySnapshot.id,
-                replyToFrom: replySnapshot.from === 'T\u00fa' ? username : replySnapshot.from,
-                replyToText: replySnapshot.text
+                replyToId:   replySnap.id,
+                replyToFrom: replySnap.from === 'Tú' ? username : replySnap.from,
+                replyToText: replySnap.text
             });
             if (pendingImage) cancelarImagen();
             cancelarRespuesta();
@@ -5166,15 +5125,14 @@ function enviar() {
 
     // ¿Es una respuesta?
     if (_replyState && _replyState.id) {
-        const replySnapshot = { ..._replyState }; // guardar antes de cancelar
+        const replySnap = { ..._replyState };
         socket.send(JSON.stringify({
             type: 'replyMessage',
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text || '',
             imageData: pendingImage ? pendingImage.dataUrl : undefined,
-            replyToId: replySnapshot.id
+            replyToId: replySnap.id
         }));
-        // Preview local inmediato con los datos de la respuesta
         addMessage({
             id: 'local_' + Date.now(),
             from: username,
@@ -5184,9 +5142,9 @@ function enviar() {
             time: new Date(),
             self: true,
             avatar: myAvatarDataUrl,
-            replyToId:   replySnapshot.id,
-            replyToFrom: replySnapshot.from === 'T\u00fa' ? username : replySnapshot.from,
-            replyToText: replySnapshot.text
+            replyToId:   replySnap.id,
+            replyToFrom: replySnap.from === 'Tú' ? username : replySnap.from,
+            replyToText: replySnap.text
         });
         if (pendingImage) cancelarImagen();
         cancelarRespuesta();
@@ -5224,10 +5182,12 @@ input.addEventListener('input', () => {
 
     if (!socket || !currentChat) return;
     if (currentChat.startsWith('group_')) return; // no typing en grupos
+    if (currentChat.startsWith('phone:')) return;  // no typing para contactos offline
     socket.send(JSON.stringify({ type: 'typing', to: currentChat, status: 'start' }));
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
-        socket.send(JSON.stringify({ type: 'typing', to: currentChat, status: 'stop' }));
+        if (socket && socket.readyState === WebSocket.OPEN)
+            socket.send(JSON.stringify({ type: 'typing', to: currentChat, status: 'stop' }));
     }, 1500);
 });
 
@@ -5292,8 +5252,8 @@ function addMessage(msg) {
         const li = document.createElement('li');
         li.className = 'info-msg';
         li.innerHTML = isMe
-            ? `📵 Llamada perdida enviada a <b>${msg.to}</b> · ${horaActual(msg.time)}`
-            : `📵 Llamada perdida de <b>${msg.from}</b> · ${horaActual(msg.time)}`;
+            ? `📵 Llamada perdida enviada a <b>${escapeHTML(msg.to)}</b> · ${horaActual(msg.time)}`
+            : `📵 Llamada perdida de <b>${escapeHTML(msg.from)}</b> · ${horaActual(msg.time)}`;
         li.style.cssText = 'color:#ef4444;background:rgba(239,68,68,0.08);border-radius:8px;padding:6px 12px;';
         chat.appendChild(li);
         if (autoScroll) scrollChat();
@@ -6272,7 +6232,6 @@ function onGroupMessage(data) {
 
     if (currentChat === chatKey) {
         if (data.from === username) {
-            // Mensaje propio: sustituir el bubble local_ más reciente con el ID real
             const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
             if (localRows.length > 0) {
                 const lastLocal = localRows[localRows.length - 1];
@@ -6280,12 +6239,8 @@ function onGroupMessage(data) {
                 lastLocal.dataset.msgid = data.id;
                 const bubble = lastLocal.querySelector('.bubble');
                 if (bubble) bubble.id = data.id;
-                // Actualizar también el id en conversations
                 const convArr = conversations[chatKey];
-                if (convArr) {
-                    const m = convArr.find(m => m.id === oldLocalId);
-                    if (m) m.id = data.id;
-                }
+                if (convArr) { const m = convArr.find(m => m.id === oldLocalId); if (m) m.id = data.id; }
                 _attachBubbleClickMenu(lastLocal, data.id, true, false, true);
             } else {
                 addGroupMessage(data);
@@ -7724,7 +7679,7 @@ function abrirModalReenviar(msgId) {
     const list = document.getElementById('forwardList');
     list.innerHTML = '';
 
-    // Buscar el mensaje original en conversations para el preview local del reenvío
+    // Buscar mensaje original para el preview
     let origMsg = null;
     for (const arr of Object.values(conversations)) {
         const m = arr.find(m => m.id === msgId);
@@ -7744,11 +7699,9 @@ function abrirModalReenviar(msgId) {
             if (onlineUsername) payload.to = onlineUsername;
             else payload.toPhone = c.contactPhone;
             socket.send(JSON.stringify(payload));
-
-            // Construir preview local del mensaje reenviado
-            const fwdLocalId = 'local_' + Date.now();
+            // Preview local inmediato
             const fwdPreview = {
-                id: fwdLocalId,
+                id: 'local_' + Date.now(),
                 from: username,
                 to: onlineUsername || null,
                 message: origMsg ? origMsg.message : '',
@@ -7759,11 +7712,9 @@ function abrirModalReenviar(msgId) {
                 avatar: myAvatarDataUrl,
                 forwardedFrom: origMsg ? origMsg.from : ''
             };
-            // Guardar en conversations del destino para que aparezca al abrir ese chat
             const destKey = onlineUsername || ('phone:' + c.contactPhone);
             if (!conversations[destKey]) conversations[destKey] = [];
             conversations[destKey].push(fwdPreview);
-            // Si el destino ya está abierto, mostrarlo ahora mismo
             if (currentChat === destKey || (onlineUsername && currentChat === onlineUsername)) {
                 addMessage(fwdPreview);
             }
@@ -7780,11 +7731,9 @@ function abrirModalReenviar(msgId) {
         item.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:var(--purple-pale);display:flex;align-items:center;justify-content:center;font-size:18px;">👥</div><span class="forward-item-name">${escapeHTML(g.name)}</span>`;
         item.onclick = () => {
             socket.send(JSON.stringify({ type: 'forwardMessage', id: msgId, groupId: g.groupId }));
-
-            // Construir preview local del mensaje reenviado al grupo
-            const fwdGrpLocalId = 'local_' + Date.now();
+            // Preview local inmediato en el grupo
             const fwdGrpPreview = {
-                id: fwdGrpLocalId,
+                id: 'local_' + Date.now(),
                 from: username,
                 to: g.groupId,
                 groupId: g.groupId,
@@ -7795,14 +7744,10 @@ function abrirModalReenviar(msgId) {
                 avatar: myAvatarDataUrl,
                 forwardedFrom: origMsg ? origMsg.from : ''
             };
-            // Guardar en conversations del grupo para que aparezca al abrir ese chat
-            const grpChatKey = 'group_' + g.groupId;
-            if (!conversations[grpChatKey]) conversations[grpChatKey] = [];
-            conversations[grpChatKey].push(fwdGrpPreview);
-            // Si el grupo ya está abierto, mostrarlo ahora mismo
-            if (currentChat === grpChatKey) {
-                addGroupMessage(fwdGrpPreview);
-            }
+            const grpKey = 'group_' + g.groupId;
+            if (!conversations[grpKey]) conversations[grpKey] = [];
+            conversations[grpKey].push(fwdGrpPreview);
+            if (currentChat === grpKey) addGroupMessage(fwdGrpPreview);
             mostrarToast('Reenviado ✓');
             cerrarModalReenviar();
         };
@@ -7899,118 +7844,7 @@ function onMensajeHilo(data) {
 // ============================================================
 // IDIOMA DEL TECLADO
 // ============================================================
-// Configuración por idioma: [dir, autocorrect, autocapitalize, spellcheck]
-const LANG_CONFIG = {
-    '':   ['ltr', 'on',  'sentences', 'true'],
-    'es': ['ltr', 'on',  'sentences', 'true'],
-    'ca': ['ltr', 'on',  'sentences', 'true'],
-    'eu': ['ltr', 'on',  'sentences', 'true'],
-    'gl': ['ltr', 'on',  'sentences', 'true'],
-    'en': ['ltr', 'on',  'sentences', 'true'],
-    'fr': ['ltr', 'on',  'sentences', 'true'],
-    'de': ['ltr', 'on',  'sentences', 'true'],
-    'it': ['ltr', 'on',  'sentences', 'true'],
-    'pt': ['ltr', 'on',  'sentences', 'true'],
-    'ru': ['ltr', 'on',  'sentences', 'true'],
-    'ar': ['rtl', 'off', 'none',      'false'], // árabe: RTL, sin autocorrect occidental
-    'zh': ['ltr', 'off', 'none',      'false'], // chino: sin autocorrect
-    'ja': ['ltr', 'off', 'none',      'false'], // japonés: sin autocorrect
-};
 
-function _aplicarLangATextarea(ta, lang) {
-    if (!ta) return;
-    const cfg = LANG_CONFIG[lang] || LANG_CONFIG[''];
-    const [dir, autocorrect, autocapitalize, spellcheck] = cfg;
-
-    if (lang) {
-        ta.setAttribute('lang', lang);
-        ta.setAttribute('spellcheck', spellcheck);
-        ta.setAttribute('autocorrect', autocorrect);
-        ta.setAttribute('autocapitalize', autocapitalize);
-        ta.setAttribute('dir', dir);
-        // Para RTL, alinear texto a la derecha
-        ta.style.textAlign = dir === 'rtl' ? 'right' : '';
-        ta.style.direction = dir;
-    } else {
-        // Automático: delegar al sistema
-        ta.removeAttribute('lang');
-        ta.setAttribute('spellcheck', 'true');
-        ta.setAttribute('autocorrect', 'on');
-        ta.setAttribute('autocapitalize', 'sentences');
-        ta.setAttribute('dir', 'ltr');
-        ta.style.textAlign = '';
-        ta.style.direction = '';
-    }
-}
-
-function cambiarIdiomaInput(lang) {
-    // Aplicar a todos los textareas/inputs de texto de la app
-    const targets = [
-        document.getElementById('mensaje'),
-        document.getElementById('threadInput'),
-    ].filter(Boolean);
-    targets.forEach(ta => _aplicarLangATextarea(ta, lang));
-
-    localStorage.setItem('kvs_keyboard_lang', lang);
-
-    // Forzar que iOS/Android re-lean el lang haciendo blur+focus
-    // Esto hace que el corrector ortográfico y las sugerencias cambien al nuevo idioma.
-    // Solo si el textarea está activo (enfocado) o es un dispositivo táctil.
-    const esTactil = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-    if (esTactil && document.activeElement === ta) {
-        ta.blur();
-        requestAnimationFrame(() => {
-            ta.focus();
-            // Mover el cursor al final
-            const len = ta.value.length;
-            ta.setSelectionRange(len, len);
-        });
-    } else if (esTactil && !ta.disabled) {
-        // Si no está enfocado pero es táctil, enfocar para que el próximo
-        // toque abra el teclado ya con el idioma correcto
-        requestAnimationFrame(() => {
-            ta.focus();
-            ta.blur();
-        });
-    }
-
-    const sel = document.getElementById('keyboardLangSelect');
-    const label = sel ? sel.options[sel.selectedIndex].text.replace(/^.{1,4}\s/, '') : lang;
-    mostrarToast(lang ? '⌨️ Teclado: ' + label : '⌨️ Teclado automático');
-}
-
-// Ocultar sección de idioma del teclado en escritorio puro (no táctil)
-// En escritorio sin pantalla táctil cambiar el lang del textarea no hace nada útil.
-(function _ocultarLangEnEscritorio() {
-    const esTactil = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-    if (!esTactil) {
-        // Intentar de nuevo cuando el DOM esté listo por si el script corre antes
-        function _tryOcultar() {
-            const row = document.getElementById('langSettingsRow');
-            const sep = row ? row.previousElementSibling : null;
-            if (row) {
-                row.style.display = 'none';
-                if (sep && sep.classList.contains('settings-divider')) sep.style.display = 'none';
-            }
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', _tryOcultar);
-        } else {
-            _tryOcultar();
-        }
-    }
-})();
-
-// Restaurar idioma guardado al arrancar en todos los inputs
-(function _restoreKeyboardLang() {
-    const saved = localStorage.getItem('kvs_keyboard_lang');
-    if (saved !== null) {
-        ['mensaje', 'threadInput'].forEach(id => {
-            const ta = document.getElementById(id);
-            if (ta) _aplicarLangATextarea(ta, saved);
-        });
-    }
-})();
 
 // ============================================================
 // PANEL UNIFICADO: EMOJIS / STICKERS / GIFTS / FAVORITOS
@@ -8309,10 +8143,7 @@ function abrirAjustes() {
     document.getElementById('settingsAvatar').src        = myAvatarDataUrl || '';
     document.getElementById('settingsName').textContent  = loginUsername || '';
     document.getElementById('settingsPhone').textContent = loginPhone || '';
-    // Restaurar idioma guardado en el selector
-    const savedLang = localStorage.getItem('kvs_keyboard_lang') || '';
-    const langSelect = document.getElementById('keyboardLangSelect');
-    if (langSelect) langSelect.value = savedLang;
+
     ocultarConfirmLogout();
     document.getElementById('settingsModal').classList.add('open');
 }
@@ -8351,33 +8182,7 @@ function logoutConfirmado() { cerrarAjustes(); logout(); }
       <button class="btn-settings-action" onclick="cerrarAjustes();abrirModalAvatar()">
         <span class="action-icon">📷</span>
         <span>Cambiar foto de perfil</span>
-      </button>
-      <div class="settings-divider"></div>
-      <div class="settings-lang-row" id="langSettingsRow">
-        <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
-          <label style="font-size:14px;font-weight:600;color:var(--text-dark);display:flex;align-items:center;gap:8px;">
-            <span style="font-size:18px;">⌨️</span> Idioma del teclado
-          </label>
-          <span style="font-size:11px;color:var(--text-muted);">Cambia el corrector y las sugerencias al escribir</span>
-        </div>
-        <select class="settings-lang-select" id="keyboardLangSelect" onchange="cambiarIdiomaInput(this.value)">
-          <option value="">🌐 Automático</option>
-          <option value="es">🇪🇸 Español</option>
-          <option value="en">🇬🇧 English</option>
-          <option value="fr">🇫🇷 Français</option>
-          <option value="de">🇩🇪 Deutsch</option>
-          <option value="it">🇮🇹 Italiano</option>
-          <option value="pt">🇵🇹 Português</option>
-          <option value="ca">🏴 Català</option>
-          <option value="eu">🏴 Euskera</option>
-          <option value="gl">🏴 Galego</option>
-          <option value="ar">🇸🇦 العربية</option>
-          <option value="zh">🇨🇳 中文</option>
-          <option value="ja">🇯🇵 日本語</option>
-          <option value="ru">🇷🇺 Русский</option>
-        </select>
-      </div>
-      <div class="settings-divider"></div>
+      </button><div class="settings-divider"></div>
       <button id="btnInstalarPWA" onclick="instalarPWA()">
         <span style="font-size:18px;">📲</span>
         <span>Instalar app en este dispositivo</span>
