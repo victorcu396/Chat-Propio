@@ -103,6 +103,7 @@ window.addEventListener('popstate', (e) => {
         document.getElementById('addContactModal'),
         document.getElementById('newGroupModal'),
         document.getElementById('editGroupModal'),
+        document.getElementById('contactRequestModal'),
     ].filter(m => m && (m.classList.contains('visible') || m.classList.contains('open')
         || (m.style && m.style.display && m.style.display !== 'none')));
 
@@ -1983,6 +1984,128 @@ emoji-picker.visible { display: block; }
     font-style: italic;
 }
 
+/* ── Usuarios desconocidos en "Conectados ahora" ── */
+#users li.stranger {
+    cursor: default;
+    opacity: 0.85;
+}
+#users li.stranger:hover { background: transparent; }
+
+.stranger-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-stranger-accept {
+    padding: 5px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--bubble-me);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: opacity var(--transition);
+    touch-action: manipulation;
+    white-space: nowrap;
+}
+.btn-stranger-accept:hover { opacity: 0.82; }
+
+.btn-stranger-reject {
+    padding: 5px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all var(--transition);
+    touch-action: manipulation;
+    white-space: nowrap;
+}
+.btn-stranger-reject:hover { background: rgba(239,68,68,0.08); color: #ef4444; border-color: #ef4444; }
+
+/* ── Modal solicitud de contacto entrante ── */
+#contactRequestModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9600;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+#contactRequestModal.visible { display: flex; }
+
+.contact-request-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    animation: loginIn .25s ease;
+    text-align: center;
+}
+
+.contact-request-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--purple-pale);
+}
+
+.contact-request-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+}
+
+.contact-request-card p {
+    font-size: 14px;
+    color: var(--text-mid);
+    margin: 0;
+    line-height: 1.4;
+}
+
+.contact-request-name-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark);
+    background: var(--white);
+    transition: border-color var(--transition);
+    box-sizing: border-box;
+}
+.contact-request-name-input:focus {
+    border-color: var(--purple-deep);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
+}
+
+.contact-request-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+
+
 .btn-contact-edit {
     background: none;
     border: none;
@@ -3448,7 +3571,7 @@ let reconnectTimer = null;
 
 function conectarWS() {
 
-    // 🚫 Evitar múltiples conexiones simultáneas
+    // 🚫 Evitar múltiples conexiones
     if (socket && (
         socket.readyState === WebSocket.OPEN ||
         socket.readyState === WebSocket.CONNECTING
@@ -3498,12 +3621,9 @@ function conectarWS() {
         console.log('❌ Desconectado');
 
         conectado = false;
+        
 
-        // Solo programar reconexión automática si la app está visible.
-        // Si está en background, el visibilitychange lo hará al volver.
-        if (document.visibilityState !== 'hidden') {
-            intentarReconexion();
-        }
+        intentarReconexion();
     };
 }
 function intentarReconexion() {
@@ -3511,62 +3631,27 @@ function intentarReconexion() {
 
     reconnectTimer = setTimeout(() => {
         console.log('🔄 Intentando reconectar...');
-        reconnectTimer = null;
-        reconnectInterval = Math.min(reconnectInterval * 1.5, 5000);
         conectarWS();
+        reconnectTimer = null;
+
+        reconnectInterval = Math.min(reconnectInterval * 1.5, 5000);
     }, reconnectInterval);
 }
-
-// ── Reconexión limpia al volver de background ─────────────────────────────
-// Problema en móvil: cuando el SO suspende la app el socket se cierra, pero
-// al volver el onclose ya programó un timer Y el visibilitychange también
-// intenta conectar → dos conexiones casi simultáneas → el servidor ve la
-// primera como "sesión activa" y puede enviar session_kicked erróneamente.
-// Solución: al volver cancelamos cualquier timer pendiente, cerramos el socket
-// viejo SILENCIOSAMENTE (sin disparar onclose/intentarReconexion), y abrimos
-// una conexión limpia.
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-        console.log('👀 Usuario volvió → reconexión limpia');
 
-        // 1. Cancelar timer de reconexión automática pendiente
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
+        console.log('👀 Usuario volvió → reconexión inmediata');
 
-        // 2. Si hay un socket que no está OPEN, cerrarlo silenciosamente
-        //    para que el servidor no lo cuente como sesión activa
-        if (socket && socket.readyState !== WebSocket.OPEN) {
-            socket.onclose = null; // evitar que dispare intentarReconexion
-            socket.onerror = null;
-            try { socket.close(); } catch(_) {}
-            socket = null;
-        }
+        reconnectInterval = 500;
 
-        reconnectInterval = 500; // reset backoff
-
-        // 3. Conectar solo si no hay socket OPEN ya
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             conectarWS();
         }
     }
 });
-
 window.addEventListener('online', () => {
     console.log('🌐 Internet volvió');
 
-    // Mismo tratamiento que visibilitychange
-    if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-    }
-    if (socket && socket.readyState !== WebSocket.OPEN) {
-        socket.onclose = null;
-        socket.onerror = null;
-        try { socket.close(); } catch(_) {}
-        socket = null;
-    }
     reconnectInterval = 500;
     conectarWS();
 });
@@ -3824,6 +3909,31 @@ function handleMessage(data) {
         return;
     }
 
+    // ── Solicitudes de contacto ──────────────────────────────────────────
+    if (data.type === 'contact_request') {
+        mostrarSolicitudContacto(data);
+        return;
+    }
+    if (data.type === 'contactRequestSent') {
+        // Confirmación de que la solicitud se envió correctamente
+        mostrarToast('Solicitud enviada ✓');
+        return;
+    }
+    if (data.type === 'contactRequestError') {
+        mostrarToast('⚠ ' + data.message, true);
+        return;
+    }
+    if (data.type === 'contactRequestAccepted') {
+        // La otra persona aceptó nuestra solicitud — ya tenemos el contactAdded pero avisamos
+        mostrarToast(data.byUsername + ' aceptó tu solicitud ✓');
+        return;
+    }
+    if (data.type === 'contactRequestRejected') {
+        // Rechazo silencioso — solo mostramos un toast discreto
+        mostrarToast(data.byUsername + ' no aceptó la solicitud');
+        return;
+    }
+
     // ── Sesión expulsada (mismo número en otro dispositivo) ──
     if (data.type === 'session_kicked') {
         if (socket) { socket.onclose = null; socket.close(); socket = null; }
@@ -3900,45 +4010,54 @@ let lastKnownUsers = [];
 // RENDER USUARIOS
 // ============================================================
 function renderUsers(onlineList) {
-    // Build set of online phones that are already in contacts (to separate them)
     const contactPhones = new Set([...myContacts.keys()]);
+
+    // Separar en contactos-online (ya se muestran en #contactsList) y desconocidos
     const onlineNotContact = onlineList.filter(u => {
         if (u === username) return false;
-        // Check if this online user's phone is in contacts
         const phone = window._phoneToUsername
             ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === u)?.[0]
             : null;
         return !phone || !contactPhones.has(phone);
     });
 
-    usersUl.innerHTML = onlineNotContact
-        .map(u => {
-            const preview = lastMessages[u] || '';
-            const badge = unreadCounts[u] ? `<span class="unread-badge">${unreadCounts[u]}</span>` : '';
+    if (onlineNotContact.length === 0) {
+        usersUl.innerHTML = '<li style="list-style:none;padding:8px 18px;font-size:12px;color:var(--text-muted);font-style:italic;cursor:default;">Nadie más conectado</li>';
+    } else {
+        usersUl.innerHTML = onlineNotContact.map(u => {
             const avatarUrl = userAvatars[u] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u)}`;
-            const isActive = currentChat === u ? 'active' : '';
-            return `<li class="${isActive}" onclick="seleccionarUsuario('${u}')">
+            const phone = window._phoneToUsername
+                ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === u)?.[0]
+                : null;
+            const phoneEsc = phone ? phone.replace(/'/g, "\\'") : '';
+            const uEsc = u.replace(/'/g, "\\'");
+            return `<li class="stranger">
                 <div class="user-avatar-wrap">
-                    <img class="user-avatar" src="${avatarUrl}" alt="${u}">
+                    <img class="user-avatar" src="${avatarUrl}" alt="${u}"
+                        onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u)}'">
                     <span class="status-dot"></span>
                 </div>
                 <div class="user-info">
                     <div class="user-name">${u}</div>
-                    <div class="user-preview">${preview}</div>
+                    <div class="user-preview" style="font-size:11px;color:var(--text-muted);font-style:italic;">No en contactos</div>
                 </div>
-                ${badge}
+                <div class="stranger-actions">
+                    <button class="btn-stranger-accept" onclick="event.stopPropagation();aceptarDesconocidoDirecto('${phoneEsc}','${uEsc}')" title="Agregar contacto">+ Agregar</button>
+                </div>
             </li>`;
         }).join('');
-
-    if (onlineNotContact.length === 0) {
-        usersUl.innerHTML = '<li style="list-style:none;padding:8px 18px;font-size:12px;color:var(--text-muted);font-style:italic;cursor:default;">Nadie más conectado</li>';
     }
 
-    // Actualizar botón unificado si el chat activo es 1:1 y cambia el estado online
+    // Actualizar botón de llamada si el chat activo es 1:1
     if (currentChat && !currentChat.startsWith('group_')) {
         const btnU = document.getElementById('btnCallUnified');
         if (btnU && btnU.dataset.mode === '1to1') {
-            btnU.disabled = !onlineList.includes(currentChat);
+            // Solo habilitar llamada si es contacto
+            const chatPhone = window._phoneToUsername
+                ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === currentChat)?.[0]
+                : null;
+            const isContact = chatPhone && myContacts.has(chatPhone);
+            btnU.disabled = !onlineList.includes(currentChat) || !isContact;
         }
     }
 }
@@ -3959,6 +4078,18 @@ function onBtnCall() {
 // ============================================================
 function seleccionarUsuario(user) {
     if (!user) return;
+
+    // ── Bloquear chat con desconocidos ───────────────────────────────────
+    // Solo se puede abrir chat con alguien que esté en myContacts.
+    // Los desconocidos solo aparecen con botón "+Agregar" en la lista.
+    const phoneOfUser = window._phoneToUsername
+        ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
+        : null;
+    if (phoneOfUser && !myContacts.has(phoneOfUser)) {
+        // No es contacto → no abrir chat
+        return;
+    }
+
     if (currentChat === user) return;
     currentChat = user;
     unreadCounts[user] = 0;
@@ -4083,6 +4214,14 @@ function enviar() {
     const text = input.value.trim();
     if (!text && !pendingImage) return;
     if (!currentChat) return;
+
+    // ── Bloquear envío a desconocidos en chat 1:1 ───────────────────────
+    if (!currentChat.startsWith('group_') && !currentChat.startsWith('phone:')) {
+        const chatPhone = window._phoneToUsername
+            ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === currentChat)?.[0]
+            : null;
+        if (chatPhone && !myContacts.has(chatPhone)) return;
+    }
 
     // ── Mensaje de grupo ──────────────────────────────
     if (currentChat.startsWith('group_')) {
@@ -5591,13 +5730,29 @@ async function guardarContacto() {
 }
 
 function onContactAdded(contactPhone, customName, avatar, username) {
-    myContacts.set(contactPhone, { contactPhone, customName, avatar: avatar || null, username: username || null });
+    // Si este contacto viene de aceptar una solicitud y el usuario puso un nombre personalizado,
+    // usarlo en lugar del username automático que manda el servidor.
+    let finalName = customName;
+    if (window._pendingCustomName && window._pendingCustomName.phone === contactPhone) {
+        finalName = window._pendingCustomName.name;
+        window._pendingCustomName = null;
+        // Renombrar también en BD para que persista
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type:         'renameContact',
+                contactPhone: contactPhone,
+                newName:      finalName
+            }));
+        }
+    }
+    myContacts.set(contactPhone, { contactPhone, customName: finalName, avatar: avatar || null, username: username || null });
     // Cachear avatar para uso offline
     if (avatar) {
         if (username) userAvatars[username] = avatar;
         userAvatars['__phone__' + contactPhone] = avatar;
     }
     renderContactsList();
+    renderUsers(lastKnownUsers); // quitar al usuario de "Conectados ahora" si estaba ahí
     cerrarModalContacto();
 }
 
@@ -6072,6 +6227,123 @@ function activarDragPanel(el) {
 }
 
 // ============================================================
+// SISTEMA DE SOLICITUDES DE CONTACTO
+// ============================================================
+
+// Estado de la solicitud actualmente mostrada en el modal
+let _currentRequest = null;
+
+/* Muestra el modal de solicitud entrante */
+function mostrarSolicitudContacto(data) {
+    _currentRequest = data;
+    const avatarUrl = data.fromAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(data.fromUsername)}`;
+    document.getElementById('crAvatar').src = avatarUrl;
+    document.getElementById('crText').textContent =
+        data.fromUsername + ' quiere añadirte como contacto.';
+    document.getElementById('crNameInput').value = data.fromUsername;
+    document.getElementById('crError').textContent = '';
+    document.getElementById('btnAceptarSolicitud').disabled = false;
+    document.getElementById('contactRequestModal').classList.add('visible');
+    // Solicitar permiso de notificaciones si no se tiene
+    pedirPermisoNotificaciones();
+    // Notificación nativa si la app está en background
+    if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
+        new Notification('Nueva solicitud de contacto', {
+            body: data.fromUsername + ' quiere añadirte como contacto.',
+            icon: '/Logo_kiVooSpace.png'
+        });
+    }
+}
+
+function aceptarSolicitudContacto() {
+    if (!_currentRequest) return;
+    const customName = document.getElementById('crNameInput').value.trim();
+    if (!customName) {
+        document.getElementById('crError').textContent = 'Pon un nombre para el contacto.';
+        return;
+    }
+    document.getElementById('btnAceptarSolicitud').disabled = true;
+
+    // Responder al servidor: aceptar
+    socket.send(JSON.stringify({
+        type:      'respondContactRequest',
+        fromPhone: _currentRequest.fromPhone,
+        accepted:  true
+    }));
+
+    // El servidor enviará contactAdded para ambos lados.
+    // Guardamos el customName localmente para sobreescribir el username automático
+    // cuando llegue el evento contactAdded.
+    window._pendingCustomName = {
+        phone: _currentRequest.fromPhone,
+        name:  customName
+    };
+
+    cerrarModalSolicitud();
+}
+
+function rechazarSolicitudContacto() {
+    if (!_currentRequest) return;
+    socket.send(JSON.stringify({
+        type:      'respondContactRequest',
+        fromPhone: _currentRequest.fromPhone,
+        accepted:  false
+    }));
+    cerrarModalSolicitud();
+}
+
+function cerrarModalSolicitud() {
+    document.getElementById('contactRequestModal').classList.remove('visible');
+    _currentRequest = null;
+}
+
+document.getElementById('contactRequestModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('contactRequestModal')) cerrarModalSolicitud();
+});
+
+/* Aceptar directamente desde el botón "+Agregar" en la lista de desconocidos
+   (el usuario está online → enviamos solicitud de contacto al servidor,
+    que la entrega inmediatamente; si la otra persona la acepta, ambos se agregan) */
+function aceptarDesconocidoDirecto(phone, uname) {
+    if (!phone || !socket) return;
+    // Enviar solicitud de contacto al otro usuario
+    socket.send(JSON.stringify({
+        type:    'sendContactRequest',
+        toPhone: phone
+    }));
+    // Feedback visual inmediato en la lista
+    renderUsers(lastKnownUsers);
+    mostrarToast('Solicitud enviada a ' + uname + ' ✓');
+}
+
+// ============================================================
+// TOAST (notificación flotante no intrusiva)
+// ============================================================
+let _toastTimer = null;
+function mostrarToast(msg, esError = false) {
+    let toast = document.getElementById('kvsToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'kvsToast';
+        toast.style.cssText = `
+            position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+            background:var(--text-dark);color:var(--white);
+            padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;
+            z-index:99999;white-space:nowrap;pointer-events:none;
+            transition:opacity .25s;opacity:0;font-family:'DM Sans',sans-serif;
+            box-shadow:0 4px 16px rgba(0,0,0,0.18);
+        `;
+        document.body.appendChild(toast);
+    }
+    if (esError) toast.style.background = '#ef4444';
+    else toast.style.background = 'var(--text-dark)';
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+// ============================================================
 // SESIÓN PERSISTENTE
 // ============================================================
 (function tryAutoLogin() {
@@ -6186,6 +6458,26 @@ function logoutConfirmado() { cerrarAjustes(); logout(); }
         <button class="btn-logout-cancel"  onclick="ocultarConfirmLogout()">Cancelar</button>
         <button class="btn-logout-confirm" onclick="logoutConfirmado()">Cerrar sesión</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL SOLICITUD DE CONTACTO ENTRANTE
+============================================================ -->
+<div id="contactRequestModal">
+  <div class="contact-request-card">
+    <img id="crAvatar" class="contact-request-avatar" src="" alt="">
+    <h3>Solicitud de contacto</h3>
+    <p id="crText"></p>
+    <div class="add-contact-field" style="width:100%">
+      <label>Guardar como</label>
+      <input class="contact-request-name-input" type="text" id="crNameInput" maxlength="30" placeholder="Nombre del contacto">
+    </div>
+    <div class="add-contact-error" id="crError"></div>
+    <div class="contact-request-actions">
+      <button class="btn-contact-cancel" onclick="rechazarSolicitudContacto()">Rechazar</button>
+      <button class="btn-contact-save" id="btnAceptarSolicitud" onclick="aceptarSolicitudContacto()">Aceptar</button>
     </div>
   </div>
 </div>

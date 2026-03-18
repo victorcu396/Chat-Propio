@@ -118,6 +118,10 @@ const userPhones = new Map();
 // Map: phone → WebSocket  (para control de sesión única por número)
 const phoneSessions = new Map();
 
+// Map: toPhone → Array<{fromPhone, fromUsername, fromAvatar, id}>
+// Solicitudes de contacto pendientes para usuarios offline
+const pendingContactRequests = new Map();
+
 wss.on('connection', (ws) => {
 
     ws.on('message', async (rawMsg) => {
@@ -141,27 +145,16 @@ wss.on('connection', (ws) => {
 
                 // ── Sesión única por número de teléfono ──────────────────
                 // Si ya hay otra sesión activa con el mismo teléfono, la cerramos.
-                // IMPORTANTE: solo enviamos session_kicked si el socket existente está
-                // genuinamente OPEN (readyState===1). Si está en CLOSING (readyState===2)
-                // o ya cerrado, es una reconexión legítima del mismo dispositivo (p.ej.
-                // el móvil suspendió la app) → no hacemos kick, simplemente reemplazamos.
                 if (ws.phone) {
                     const existingWs = phoneSessions.get(ws.phone);
-                    if (existingWs && existingWs !== ws) {
-                        if (existingWs.readyState === 1 /* OPEN */) {
-                            // Otro dispositivo/pestaña diferente está activo → kick
-                            try {
-                                existingWs.send(JSON.stringify({
-                                    type: 'session_kicked',
-                                    message: 'Tu sesión fue iniciada en otro dispositivo o pestaña.'
-                                }));
-                            } catch(_) {}
-                            existingWs.close(4001, 'session_replaced');
-                        } else {
-                            // Socket en CLOSING o ya cerrado → es reconexión del mismo
-                            // dispositivo tras suspensión. Cerramos limpiamente sin kick.
-                            try { existingWs.terminate(); } catch(_) {}
-                        }
+                    if (existingWs && existingWs !== ws && existingWs.readyState === 1 /* OPEN */) {
+                        try {
+                            existingWs.send(JSON.stringify({
+                                type: 'session_kicked',
+                                message: 'Tu sesión fue iniciada en otro dispositivo o pestaña.'
+                            }));
+                        } catch(_) {}
+                        existingWs.close(4001, 'session_replaced');
                     }
                     phoneSessions.set(ws.phone, ws);
                 }
@@ -233,6 +226,24 @@ wss.on('connection', (ws) => {
 
                     // (ya cubierto por el loop anterior; aquí no hay trabajo extra)
                 } catch(_) {}
+
+                // ── Entregar solicitudes de contacto pendientes ──
+                if (ws.phone) {
+                    const pending = pendingContactRequests.get(ws.phone) || [];
+                    if (pending.length > 0) {
+                        for (const req of pending) {
+                            try {
+                                ws.send(JSON.stringify({
+                                    type:        'contact_request',
+                                    id:          req.id,
+                                    fromPhone:   req.fromPhone,
+                                    fromUsername:req.fromUsername,
+                                    fromAvatar:  req.fromAvatar
+                                }));
+                            } catch(_) {}
+                        }
+                    }
+                }
 
                 break;
             }
@@ -899,6 +910,150 @@ wss.on('connection', (ws) => {
                 } catch(e) {
                     console.error('editGroup error:', e.message);
                     ws.send(JSON.stringify({ type: 'groupError', message: e.message }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               SOLICITUD DE CONTACTO
+               El remitente la envía; si el destinatario
+               está online la recibe al momento, si no
+               queda pendiente para cuando se conecte.
+            ────────────────────────────────────── */
+            case 'sendContactRequest': {
+                if (!data.toPhone) break;
+                if (!ws.phone) break;
+                if (data.toPhone === ws.phone) break;
+
+                // Comprobar que el destinatario existe en BD
+                const reqTargetUser = await User.findOne({ phone: data.toPhone }).lean();
+                if (!reqTargetUser) {
+                    ws.send(JSON.stringify({
+                        type: 'contactRequestError',
+                        message: 'Usuario no encontrado. Comprueba el número.'
+                    }));
+                    break;
+                }
+
+                // Comprobar que no es ya un contacto del remitente
+                const alreadyContact = await Contact.findOne({
+                    ownerPhone:   ws.phone,
+                    contactPhone: data.toPhone
+                });
+                if (alreadyContact) {
+                    ws.send(JSON.stringify({
+                        type: 'contactRequestError',
+                        message: 'Este usuario ya está en tus contactos.'
+                    }));
+                    break;
+                }
+
+                const reqId = crypto.randomUUID();
+                const reqPayload = {
+                    type:        'contact_request',
+                    id:          reqId,
+                    fromPhone:   ws.phone,
+                    fromUsername:ws.username,
+                    fromAvatar:  ws.avatar || null
+                };
+
+                // Intentar entrega inmediata si está online
+                const reqTargetWs = [...users.values()].find(u => u.phone === data.toPhone);
+                if (reqTargetWs && reqTargetWs.readyState === WebSocket.OPEN) {
+                    try { reqTargetWs.send(JSON.stringify(reqPayload)); } catch(_) {}
+                } else {
+                    // Guardar para entrega al reconectar
+                    const list = pendingContactRequests.get(data.toPhone) || [];
+                    // Evitar duplicados del mismo remitente
+                    const idx = list.findIndex(r => r.fromPhone === ws.phone);
+                    if (idx >= 0) list.splice(idx, 1);
+                    list.push({ id: reqId, fromPhone: ws.phone, fromUsername: ws.username, fromAvatar: ws.avatar || null });
+                    pendingContactRequests.set(data.toPhone, list);
+                }
+
+                // Confirmar al remitente
+                ws.send(JSON.stringify({ type: 'contactRequestSent', toPhone: data.toPhone }));
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               RESPONDER SOLICITUD DE CONTACTO
+               accepted: true  → agrega contacto en ambos lados
+               accepted: false → descarta la solicitud
+            ────────────────────────────────────── */
+            case 'respondContactRequest': {
+                if (!data.fromPhone || typeof data.accepted === 'undefined') break;
+                if (!ws.phone) break;
+
+                // Limpiar de pendientes siempre
+                const reqList = pendingContactRequests.get(ws.phone) || [];
+                const filtered = reqList.filter(r => r.fromPhone !== data.fromPhone);
+                if (filtered.length > 0) {
+                    pendingContactRequests.set(ws.phone, filtered);
+                } else {
+                    pendingContactRequests.delete(ws.phone);
+                }
+
+                if (!data.accepted) {
+                    // Solo notificar al remitente si está online (rechazo silencioso)
+                    const rejWs = [...users.values()].find(u => u.phone === data.fromPhone);
+                    if (rejWs && rejWs.readyState === WebSocket.OPEN) {
+                        try {
+                            rejWs.send(JSON.stringify({
+                                type:    'contactRequestRejected',
+                                byPhone: ws.phone,
+                                byUsername: ws.username
+                            }));
+                        } catch(_) {}
+                    }
+                    break;
+                }
+
+                // ── Aceptar: agregar contacto en ambos lados ──────────────
+                try {
+                    const fromUser = await User.findOne({ phone: data.fromPhone }).lean();
+                    const fromName = fromUser ? fromUser.username : data.fromPhone;
+
+                    // 1. El que acepta agrega al solicitante
+                    await Contact.findOneAndUpdate(
+                        { ownerPhone: ws.phone, contactPhone: data.fromPhone },
+                        { ownerPhone: ws.phone, contactPhone: data.fromPhone, customName: fromName },
+                        { upsert: true, new: true }
+                    );
+                    ws.send(JSON.stringify({
+                        type:         'contactAdded',
+                        contactPhone: data.fromPhone,
+                        customName:   fromName,
+                        avatar:       fromUser ? fromUser.avatar : null,
+                        username:     fromUser ? fromUser.username : null
+                    }));
+
+                    // 2. El solicitante agrega al que aceptó
+                    await Contact.findOneAndUpdate(
+                        { ownerPhone: data.fromPhone, contactPhone: ws.phone },
+                        { ownerPhone: data.fromPhone, contactPhone: ws.phone, customName: ws.username },
+                        { upsert: true, new: true }
+                    );
+                    const acceptorUser = await User.findOne({ phone: ws.phone }).lean();
+                    const fromWs = [...users.values()].find(u => u.phone === data.fromPhone);
+                    if (fromWs && fromWs.readyState === WebSocket.OPEN) {
+                        fromWs.send(JSON.stringify({
+                            type:         'contactAdded',
+                            contactPhone: ws.phone,
+                            customName:   ws.username,
+                            avatar:       ws.avatar || null,
+                            username:     ws.username
+                        }));
+                        // Notificar al solicitante que fue aceptado
+                        fromWs.send(JSON.stringify({
+                            type:        'contactRequestAccepted',
+                            byPhone:     ws.phone,
+                            byUsername:  ws.username,
+                            byAvatar:    ws.avatar || null
+                        }));
+                    }
+                } catch(e) {
+                    console.error('respondContactRequest error:', e.message);
                 }
                 break;
             }
