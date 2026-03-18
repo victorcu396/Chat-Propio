@@ -1460,12 +1460,12 @@ html, body {
     left: 0; right: 0;
     background: var(--white);
     border: 1px solid var(--border);
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.10);
-    z-index: 500;
+    border-radius: 16px 16px 16px 16px;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+    z-index: 600;
     display: none;
     flex-direction: column;
-    max-height: 340px;
+    max-height: 360px;
     overflow: hidden;
     animation: loginIn .18s ease;
 }
@@ -1475,21 +1475,41 @@ html, body {
     display: flex;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 .sg-tab {
-    flex: 1; padding: 10px 0;
+    flex: 1; padding: 10px 6px;
     border: none; background: none;
-    font-size: 13px; font-weight: 600;
+    font-size: 12px; font-weight: 600;
     color: var(--text-muted);
     cursor: pointer;
     font-family: 'DM Sans', sans-serif;
-    transition: color var(--transition), border-bottom var(--transition);
+    transition: color var(--transition);
     border-bottom: 2px solid transparent;
     touch-action: manipulation;
+    white-space: nowrap;
+    min-width: 70px;
 }
 .sg-tab.active { color: var(--purple-deep); border-bottom-color: var(--purple-deep); }
 
 .sg-content { flex: 1; overflow-y: auto; padding: 10px 12px; }
+
+/* Tab de emojis: el emoji-picker nativo dentro del panel */
+#sgEmojiWrap {
+    height: 280px;
+    overflow: hidden;
+    margin: -10px -12px;
+}
+#sgEmojiWrap emoji-picker {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: 280px !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
 
 /* Stickers: grid de emojis grandes */
 .sticker-grid {
@@ -1506,8 +1526,20 @@ html, body {
     display: flex; align-items: center; justify-content: center;
     transition: background var(--transition), transform .1s;
     touch-action: manipulation;
+    position: relative;
 }
 .sticker-btn:hover { background: var(--purple-pale); transform: scale(1.15); }
+/* Botón de guardar favorito dentro de cada sticker */
+.sticker-fav-btn {
+    position: absolute; top: 0; right: 0;
+    width: 16px; height: 16px;
+    border: none; background: none;
+    font-size: 10px; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+    line-height: 1; padding: 0;
+    touch-action: manipulation;
+}
+.sticker-btn:hover .sticker-fav-btn { display: flex; }
 
 .sticker-category-label {
     font-size: 11px; font-weight: 600; text-transform: uppercase;
@@ -1535,6 +1567,13 @@ html, body {
 .gift-card:hover { border-color: var(--purple-deep); background: var(--purple-pale); transform: scale(1.03); }
 .gift-emoji { font-size: 36px; line-height: 1; display: block; }
 .gift-label { font-size: 11px; font-weight: 600; color: var(--text-mid); }
+
+/* Favoritos vacíos */
+.sg-empty {
+    text-align: center; padding: 30px 20px;
+    color: var(--text-muted); font-size: 13px;
+}
+.sg-empty-icon { font-size: 36px; display: block; margin-bottom: 8px; }
 
 /* Mensaje de sticker en el chat */
 .sticker-msg { font-size: 56px; line-height: 1; display: block; }
@@ -3399,20 +3438,23 @@ html.is-mobile .contact-actions { display: flex; }
         <button class="reply-cancel" onclick="cancelarRespuesta()" title="Cancelar">×</button>
       </div>
 
-      <!-- Panel de stickers y gifts -->
-      <div id="stickerGiftPanel">
-        <div class="sg-tabs">
-          <button class="sg-tab active" id="tabStickers" onclick="cambiarTabSG('stickers')">😄 Stickers</button>
-          <button class="sg-tab"        id="tabGifts"    onclick="cambiarTabSG('gifts')">🎁 Gifts</button>
-        </div>
-        <div class="sg-content" id="sgContent"></div>
-      </div>
-
       <!-- Input -->
       <div class="input-area">
-        <emoji-picker id="emojiPicker"></emoji-picker>
-        <button class="icon-btn" onclick="toggleEmoji()" title="Emojis">😊</button>
-        <button class="icon-btn" onclick="toggleStickerGiftPanel()" title="Stickers y gifts" id="btnStickerGift">🎭</button>
+        <!-- Panel unificado: Emojis / Stickers / Gifts / Favoritos -->
+        <!-- Está DENTRO de .input-area para que position:absolute funcione correctamente -->
+        <div id="stickerGiftPanel">
+          <div class="sg-tabs">
+            <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
+            <button class="sg-tab"        id="tabStickers"  onclick="cambiarTabSG('stickers')">😄 Stickers</button>
+            <button class="sg-tab"        id="tabGifts"     onclick="cambiarTabSG('gifts')">🎁 Gifts</button>
+            <button class="sg-tab"        id="tabFavoritos" onclick="cambiarTabSG('favoritos')">⭐ Favoritos</button>
+          </div>
+          <div class="sg-content" id="sgContent"></div>
+        </div>
+        <!-- emoji-picker nativo (oculto - su instancia se mueve al panel cuando se abre) -->
+        <emoji-picker id="emojiPicker" style="display:none;"></emoji-picker>
+
+        <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
         <textarea id="mensaje" placeholder="Escribe un mensaje..." rows="1" disabled lang="es"></textarea>
@@ -4262,17 +4304,17 @@ emojiPicker.addEventListener('emoji-click', (e) => {
 });
 
 function toggleEmoji() {
-    // Cerrar panel de stickers/gifts si está abierto
-    const sgPanel = document.getElementById('stickerGiftPanel');
-    if (sgPanel) sgPanel.classList.remove('visible');
-    emojiPicker.classList.toggle('visible');
+    // El emoji picker está ahora integrado en el panel unificado — abrir en pestaña emojis
+    if (_sgOpen && _sgTab === 'emojis') {
+        cerrarSGPanel();
+    } else {
+        _sgTab = 'emojis';
+        _sgOpen = false; // forzar apertura limpia
+        toggleStickerGiftPanel(null);
+    }
 }
 
-document.addEventListener('click', (e) => {
-    if (!emojiPicker.contains(e.target) && e.target.innerText !== '😊') {
-        emojiPicker.classList.remove('visible');
-    }
-});
+// (El cierre del panel unificado lo gestiona el listener global en renderSGPanel)
 
 // ============================================================
 // IMAGEN
@@ -7539,7 +7581,9 @@ function cambiarIdiomaInput(lang) {
         ta.removeAttribute('lang');
     }
     localStorage.setItem('kvs_keyboard_lang', lang);
-    mostrarToast(lang ? '⌨️ Teclado: ' + (document.getElementById('keyboardLangSelect').options[document.getElementById('keyboardLangSelect').selectedIndex].text.replace(/^.{2,4}\s/, '')) : '⌨️ Teclado automático');
+    const sel = document.getElementById('keyboardLangSelect');
+    const label = sel ? sel.options[sel.selectedIndex].text.replace(/^.{1,4}\s/, '') : lang;
+    mostrarToast(lang ? '⌨️ Teclado: ' + label : '⌨️ Teclado automático');
 }
 
 // Restaurar idioma guardado al arrancar
@@ -7555,96 +7599,156 @@ function cambiarIdiomaInput(lang) {
 })();
 
 // ============================================================
-// STICKERS Y GIFTS
+// PANEL UNIFICADO: EMOJIS / STICKERS / GIFTS / FAVORITOS
 // ============================================================
 
 const STICKER_CATEGORIES = [
-    {
-        name: 'Caras',
-        items: ['😀','😂','🥹','😍','🥰','😎','🤩','😜','🤪','😏','😒','😭','😱','🤯','🥳','😴','🤔','🫡','😇','🤗','🫶','💪','👏','🙌','👍','❤️','🔥','✨','💯','🎉']
-    },
-    {
-        name: 'Animales',
-        items: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🐔','🐧','🐦','🦆','🦅','🦉','🦋','🐝','🌸','🌺','🌻','🌹','🍀','🌈','⭐','🌙']
-    },
-    {
-        name: 'Comida',
-        items: ['🍕','🍔','🌮','🍜','🍣','🍩','🎂','🍰','🧁','🍫','🍬','🍭','🍦','🥤','☕','🧋','🍺','🥂','🎁','🎊']
-    },
-    {
-        name: 'Actividades',
-        items: ['⚽','🏀','🎾','🏈','⚾','🎱','🏓','🎮','🎯','🎪','🎭','🎨','🎬','🎤','🎧','🎸','🎹','🎺','🎻','🥁','🎲','♟️','🎠','🎡','🎢','🎪','🏆','🥇','🎖️','🏅']
-    }
+    { name: 'Caras',       items: ['😀','😂','🥹','😍','🥰','😎','🤩','😜','🤪','😏','😒','😭','😱','🤯','🥳','😴','🤔','🫡','😇','🤗','🫶','💪','👏','🙌','👍','❤️','🔥','✨','💯','🎉'] },
+    { name: 'Animales',    items: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐸','🐵','🦄','🐔','🐧','🐦','🦆','🦅','🦉','🦋','🐝','🌸','🌺','🌻','🌹','🍀','🌈','⭐','🌙'] },
+    { name: 'Comida',      items: ['🍕','🍔','🌮','🍜','🍣','🍩','🎂','🍰','🧁','🍫','🍬','🍭','🍦','🥤','☕','🧋','🍺','🥂','🎁','🎊'] },
+    { name: 'Actividades', items: ['⚽','🏀','🎾','🏈','⚾','🎱','🏓','🎮','🎯','🎪','🎭','🎨','🎬','🎤','🎧','🎸','🎹','🎺','🎻','🥁','🎲','♟️','🎠','🎡','🎢','🏆','🥇','🎖️','🏅','🚀'] }
 ];
 
 const GIFT_ITEMS = [
-    { emoji: '🎁', label: '¡Regalo!',       sub: 'Un abrazo virtual' },
-    { emoji: '💝', label: '💝 Con amor',     sub: 'Te quiero mucho' },
-    { emoji: '🌹', label: 'Una rosa',        sub: 'Para ti' },
-    { emoji: '🎂', label: '¡Cumpleaños!',    sub: 'Feliz cumple 🎉' },
-    { emoji: '🏆', label: 'Campeón',         sub: '¡Lo conseguiste!' },
-    { emoji: '⭐', label: 'Estrella',        sub: 'Eres genial' },
-    { emoji: '🍕', label: 'Pizza gratis',    sub: 'Te invito 🍕' },
-    { emoji: '✈️', label: 'Viaje',           sub: '¡Nos vamos!' },
-    { emoji: '🎮', label: 'A jugar',         sub: 'GG fácil' },
-    { emoji: '💎', label: 'Diamante',        sub: 'Eres un tesoro' },
-    { emoji: '🌟', label: 'Superestrella',   sub: '¡Eres increíble!' },
-    { emoji: '🎵', label: 'Tu canción',      sub: 'Pensé en ti' },
+    { emoji: '🎁', label: '¡Regalo!',      sub: 'Un abrazo virtual' },
+    { emoji: '💝', label: 'Con amor',      sub: 'Te quiero mucho' },
+    { emoji: '🌹', label: 'Una rosa',      sub: 'Para ti' },
+    { emoji: '🎂', label: '¡Cumpleaños!', sub: 'Feliz cumple 🎉' },
+    { emoji: '🏆', label: 'Campeón',       sub: '¡Lo conseguiste!' },
+    { emoji: '⭐', label: 'Estrella',      sub: 'Eres genial' },
+    { emoji: '🍕', label: 'Pizza gratis',  sub: 'Te invito 🍕' },
+    { emoji: '✈️', label: 'Viaje',         sub: '¡Nos vamos!' },
+    { emoji: '🎮', label: 'A jugar',       sub: 'GG fácil' },
+    { emoji: '💎', label: 'Diamante',      sub: 'Eres un tesoro' },
+    { emoji: '🌟', label: 'Superestrella', sub: '¡Eres increíble!' },
+    { emoji: '🎵', label: 'Tu canción',    sub: 'Pensé en ti' },
 ];
 
-let _sgTab = 'stickers';
+let _sgTab    = 'emojis';
+let _sgOpen   = false;
 
-function toggleStickerGiftPanel() {
-    const panel = document.getElementById('stickerGiftPanel');
-    const isVisible = panel.classList.contains('visible');
-    // Cerrar emoji picker si está abierto
-    document.getElementById('emojiPicker').classList.remove('visible');
-    if (isVisible) {
-        panel.classList.remove('visible');
+// Favoritos guardados en localStorage
+function _getFavoritos() {
+    try { return JSON.parse(localStorage.getItem('kvs_fav_stickers') || '[]'); } catch { return []; }
+}
+function _setFavoritos(arr) {
+    localStorage.setItem('kvs_fav_stickers', JSON.stringify(arr));
+}
+function toggleFavorito(emoji, e) {
+    if (e) e.stopPropagation();
+    const favs = _getFavoritos();
+    const idx  = favs.indexOf(emoji);
+    if (idx >= 0) {
+        favs.splice(idx, 1);
+        mostrarToast('Eliminado de favoritos');
     } else {
+        favs.unshift(emoji);
+        mostrarToast('⭐ Guardado en favoritos');
+    }
+    _setFavoritos(favs);
+    // Refrescar si estamos en pestaña favoritos
+    if (_sgTab === 'favoritos') renderSGPanel('favoritos');
+}
+
+function toggleStickerGiftPanel(e) {
+    if (e) e.stopPropagation();
+    const panel = document.getElementById('stickerGiftPanel');
+    _sgOpen = !_sgOpen;
+    if (_sgOpen) {
         renderSGPanel(_sgTab);
         panel.classList.add('visible');
-        // Cerrar al pulsar fuera
-        setTimeout(() => {
-            document.addEventListener('click', _cerrarSGPanelOutside, { once: true });
-        }, 50);
+    } else {
+        panel.classList.remove('visible');
     }
 }
 
-function _cerrarSGPanelOutside(e) {
+function cerrarSGPanel() {
+    _sgOpen = false;
+    const panel = document.getElementById('stickerGiftPanel');
+    if (panel) panel.classList.remove('visible');
+}
+
+// Cerrar el panel al hacer click fuera (en el chat, etc.)
+document.addEventListener('click', (ev) => {
+    if (!_sgOpen) return;
     const panel = document.getElementById('stickerGiftPanel');
     const btn   = document.getElementById('btnStickerGift');
-    if (panel && !panel.contains(e.target) && e.target !== btn) {
-        panel.classList.remove('visible');
-    } else if (panel && panel.classList.contains('visible')) {
-        // Still open — re-attach listener
-        setTimeout(() => {
-            document.addEventListener('click', _cerrarSGPanelOutside, { once: true });
-        }, 50);
-    }
-}
+    if (!panel) return;
+    // Si el click es dentro del panel o en el botón que lo abre, no cerrar
+    if (panel.contains(ev.target) || (btn && btn.contains(ev.target))) return;
+    cerrarSGPanel();
+});
 
 function cambiarTabSG(tab) {
     _sgTab = tab;
-    document.getElementById('tabStickers').classList.toggle('active', tab === 'stickers');
-    document.getElementById('tabGifts').classList.toggle('active', tab === 'gifts');
+    ['tabEmojis','tabStickers','tabGifts','tabFavoritos'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('active', id === 'tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+    });
     renderSGPanel(tab);
 }
 
 function renderSGPanel(tab) {
     const content = document.getElementById('sgContent');
+    if (!content) return;
+
+    if (tab === 'emojis') {
+        // Mostrar el emoji-picker nativo reubicado dentro del panel
+        content.innerHTML = '<div id="sgEmojiWrap"></div>';
+        const wrap = document.getElementById('sgEmojiWrap');
+        const picker = document.getElementById('emojiPicker');
+        if (picker) {
+            picker.style.display = 'block';
+            // Mover el picker al wrap (no clonamos, movemos el elemento real)
+            wrap.appendChild(picker);
+        }
+        return;
+    }
+
+    // Si salimos de emojis, devolver el picker a su lugar oculto
+    const picker = document.getElementById('emojiPicker');
+    if (picker && picker.parentElement && picker.parentElement.id === 'sgEmojiWrap') {
+        picker.style.display = 'none';
+        document.querySelector('.input-area').appendChild(picker);
+    }
+
     if (tab === 'stickers') {
         let html = '';
+        const favs = _getFavoritos();
         STICKER_CATEGORIES.forEach(cat => {
-            html += `<div class="sticker-category-label">${cat.name}</div>`;
-            html += `<div class="sticker-grid">`;
+            html += `<div class="sticker-category-label">${cat.name}</div><div class="sticker-grid">`;
             cat.items.forEach(emoji => {
-                html += `<button class="sticker-btn" onclick="enviarSticker('${emoji}')" title="${emoji}">${emoji}</button>`;
+                const isFav = favs.includes(emoji);
+                html += `<button class="sticker-btn" onclick="enviarSticker('${emoji}')">
+                    ${emoji}
+                    <button class="sticker-fav-btn" onclick="toggleFavorito('${emoji}',event)" title="${isFav ? 'Quitar favorito' : 'Guardar favorito'}">${isFav ? '★' : '☆'}</button>
+                </button>`;
             });
             html += `</div>`;
         });
         content.innerHTML = html;
-    } else {
+        return;
+    }
+
+    if (tab === 'favoritos') {
+        const favs = _getFavoritos();
+        if (!favs.length) {
+            content.innerHTML = `<div class="sg-empty"><span class="sg-empty-icon">⭐</span>Aún no tienes favoritos.<br>Pasa el cursor sobre un sticker y pulsa ☆ para guardarlo.</div>`;
+            return;
+        }
+        let html = '<div class="sticker-category-label">Mis favoritos</div><div class="sticker-grid">';
+        favs.forEach(emoji => {
+            html += `<button class="sticker-btn" onclick="enviarSticker('${emoji}')">
+                ${emoji}
+                <button class="sticker-fav-btn" onclick="toggleFavorito('${emoji}',event)" title="Quitar de favoritos">★</button>
+            </button>`;
+        });
+        html += '</div>';
+        content.innerHTML = html;
+        return;
+    }
+
+    if (tab === 'gifts') {
         let html = '<div class="gift-grid">';
         GIFT_ITEMS.forEach((g, i) => {
             html += `<div class="gift-card" onclick="enviarGift(${i})">
@@ -7659,16 +7763,14 @@ function renderSGPanel(tab) {
 
 function enviarSticker(emoji) {
     if (!currentChat || !socket) return;
-    document.getElementById('stickerGiftPanel').classList.remove('visible');
+    cerrarSGPanel();
 
-    const isGroup    = currentChat.startsWith('group_');
-    const isOffline  = currentChat.startsWith('phone:');
-    const toPhone    = isOffline  ? currentChat.replace('phone:', '') : null;
+    const isGroup   = currentChat.startsWith('group_');
+    const isOffline = currentChat.startsWith('phone:');
+    const toPhone   = isOffline ? currentChat.replace('phone:', '') : null;
     const toUsername = (!isGroup && !isOffline) ? currentChat : null;
-    const groupId    = isGroup ? currentChat.replace('group_', '') : null;
-
-    // Los stickers se envían como mensaje especial con prefijo __sticker__
-    const msgText = '__sticker__' + emoji;
+    const groupId   = isGroup ? currentChat.replace('group_', '') : null;
+    const msgText   = '__sticker__' + emoji;
 
     if (isGroup) {
         socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: msgText }));
@@ -7678,32 +7780,21 @@ function enviarSticker(emoji) {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: msgText
         }));
-        // Mostrar localmente
-        addMessage({
-            id: 'local_' + Date.now(),
-            from: username,
-            to: toUsername,
-            toPhone,
-            message: msgText,
-            timestamp: Date.now(),
-            self: true
-        });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true });
     }
 }
 
 function enviarGift(idx) {
     const g = GIFT_ITEMS[idx];
     if (!g || !currentChat || !socket) return;
-    document.getElementById('stickerGiftPanel').classList.remove('visible');
+    cerrarSGPanel();
 
-    const isGroup    = currentChat.startsWith('group_');
-    const isOffline  = currentChat.startsWith('phone:');
-    const toPhone    = isOffline  ? currentChat.replace('phone:', '') : null;
+    const isGroup   = currentChat.startsWith('group_');
+    const isOffline = currentChat.startsWith('phone:');
+    const toPhone   = isOffline ? currentChat.replace('phone:', '') : null;
     const toUsername = (!isGroup && !isOffline) ? currentChat : null;
-    const groupId    = isGroup ? currentChat.replace('group_', '') : null;
-
-    // Los gifts se envían como mensaje especial con prefijo __gift__
-    const msgText = `__gift__${g.emoji}||${g.label}||${g.sub}`;
+    const groupId   = isGroup ? currentChat.replace('group_', '') : null;
+    const msgText   = `__gift__${g.emoji}||${g.label}||${g.sub}`;
 
     if (isGroup) {
         socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: msgText }));
@@ -7713,15 +7804,7 @@ function enviarGift(idx) {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: msgText
         }));
-        addMessage({
-            id: 'local_' + Date.now(),
-            from: username,
-            to: toUsername,
-            toPhone,
-            message: msgText,
-            timestamp: Date.now(),
-            self: true
-        });
+        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: msgText, timestamp: Date.now(), self: true });
     }
 }
 
