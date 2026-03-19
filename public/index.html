@@ -1929,38 +1929,63 @@ emoji-picker.visible { display: block; }
 
 /* Resaltado de búsqueda en chat */
 .search-highlight { background: #fde68a; border-radius: 2px; padding: 0 1px; }
-.msg-row.search-match .bubble { outline: 2px solid var(--purple-light); outline-offset: 2px; }
+.search-highlight.current { background: #fb923c; color: white; }
+.msg-row.search-match .bubble { outline: 2px solid var(--purple-pale); outline-offset: 2px; }
+.msg-row.search-current .bubble { outline: 2px solid var(--purple-deep); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(79,70,229,0.12); }
 
 /* Mención @usuario */
 .mention-chip { color: var(--purple-deep); font-weight: 600; }
 .mention-chip.me { background: rgba(79,70,229,0.12); border-radius: 3px; padding: 0 2px; }
 
-/* Lista de sugerencias de mención */
+/* Lista de sugerencias de mención — aparece justo encima del área de input */
 #mentionList {
+    display: none;
     position: absolute;
-    bottom: 100%;
+    bottom: calc(100% + 2px);
     left: 0; right: 0;
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: var(--radius-md) var(--radius-md) 0 0;
-    box-shadow: var(--shadow-card);
-    max-height: 180px;
+    box-shadow: 0 -4px 20px rgba(79,70,229,0.13);
+    max-height: 220px;
     overflow-y: auto;
-    z-index: 600;
-    display: none;
+    z-index: 700;
+    overscroll-behavior: contain;
 }
 #mentionList.visible { display: block; }
+/* Título de la sección */
+#mentionList .mention-header {
+    padding: 7px 14px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
 .mention-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
+    gap: 10px;
+    padding: 9px 14px;
     cursor: pointer;
     font-size: 14px;
     transition: background var(--transition);
+    border-bottom: 1px solid rgba(0,0,0,0.03);
 }
+.mention-item:last-child { border-bottom: none; }
 .mention-item:hover, .mention-item.selected { background: var(--purple-pale); }
-.mention-item img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.mention-item img {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid var(--border);
+}
+.mention-item-info { display: flex; flex-direction: column; gap: 1px; }
+.mention-item-name { font-weight: 600; font-size: 13px; color: var(--text-dark); }
+.mention-item-handle { font-size: 11px; color: var(--text-muted); }
+.mention-item.selected .mention-item-name { color: var(--purple-deep); }
 
 /* Indicador de mensajes temporales activo */
 #btnAutoDestruct.active { color: #ef4444; }
@@ -3513,13 +3538,26 @@ html.is-mobile .contact-actions { display: flex; }
       </div>
 
       <!-- Barra de búsqueda en chat -->
-      <div id="chatSearchBar" style="display:none;padding:8px 14px;background:var(--white);border-bottom:1px solid var(--border);flex-shrink:0;">
-        <input id="chatSearchInput" type="search" placeholder="🔍 Buscar en la conversación…"
-          style="width:100%;padding:7px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
-          oninput="buscarEnChat(this.value)"
-          onfocus="this.style.borderColor='var(--purple-deep)'"
-          onblur="this.style.borderColor='var(--border)'">
-        <div id="chatSearchCount" style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;"></div>
+      <!-- Barra de búsqueda en chat (con navegación ▲▼) -->
+      <div id="chatSearchBar" style="display:none;padding:8px 14px;background:var(--white);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px;align-items:center;flex-direction:row;">
+        <div style="flex:1;position:relative;">
+          <input id="chatSearchInput" type="search" placeholder="Buscar en la conversación…"
+            style="width:100%;padding:7px 36px 7px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
+            oninput="buscarEnChat(this.value)"
+            onkeydown="onSearchKeydown(event)"
+            onfocus="this.style.borderColor='var(--purple-deep)'"
+            onblur="this.style.borderColor='var(--border)'">
+          <span id="chatSearchCount" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-muted);pointer-events:none;white-space:nowrap;"></span>
+        </div>
+        <button onclick="navegarBusqueda(-1)" title="Resultado anterior" id="btnSearchPrev"
+          style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px 6px;border-radius:var(--radius-sm);color:var(--text-mid);transition:background var(--transition);"
+          onmouseover="this.style.background='var(--purple-pale)'" onmouseout="this.style.background=''">▲</button>
+        <button onclick="navegarBusqueda(1)" title="Resultado siguiente" id="btnSearchNext"
+          style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px 6px;border-radius:var(--radius-sm);color:var(--text-mid);transition:background var(--transition);"
+          onmouseover="this.style.background='var(--purple-pale)'" onmouseout="this.style.background=''">▼</button>
+        <button onclick="toggleSearchBar()" title="Cerrar búsqueda"
+          style="background:none;border:none;cursor:pointer;font-size:18px;padding:4px 6px;border-radius:var(--radius-sm);color:var(--text-muted);transition:background var(--transition);"
+          onmouseover="this.style.background='var(--purple-pale)'" onmouseout="this.style.background=''">✕</button>
       </div>
 
       <!-- Menú autodestrucción -->
@@ -8890,72 +8928,140 @@ function onConversacionBorrada(conversationId) {
 // FEATURE: BUSCAR EN CHAT
 // ============================================================
 let _searchActive = false;
-let _searchMatches = [];
-let _searchIdx = 0;
+let _searchMatches = [];  // array de {row, mark} — todos los highlights encontrados
+let _searchIdx = -1;      // índice del resultado actualmente resaltado en naranja
 
 function toggleSearchBar() {
     const bar = document.getElementById('chatSearchBar');
     _searchActive = !_searchActive;
-    bar.style.display = _searchActive ? 'block' : 'none';
+    bar.style.display = _searchActive ? 'flex' : 'none';
     document.getElementById('btnSearchChat').classList.toggle('active', _searchActive);
     if (_searchActive) {
         document.getElementById('chatSearchInput').focus();
     } else {
-        // Limpiar highlights
         document.getElementById('chatSearchInput').value = '';
-        buscarEnChat('');
+        _limpiarBusqueda();
     }
 }
 
-function buscarEnChat(query) {
-    // Quitar highlights anteriores
+function _limpiarBusqueda() {
+    // Quitar todos los highlights del DOM
     chat.querySelectorAll('.search-highlight').forEach(el => {
         const parent = el.parentNode;
-        parent.replaceChild(document.createTextNode(el.textContent), el);
-        parent.normalize();
+        if (parent) {
+            parent.replaceChild(document.createTextNode(el.textContent), el);
+            parent.normalize();
+        }
     });
-    chat.querySelectorAll('.msg-row').forEach(r => r.classList.remove('search-match'));
+    chat.querySelectorAll('.msg-row').forEach(r => {
+        r.classList.remove('search-match');
+        r.classList.remove('search-current');
+    });
     _searchMatches = [];
-    document.getElementById('chatSearchCount').textContent = '';
+    _searchIdx = -1;
+    const countEl = document.getElementById('chatSearchCount');
+    if (countEl) countEl.textContent = '';
+    _actualizarBotonesNavBusqueda();
+}
+
+function buscarEnChat(query) {
+    _limpiarBusqueda();
 
     const q = query.trim().toLowerCase();
     if (!q) return;
 
-    // Buscar en todas las burbujas de texto
+    // Buscar en todas las burbujas de texto del chat visible
     const rows = [...chat.querySelectorAll('.msg-row')];
     rows.forEach(row => {
         const bubble = row.querySelector('.bubble');
         if (!bubble) return;
         const textEl = bubble.querySelector('.msg-text');
         if (!textEl) return;
-        // Solo texto plano (no reply-preview)
+        // Extraer texto puro (sin reply-preview, forward-label, meta)
         const cloned = textEl.cloneNode(true);
-        cloned.querySelectorAll('.reply-preview,.forward-label,.meta').forEach(el => el.remove());
+        cloned.querySelectorAll('.reply-preview,.forward-label,.meta,.edited-label,.star-badge,.estado,.hora').forEach(el => el.remove());
         const txt = cloned.textContent.toLowerCase();
-        if (txt.includes(q)) {
-            row.classList.add('search-match');
-            _searchMatches.push(row);
-            // Highlight en el DOM
-            _highlightText(textEl, q);
-        }
+        if (!txt.includes(q)) return;
+
+        row.classList.add('search-match');
+        // Resaltar todas las ocurrencias en el nodo real
+        const marks = _highlightText(textEl, q);
+        marks.forEach(mark => _searchMatches.push({ row, mark }));
     });
 
-    const count = _searchMatches.length;
-    document.getElementById('chatSearchCount').textContent =
-        count ? `${count} resultado${count > 1 ? 's' : ''}` : 'Sin resultados';
+    const total = _searchMatches.length;
+    if (total === 0) {
+        const countEl = document.getElementById('chatSearchCount');
+        if (countEl) countEl.textContent = 'Sin resultados';
+        _actualizarBotonesNavBusqueda();
+        return;
+    }
 
-    if (count > 0) {
-        _searchIdx = 0;
-        _searchMatches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Ir al primer resultado
+    _searchIdx = 0;
+    _resaltarActual();
+    _actualizarContadorBusqueda();
+    _actualizarBotonesNavBusqueda();
+}
+
+function navegarBusqueda(direccion) {
+    // direccion: -1 = anterior, +1 = siguiente
+    if (!_searchMatches.length) return;
+    // Quitar resaltado actual
+    if (_searchIdx >= 0 && _searchIdx < _searchMatches.length) {
+        _searchMatches[_searchIdx].mark.classList.remove('current');
+        _searchMatches[_searchIdx].row.classList.remove('search-current');
+    }
+    _searchIdx += direccion;
+    // Wrap around
+    if (_searchIdx < 0) _searchIdx = _searchMatches.length - 1;
+    if (_searchIdx >= _searchMatches.length) _searchIdx = 0;
+    _resaltarActual();
+    _actualizarContadorBusqueda();
+}
+
+function onSearchKeydown(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        navegarBusqueda(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'Escape') {
+        toggleSearchBar();
     }
 }
 
+function _resaltarActual() {
+    if (_searchIdx < 0 || _searchIdx >= _searchMatches.length) return;
+    const { row, mark } = _searchMatches[_searchIdx];
+    mark.classList.add('current');
+    row.classList.add('search-current');
+    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function _actualizarContadorBusqueda() {
+    const countEl = document.getElementById('chatSearchCount');
+    if (!countEl) return;
+    const total = _searchMatches.length;
+    if (total === 0) { countEl.textContent = ''; return; }
+    countEl.textContent = `${_searchIdx + 1} / ${total}`;
+}
+
+function _actualizarBotonesNavBusqueda() {
+    const has = _searchMatches.length > 0;
+    const prev = document.getElementById('btnSearchPrev');
+    const next = document.getElementById('btnSearchNext');
+    if (prev) prev.style.opacity = has ? '1' : '0.35';
+    if (next) next.style.opacity = has ? '1' : '0.35';
+}
+
 function _highlightText(el, query) {
-    // Recorrer nodos de texto y envolver matches en <mark>
+    // Recorre nodos de texto y envuelve cada match en <mark class="search-highlight">
+    // Devuelve array de todos los marks creados
+    const marks = [];
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
         acceptNode(node) {
-            // No resaltar dentro de reply-preview ni meta
-            if (node.parentElement.closest('.reply-preview,.forward-label,.meta')) return NodeFilter.FILTER_REJECT;
+            if (node.parentElement.closest('.reply-preview,.forward-label,.meta,.search-highlight')) {
+                return NodeFilter.FILTER_REJECT;
+            }
             return NodeFilter.FILTER_ACCEPT;
         }
     });
@@ -8965,15 +9071,46 @@ function _highlightText(el, query) {
 
     textNodes.forEach(tn => {
         const txt = tn.textContent;
-        const idx = txt.toLowerCase().indexOf(query);
-        if (idx < 0) return;
-        const range = document.createRange();
-        range.setStart(tn, idx);
-        range.setEnd(tn, idx + query.length);
-        const mark = document.createElement('mark');
-        mark.className = 'search-highlight';
-        range.surroundContents(mark);
+        const lowerTxt = txt.toLowerCase();
+        let searchFrom = 0;
+        let idx;
+        // Encontrar TODAS las ocurrencias en este nodo de texto
+        while ((idx = lowerTxt.indexOf(query, searchFrom)) >= 0) {
+            // Partir el nodo: [antes][match][después]
+            const beforeNode = document.createTextNode(txt.slice(searchFrom, idx));
+            const mark = document.createElement('mark');
+            mark.className = 'search-highlight';
+            mark.textContent = txt.slice(idx, idx + query.length);
+            const afterText = txt.slice(idx + query.length);
+            const parent = tn.parentNode;
+            // Insertar antes del nodo actual
+            parent.insertBefore(beforeNode, tn);
+            parent.insertBefore(mark, tn);
+            marks.push(mark);
+            // Actualizar el nodo de texto restante para continuar buscando
+            tn.textContent = afterText;
+            searchFrom = 0; // el nodo ahora es solo el afterText
+            // Actualizar lowerTxt para la próxima iteración
+            const newTxt = tn.textContent;
+            const newLower = newTxt.toLowerCase();
+            // Buscar en el nuevo texto restante
+            let nextIdx = newLower.indexOf(query, 0);
+            while (nextIdx >= 0) {
+                const b2 = document.createTextNode(newTxt.slice(0, nextIdx));
+                const m2 = document.createElement('mark');
+                m2.className = 'search-highlight';
+                m2.textContent = newTxt.slice(nextIdx, nextIdx + query.length);
+                const rest = newTxt.slice(nextIdx + query.length);
+                parent.insertBefore(b2, tn);
+                parent.insertBefore(m2, tn);
+                marks.push(m2);
+                tn.textContent = rest;
+                nextIdx = rest.toLowerCase().indexOf(query, 0);
+            }
+            break; // ya procesamos todo este nodo
+        }
     });
+    return marks;
 }
 
 // ============================================================
@@ -9004,7 +9141,6 @@ function _mostrarMentionList() {
     const grp = myGroups.get(currentChat.replace('group_', ''));
     if (!grp) return;
 
-    // Buscar miembros que coincidan con el query
     const matches = grp.members
         .map(phone => {
             const uname = window._phoneToUsername ? window._phoneToUsername[phone] : null;
@@ -9013,21 +9149,31 @@ function _mostrarMentionList() {
             return { phone, username: uname, displayName };
         })
         .filter(m => m.username && m.username !== username)
-        .filter(m => !_mentionQuery || m.displayName.toLowerCase().includes(_mentionQuery) || m.username.toLowerCase().includes(_mentionQuery));
+        .filter(m => {
+            if (!_mentionQuery) return true;
+            return m.displayName.toLowerCase().includes(_mentionQuery) ||
+                   m.username.toLowerCase().includes(_mentionQuery);
+        });
 
     const list = document.getElementById('mentionList');
     if (!matches.length) { _cerrarMentionList(); return; }
 
-    list.className = 'visible';
     _mentionSelectedIdx = 0;
-    list.innerHTML = matches.map((m, i) => {
-        const av = userAvatars[m.username] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.username)}`;
-        return `<div class="mention-item${i === 0 ? ' selected' : ''}" onclick="seleccionarMencion('${m.username.replace(/'/g,"\'")}')">
-            <img src="${av}" alt="${escapeHTML(m.displayName)}">
-            <div><div style="font-weight:600;font-size:13px;">${escapeHTML(m.displayName)}</div><div style="font-size:11px;color:var(--text-muted);">@${escapeHTML(m.username)}</div></div>
-        </div>`;
-    }).join('');
+    list.innerHTML =
+        '<div class="mention-header">Mencionar</div>' +
+        matches.map((m, i) => {
+            const av = userAvatars[m.username]
+                || ('https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(m.username));
+            const safeName = m.username.replace(/'/g, "\\'");
+            return '<div class="mention-item' + (i === 0 ? ' selected' : '') + '" data-idx="' + i + '" onclick="seleccionarMencion(\'' + safeName + '\')">'
+                + '<img src="' + av + '" alt="' + escapeHTML(m.displayName) + '">'
+                + '<div class="mention-item-info">'
+                + '<div class="mention-item-name">' + escapeHTML(m.displayName) + '</div>'
+                + '<div class="mention-item-handle">@' + escapeHTML(m.username) + '</div>'
+                + '</div></div>';
+        }).join('');
     list._matches = matches;
+    list.className = 'visible';
 }
 
 function _cerrarMentionList() {
@@ -9053,16 +9199,19 @@ function seleccionarMencion(mentionUsername) {
 function _onKeydownMention(e) {
     const list = document.getElementById('mentionList');
     if (!list.classList.contains('visible')) return;
-    const items = list.querySelectorAll('.mention-item');
+    const items = [...list.querySelectorAll('.mention-item')];
     if (!items.length) return;
+
     if (e.key === 'ArrowDown') {
         e.preventDefault();
-        _mentionSelectedIdx = Math.min(_mentionSelectedIdx + 1, items.length - 1);
+        _mentionSelectedIdx = (_mentionSelectedIdx + 1) % items.length;
         items.forEach((it, i) => it.classList.toggle('selected', i === _mentionSelectedIdx));
+        items[_mentionSelectedIdx].scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        _mentionSelectedIdx = Math.max(_mentionSelectedIdx - 1, 0);
+        _mentionSelectedIdx = (_mentionSelectedIdx - 1 + items.length) % items.length;
         items.forEach((it, i) => it.classList.toggle('selected', i === _mentionSelectedIdx));
+        items[_mentionSelectedIdx].scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter' || e.key === 'Tab') {
         const matches = list._matches;
         if (matches && matches[_mentionSelectedIdx]) {
@@ -9070,6 +9219,7 @@ function _onKeydownMention(e) {
             seleccionarMencion(matches[_mentionSelectedIdx].username);
         }
     } else if (e.key === 'Escape') {
+        e.preventDefault();
         _cerrarMentionList();
     }
 }
