@@ -29,6 +29,25 @@ const UserSchema = new mongoose.Schema({
         default: Date.now
     },
 
+    // Última vez visto (se actualiza al desconectar)
+    lastSeen: {
+        type: Date,
+        default: null
+    },
+
+    // Chats archivados: array de conversationIds (usernames o group_XXX)
+    archivedChats: {
+        type: [String],
+        default: []
+    },
+
+    // Configuración de autodestrucción por conversación { conversationId: segundos }
+    autoDestructSettings: {
+        type: Map,
+        of: Number,
+        default: {}
+    },
+
     // Array de teléfonos que este usuario ha bloqueado
     blockedPhones: {
         type: [String],

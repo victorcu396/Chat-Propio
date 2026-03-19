@@ -112,7 +112,7 @@ app.get('/api/user', async (req, res) => {
     try {
         const user = await User.findOne({ phone }).lean();
         if (!user) return res.status(404).json({ error: 'usuario no encontrado' });
-        res.json({ phone: user.phone, username: user.username, avatar: user.avatar });
+        res.json({ phone: user.phone, username: user.username, avatar: user.avatar, lastSeen: user.lastSeen || null });
     } catch(e) {
         res.status(500).json({ error: e.message });
     }
@@ -200,9 +200,49 @@ async function enviarPushAPhone(phone, payload) {
     }
 }
 
+/* REST: obtener chats archivados y configuraciones de autodestrucción
+   GET /api/user/settings?phone=+34XXX */
+app.get('/api/user/settings', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    try {
+        const user = await User.findOne({ phone }).lean();
+        if (!user) return res.status(404).json({ error: 'no encontrado' });
+        res.json({
+            archivedChats:       user.archivedChats || [],
+            autoDestructSettings: user.autoDestructSettings
+                ? Object.fromEntries(Object.entries(user.autoDestructSettings))
+                : {}
+        });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
 );
+
+/* ── Job: eliminar mensajes expirados (autodestrucción) cada minuto ────────── */
+setInterval(async () => {
+    try {
+        const expired = await Message.find({ expiresAt: { $lte: new Date() }, deletedAt: null }).lean();
+        if (!expired.length) return;
+        const ids = expired.map(m => m.id);
+        await Message.updateMany(
+            { id: { $in: ids } },
+            { deletedAt: new Date(), message: '', imageData: null, audioData: null }
+        );
+        // Notificar a los usuarios afectados si están conectados
+        expired.forEach(m => {
+            const payload = JSON.stringify({ type: 'message_deleted', id: m.id });
+            [m.from, m.to].filter(Boolean).forEach(uname => {
+                const uWs = users.get(uname);
+                if (uWs && uWs.readyState === WebSocket.OPEN) {
+                    try { uWs.send(payload); } catch(_) {}
+                }
+            });
+        });
+    } catch(e) { console.error('[AutoDestruct] Error:', e.message); }
+}, 60 * 1000);
 
 /* ── Keep-alive: evita que Render duerma el servidor en plan gratuito ──
    Render inyecta RENDER_EXTERNAL_URL automáticamente con la URL pública.
@@ -457,6 +497,22 @@ wss.on('connection', (ws) => {
                     }
                 }
 
+                // Extraer menciones (@username) del texto
+                const mentionMatches = (data.message || '').match(/@([\w\u00C0-\u017F]+)/g) || [];
+                const mentions = mentionMatches.map(m => m.slice(1));
+
+                // Calcular expiresAt si el remitente tiene autodestrucción activada para esta conversación
+                let expiresAt = null;
+                if (ws.phone) {
+                    try {
+                        const senderUser = await User.findOne({ phone: ws.phone }).lean();
+                        const secs = senderUser && senderUser.autoDestructSettings
+                            ? (senderUser.autoDestructSettings[conversationId] || senderUser.autoDestructSettings.get?.(conversationId))
+                            : null;
+                        if (secs) expiresAt = new Date(Date.now() + secs * 1000);
+                    } catch(_) {}
+                }
+
                 const message = new Message({
                     id,
                     conversationId,
@@ -467,7 +523,9 @@ wss.on('connection', (ws) => {
                     audioData,
                     avatar:    ws.avatar,
                     delivered: false,
-                    read:      false
+                    read:      false,
+                    mentions,
+                    expiresAt
                 });
 
                 await message.save();
@@ -1641,6 +1699,83 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               BORRAR CONVERSACIÓN COMPLETA
+               Borra suavemente todos los mensajes de
+               una conversación para el usuario que lo pide.
+            ────────────────────────────────────── */
+            case 'clearConversation': {
+                if (!data.conversationId) break;
+                if (!ws.username) break;
+                try {
+                    // Borrado suave: marcar todos los mensajes como eliminados
+                    await Message.updateMany(
+                        { conversationId: data.conversationId, deletedAt: null },
+                        { deletedAt: new Date(), message: '', imageData: null, audioData: null }
+                    );
+                    ws.send(JSON.stringify({ type: 'conversation_cleared', conversationId: data.conversationId }));
+                } catch(e) { console.error('clearConversation error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               CONFIGURAR AUTODESTRUCCIÓN
+               Guarda el tiempo de autodestrucción para
+               una conversación concreta del usuario.
+               seconds = 0 desactiva.
+            ────────────────────────────────────── */
+            case 'setAutoDestruct': {
+                if (!data.conversationId || data.seconds === undefined) break;
+                if (!ws.phone) break;
+                try {
+                    const seconds = parseInt(data.seconds, 10) || 0;
+                    if (seconds === 0) {
+                        await User.updateOne({ phone: ws.phone }, { $unset: { [`autoDestructSettings.${data.conversationId}`]: '' } });
+                    } else {
+                        await User.updateOne({ phone: ws.phone }, { $set: { [`autoDestructSettings.${data.conversationId}`]: seconds } });
+                    }
+                    ws.send(JSON.stringify({ type: 'auto_destruct_set', conversationId: data.conversationId, seconds }));
+                } catch(e) { console.error('setAutoDestruct error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               AUDIO ESCUCHADO
+               El receptor notifica que escuchó un audio.
+            ────────────────────────────────────── */
+            case 'audioRead': {
+                if (!data.id) break;
+                if (!ws.username) break;
+                try {
+                    const aMsg = await Message.findOne({ id: data.id });
+                    if (!aMsg || aMsg.deletedAt) break;
+                    if (!aMsg.audioReadBy.includes(ws.username)) {
+                        aMsg.audioReadBy.push(ws.username);
+                        await aMsg.save();
+                    }
+                    // Notificar al remitente que fue escuchado
+                    const senderWs = users.get(aMsg.from);
+                    if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                        senderWs.send(JSON.stringify({ type: 'audio_read', id: data.id, by: ws.username }));
+                    }
+                } catch(e) { console.error('audioRead error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               ARCHIVAR / DESARCHIVAR CONVERSACIÓN
+            ────────────────────────────────────── */
+            case 'archiveChat': {
+                if (!data.conversationId) break;
+                if (!ws.phone) break;
+                try {
+                    const action = data.archive ? '$addToSet' : '$pull';
+                    await User.updateOne({ phone: ws.phone }, { [action]: { archivedChats: data.conversationId } });
+                    ws.send(JSON.stringify({ type: 'chat_archived', conversationId: data.conversationId, archived: !!data.archive }));
+                } catch(e) { console.error('archiveChat error:', e.message); }
+                break;
+            }
+
+            /* ──────────────────────────────────────
                RENOMBRAR CONTACTO
                Solo actualiza el customName del dueño.
                El contacto no se entera: cada uno ve
@@ -1683,6 +1818,13 @@ wss.on('connection', (ws) => {
             // Limpiar sesión activa solo si este WS es el actual para ese teléfono
             if (ws.phone && phoneSessions.get(ws.phone) === ws) {
                 phoneSessions.delete(ws.phone);
+            }
+            // Actualizar lastSeen al desconectarse
+            if (ws.phone) {
+                const lastSeenNow = new Date();
+                User.updateOne({ phone: ws.phone }, { lastSeen: lastSeenNow }).exec();
+                // Notificar a los contactos que tengan este chat abierto
+                broadcast({ type: 'user_last_seen', username: ws.username, lastSeen: lastSeenNow.toISOString() });
             }
             broadcastUsers();
             broadcast({

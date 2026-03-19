@@ -996,6 +996,27 @@ html, body {
     opacity: 0.75;
 }
 
+.chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.btn-header-action {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 17px;
+    padding: 6px 7px;
+    border-radius: var(--radius-sm);
+    color: var(--text-mid);
+    transition: background var(--transition), color var(--transition);
+    touch-action: manipulation;
+    line-height: 1;
+}
+.btn-header-action:hover { background: var(--purple-pale); color: var(--purple-deep); }
+.btn-header-action.active { color: var(--purple-deep); background: var(--purple-pale); }
+
 .call-btns {
     display: flex;
     gap: 8px;
@@ -1871,11 +1892,96 @@ emoji-picker.visible { display: block; }
     min-width: 42px;
 }
 
-.rec-label {
-    font-size: 13px;
-    color: #b91c1c;
+.rec-waveform {
+    display: flex;
+    align-items: center;
+    gap: 3px;
     flex: 1;
+    height: 28px;
 }
+.rec-waveform span {
+    display: block;
+    width: 3px;
+    border-radius: 2px;
+    background: #ef4444;
+    animation: recWave 0.6s ease-in-out infinite;
+    min-height: 4px;
+}
+.rec-waveform span:nth-child(1)  { animation-delay: 0s;    }
+.rec-waveform span:nth-child(2)  { animation-delay: 0.08s; }
+.rec-waveform span:nth-child(3)  { animation-delay: 0.16s; }
+.rec-waveform span:nth-child(4)  { animation-delay: 0.24s; }
+.rec-waveform span:nth-child(5)  { animation-delay: 0.32s; }
+.rec-waveform span:nth-child(6)  { animation-delay: 0.24s; }
+.rec-waveform span:nth-child(7)  { animation-delay: 0.16s; }
+.rec-waveform span:nth-child(8)  { animation-delay: 0.08s; }
+.rec-waveform span:nth-child(9)  { animation-delay: 0s;    }
+.rec-waveform span:nth-child(10) { animation-delay: 0.08s; }
+@keyframes recWave {
+    0%, 100% { height: 4px; }
+    50%       { height: 22px; }
+}
+/* Se reemplaza con bars basadas en nivel de micrófono en JS */
+.rec-waveform.live span { animation: none; }
+
+/* Indicador de audio escuchado */
+.audio-listened { font-size: 10px; color: var(--online); margin-left: 4px; }
+
+/* Resaltado de búsqueda en chat */
+.search-highlight { background: #fde68a; border-radius: 2px; padding: 0 1px; }
+.msg-row.search-match .bubble { outline: 2px solid var(--purple-light); outline-offset: 2px; }
+
+/* Mención @usuario */
+.mention-chip { color: var(--purple-deep); font-weight: 600; }
+.mention-chip.me { background: rgba(79,70,229,0.12); border-radius: 3px; padding: 0 2px; }
+
+/* Lista de sugerencias de mención */
+#mentionList {
+    position: absolute;
+    bottom: 100%;
+    left: 0; right: 0;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    box-shadow: var(--shadow-card);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 600;
+    display: none;
+}
+#mentionList.visible { display: block; }
+.mention-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background var(--transition);
+}
+.mention-item:hover, .mention-item.selected { background: var(--purple-pale); }
+.mention-item img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+
+/* Indicador de mensajes temporales activo */
+#btnAutoDestruct.active { color: #ef4444; }
+
+/* Archivados: sección en sidebar */
+.archived-label {
+    padding: 10px 16px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.archived-label:hover { color: var(--purple-deep); }
+#archivedList { list-style: none; padding: 0 8px 4px; display: none; }
+#archivedList.visible { display: block; }
 
 .btn-rec-cancel {
     background: none;
@@ -3373,6 +3479,12 @@ html.is-mobile .contact-actions { display: flex; }
       </div>
       <ul id="groupsList"></ul>
 
+      <!-- Archivadas -->
+      <div class="archived-label" onclick="toggleArchivedSection()" id="archivedLabel">
+        <span>📁 Archivadas</span><span id="archivedCount" style="background:var(--border);border-radius:10px;padding:1px 7px;font-size:10px;"></span>
+      </div>
+      <ul id="archivedList"></ul>
+
       <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
       <ul id="users"></ul>
     </aside>
@@ -3389,9 +3501,35 @@ html.is-mobile .contact-actions { display: flex; }
           <div id="chatStatus"></div>
           <div id="chatPhone" style="display:none"></div>
         </div>
+        <div class="chat-header-actions">
+          <button class="btn-header-action" id="btnSearchChat" onclick="toggleSearchBar()" title="Buscar en el chat">🔍</button>
+          <button class="btn-header-action" id="btnAutoDestruct" onclick="abrirMenuAutoDestruct()" title="Mensajes temporales">⏱️</button>
+          <button class="btn-header-action" id="btnArchiveChat" onclick="toggleArchivarChat()" title="Archivar conversación">📁</button>
+          <button class="btn-header-action" id="btnClearChat" onclick="confirmarBorrarChat()" title="Borrar conversación">🗑️</button>
+        </div>
         <div class="call-btns">
           <button class="btn-call audio" id="btnCallUnified" title="Llamada" onclick="onBtnCall()" disabled>📞</button>
         </div>
+      </div>
+
+      <!-- Barra de búsqueda en chat -->
+      <div id="chatSearchBar" style="display:none;padding:8px 14px;background:var(--white);border-bottom:1px solid var(--border);flex-shrink:0;">
+        <input id="chatSearchInput" type="search" placeholder="🔍 Buscar en la conversación…"
+          style="width:100%;padding:7px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
+          oninput="buscarEnChat(this.value)"
+          onfocus="this.style.borderColor='var(--purple-deep)'"
+          onblur="this.style.borderColor='var(--border)'">
+        <div id="chatSearchCount" style="font-size:11px;color:var(--text-muted);margin-top:4px;text-align:right;"></div>
+      </div>
+
+      <!-- Menú autodestrucción -->
+      <div id="autoDestructMenu" style="display:none;position:absolute;top:60px;right:120px;z-index:800;background:var(--white);border-radius:var(--radius-md);box-shadow:var(--shadow-card);padding:8px 0;min-width:190px;border:1px solid var(--border);">
+        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;">Mensajes temporales</div>
+        <button class="ctx-item" onclick="setAutoDestruct(0)">🚫 Desactivado</button>
+        <button class="ctx-item" onclick="setAutoDestruct(60)">1 minuto</button>
+        <button class="ctx-item" onclick="setAutoDestruct(3600)">1 hora</button>
+        <button class="ctx-item" onclick="setAutoDestruct(86400)">24 horas</button>
+        <button class="ctx-item" onclick="setAutoDestruct(604800)">7 días</button>
       </div>
 
       <!-- Mensajes -->
@@ -3414,7 +3552,10 @@ html.is-mobile .contact-actions { display: flex; }
       <div id="audioRecordBar">
         <span class="rec-dot"></span>
         <span class="rec-timer" id="recTimer">0:00</span>
-        <span class="rec-label">Grabando audio…</span>
+        <div class="rec-waveform" id="recWaveform">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
         <button class="btn-rec-cancel" onclick="cancelarAudio()" title="Cancelar grabación">✕</button>
         <button class="btn-rec-send" onclick="enviarAudio()" title="Enviar audio">▶</button>
       </div>
@@ -3446,6 +3587,7 @@ html.is-mobile .contact-actions { display: flex; }
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
+        <div id="mentionList"></div>
         <textarea id="mensaje" placeholder="Escribe un mensaje..." rows="1" disabled lang="es"></textarea>
         <button class="icon-btn" id="btnMic" onclick="toggleGrabacion()" title="Grabar audio" style="display:none">🎙️</button>
         <button id="btnEnviar" disabled title="Enviar">
@@ -4051,6 +4193,13 @@ function _limpiarEstadoGlobal() {
     // reactiva de chat al volver desde una notificación push)
     _contactosListos = false;
     _gruposListos    = false;
+
+    // Resetear estado de nuevas features
+    _archivedChats        = new Set();
+    _autoDestructSettings = {};
+    userLastSeen          = {};
+    _cerrarMentionList();
+    if (_searchActive) { _searchActive = false; const bar = document.getElementById('chatSearchBar'); if (bar) bar.style.display = 'none'; }
 }
 
 function logout() {
@@ -4332,6 +4481,7 @@ let myAvatarDataUrl = ''; // base64 o URL del avatar propio
 let pendingAvatarDataUrl = ''; // avatar seleccionado pero no guardado aún
 
 let userAvatars = {}; // username → avatarUrl de otros usuarios
+let userLastSeen = {}; // username → ISO date string of last seen
 const conversations = {};
 let typingTimer = null;
 let unreadCounts = {};
@@ -4435,6 +4585,7 @@ function conectarWS() {
 
         cargarContactos();
         cargarGrupos();
+        cargarConfiguracionUsuario();
 
         // Suscribir (o renovar suscripción) al push tras conectar
         _suscribirAPush().catch(() => {});
@@ -4508,6 +4659,22 @@ function intentarReconexion() {
 }
 
 // ── Helper: actualiza el chatStatus del chat abierto cuando cambia presencia ──
+function _formatLastSeen(isoDate) {
+    if (!isoDate) return null;
+    const d = new Date(isoDate);
+    if (isNaN(d)) return null;
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffH   = Math.floor(diffMs / 3600000);
+    const diffD   = Math.floor(diffMs / 86400000);
+    if (diffMin < 1)  return 'visto hace un momento';
+    if (diffMin < 60) return `visto hace ${diffMin} min`;
+    if (diffH < 24)   return `visto hoy a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    if (diffD === 1)  return `visto ayer a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    return `visto el ${d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 function _actualizarChatStatusPresencia() {
     if (!currentChat || currentChat.startsWith('group_')) return;
     let targetUsername = currentChat;
@@ -4518,8 +4685,19 @@ function _actualizarChatStatusPresencia() {
     }
     const isOnline = lastKnownUsers.includes(targetUsername);
     const isAway   = isOnline && window._awayUsers && window._awayUsers.has(targetUsername);
-    const statusText  = !isOnline ? '○ Desconectado' : isAway ? '🌙 Ausente' : '● En línea';
-    const statusColor = !isOnline ? 'var(--text-muted)' : isAway ? '#f59e0b' : 'var(--online)';
+    let statusText, statusColor;
+    if (isOnline && !isAway) {
+        statusText  = '● En línea';
+        statusColor = 'var(--online)';
+    } else if (isAway) {
+        statusText  = '🌙 Ausente';
+        statusColor = '#f59e0b';
+    } else {
+        // Mostrar "última vez visto" si lo tenemos
+        const lastSeen = userLastSeen[targetUsername];
+        statusText  = lastSeen ? _formatLastSeen(lastSeen) : '○ Desconectado';
+        statusColor = 'var(--text-muted)';
+    }
     document.getElementById('chatStatus').textContent = statusText;
     document.getElementById('chatStatus').style.color = statusColor;
 }
@@ -4999,6 +5177,48 @@ function handleMessage(data) {
         onContactRenamed(data.contactPhone, data.newName);
         return;
     }
+    if (data.type === 'conversation_cleared') {
+        onConversacionBorrada(data.conversationId);
+        return;
+    }
+    if (data.type === 'auto_destruct_set') {
+        _onAutoDestructSet(data.conversationId, data.seconds);
+        return;
+    }
+    if (data.type === 'chat_archived') {
+        _onChatArchivado(data.conversationId, data.archived);
+        return;
+    }
+    if (data.type === 'audio_read') {
+        // Alguien escuchó nuestro audio: mostrar indicador en la burbuja
+        const bubble = document.getElementById(data.id);
+        if (bubble) {
+            const meta = bubble.querySelector('.meta');
+            if (meta && !meta.querySelector('.audio-listened')) {
+                const span = document.createElement('span');
+                span.className = 'audio-listened';
+                span.title = 'Escuchado';
+                span.textContent = '🎧';
+                meta.appendChild(span);
+            }
+        }
+        // Actualizar en conversations[]
+        for (const arr of Object.values(conversations)) {
+            const m = arr.find(m => m.id === data.id);
+            if (m) { if (!m.audioReadBy) m.audioReadBy = []; if (!m.audioReadBy.includes(data.by)) m.audioReadBy.push(data.by); break; }
+        }
+        return;
+    }
+    if (data.type === 'user_last_seen') {
+        // Un contacto se desconectó: guardar su lastSeen y actualizar el header si su chat está abierto
+        if (data.username && data.lastSeen) {
+            userLastSeen[data.username] = data.lastSeen;
+            if (currentChat === data.username || (currentChat && currentChat.startsWith('phone:'))) {
+                _actualizarChatStatusPresencia();
+            }
+        }
+        return;
+    }
     if (data.type === 'contactError') {
         document.getElementById('addContactError').textContent = 'Error: ' + data.message;
         document.getElementById('btnGuardarContacto').disabled = false;
@@ -5239,6 +5459,13 @@ function seleccionarUsuario(user) {
     }
     // Cerrar notificaciones de la bandeja del sistema para este chat
     _cerrarNotificacionesDeChat(user);
+    // Actualizar botones de cabecera
+    document.getElementById('btnArchiveChat').classList.toggle('active', _archivedChats.has(user));
+    _actualizarBtnAutoDestruct();
+    // Cerrar barra de búsqueda si estaba abierta
+    if (_searchActive) toggleSearchBar();
+    // Cerrar lista de menciones
+    _cerrarMentionList();
     chat.innerHTML = '';
 
     // Check if this user is a contact and get custom name
@@ -5275,8 +5502,25 @@ function seleccionarUsuario(user) {
 
     const isOnline = lastKnownUsers.includes(user);
     const isAway   = isOnline && window._awayUsers && window._awayUsers.has(user);
-    const statusText  = !isOnline ? '○ Desconectado' : isAway ? '🌙 Ausente' : '● En línea';
-    const statusColor = !isOnline ? 'var(--text-muted)' : isAway ? '#f59e0b' : 'var(--online)';
+    let statusText, statusColor;
+    if (isOnline && !isAway)  { statusText = '● En línea'; statusColor = 'var(--online)'; }
+    else if (isAway)          { statusText = '🌙 Ausente'; statusColor = '#f59e0b'; }
+    else {
+        const ls = userLastSeen[user];
+        statusText = ls ? _formatLastSeen(ls) : '○ Desconectado';
+        statusColor = 'var(--text-muted)';
+        // Fetch lastSeen from server if not cached
+        if (!ls && phone) {
+            fetch(`/api/user?phone=${encodeURIComponent(phone)}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(u => {
+                    if (u && u.lastSeen) {
+                        userLastSeen[user] = u.lastSeen;
+                        if (currentChat === user) _actualizarChatStatusPresencia();
+                    }
+                }).catch(() => {});
+        }
+    }
     document.getElementById('chatStatus').textContent = statusText;
     document.getElementById('chatStatus').style.color = statusColor;
     const btnU = document.getElementById('btnCallUnified');
@@ -5531,6 +5775,7 @@ input.addEventListener('input', () => {
     actualizarBtnEnviar();
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    _onInputMention();
 
     if (!socket || !currentChat) return;
     if (currentChat.startsWith('group_')) return; // no typing en grupos
@@ -5544,6 +5789,9 @@ input.addEventListener('input', () => {
 });
 
 input.addEventListener('keydown', (e) => {
+    // Mention list intercepts arrow keys, Enter, Tab, Escape
+    _onKeydownMention(e);
+    if (e.defaultPrevented) return;
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         // enviar() ya detecta internamente si hay _editState activo
@@ -5723,7 +5971,7 @@ function addMessage(msg) {
         content = `<img class="img-msg" src="${msg.imageData}" alt="imagen">`;
         if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
     } else {
-        content = escapeHTML(msg.message);
+        content = renderMentions(escapeHTML(msg.message));
     }
 
     row.innerHTML = `
@@ -5757,6 +6005,14 @@ function addMessage(msg) {
 function escapeHTML(str) {
     if (!str) return '';
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function renderMentions(html) {
+    if (!html) return html || '';
+    return html.replace(/@([\wÀ-ſ]+)/g, (match, uname) => {
+        const isMe = uname === username;
+        return `<span class="mention-chip${isMe ? ' me' : ''}">@${escapeHTML(uname)}</span>`;
+    });
 }
 
 function addDaySeparator(day) {
@@ -6108,6 +6364,46 @@ async function iniciarGrabacion() {
 
     mediaRecorder.start(200); // chunk cada 200ms
 
+    // ── Visualización de forma de onda en tiempo real ──
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source   = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 32;
+        source.connect(analyser);
+        const dataArr   = new Uint8Array(analyser.frequencyBinCount);
+        const waveEl    = document.getElementById('recWaveform');
+        const bars      = waveEl ? [...waveEl.querySelectorAll('span')] : [];
+        waveEl && waveEl.classList.add('live');
+        let _waveRAF;
+        const _animateWave = () => {
+            analyser.getByteFrequencyData(dataArr);
+            bars.forEach((bar, i) => {
+                const val = dataArr[i % dataArr.length] || 0;
+                const h = Math.max(4, Math.round((val / 255) * 24));
+                bar.style.height = h + 'px';
+            });
+            _waveRAF = requestAnimationFrame(_animateWave);
+        };
+        _animateWave();
+        // Guardar referencia para cancelar al detener
+        window._recWaveRAF     = _waveRAF;
+        window._recAudioCtx    = audioCtx;
+        window._recWaveAnimate = _animateWave;
+        window._recWaveRAFRef  = { raf: _waveRAF };
+        // Actualizar referencia en cada frame
+        const _wrapAnimate = () => {
+            analyser.getByteFrequencyData(dataArr);
+            bars.forEach((bar, i) => {
+                const val = dataArr[i % dataArr.length] || 0;
+                bar.style.height = Math.max(4, Math.round((val / 255) * 24)) + 'px';
+            });
+            window._recWaveRAFRef.raf = requestAnimationFrame(_wrapAnimate);
+        };
+        cancelAnimationFrame(_waveRAF);
+        window._recWaveRAFRef.raf = requestAnimationFrame(_wrapAnimate);
+    } catch(_) { /* si falla la visualización, no bloquear la grabación */ }
+
     // UI
     document.getElementById('audioRecordBar').classList.add('visible');
     document.getElementById('btnMic').textContent = '⏹️';
@@ -6128,6 +6424,11 @@ function detenerGrabacion() {
     mediaRecorder.stop();
     isRecording = false;
     clearInterval(recTimerInterval);
+    // Detener animación de onda
+    if (window._recWaveRAFRef) { cancelAnimationFrame(window._recWaveRAFRef.raf); window._recWaveRAFRef = null; }
+    if (window._recAudioCtx)   { try { window._recAudioCtx.close(); } catch(_) {} window._recAudioCtx = null; }
+    const waveEl = document.getElementById('recWaveform');
+    if (waveEl) { waveEl.classList.remove('live'); [...waveEl.querySelectorAll('span')].forEach(s => s.style.height = ''); }
     document.getElementById('btnMic').textContent = '🎙️';
     document.getElementById('btnMic').style.background = '';
 }
@@ -6235,6 +6536,16 @@ function toggleAudioPlay(audioId) {
         audioEl.play();
         if (playBtn) playBtn.textContent = '⏸';
         if (waveEl) waveEl.classList.add('playing');
+        // Notificar al servidor que escuchamos el audio (solo si no es nuestro)
+        const msgId = audioId.startsWith('aud_') ? audioId.slice(4) : audioId;
+        const row = audioEl.closest ? null : document.querySelector(`[data-msgid="${msgId}"]`);
+        const isMine = row
+            ? row.classList.contains('me')
+            : !!document.querySelector(`.msg-row.me[data-msgid="${msgId}"]`);
+        if (!isMine && socket && socket.readyState === WebSocket.OPEN && !audioEl._readSent) {
+            audioEl._readSent = true;
+            socket.send(JSON.stringify({ type: 'audioRead', id: msgId }));
+        }
     } else {
         audioEl.pause();
         if (playBtn) playBtn.textContent = '▶';
@@ -6425,6 +6736,11 @@ function seleccionarGrupo(groupId) {
     unreadCounts[chatKey] = 0;
     // Cerrar notificaciones de la bandeja del sistema para este grupo
     _cerrarNotificacionesDeChat(chatKey);
+    // Actualizar botones de cabecera
+    document.getElementById('btnArchiveChat').classList.toggle('active', _archivedChats.has(chatKey));
+    _actualizarBtnAutoDestruct();
+    if (_searchActive) toggleSearchBar();
+    _cerrarMentionList();
     chat.innerHTML = '';
 
     document.getElementById('chatName').textContent = '👥 ' + g.name;
@@ -6514,7 +6830,7 @@ function addGroupMessage(msg) {
         content = `<img class="img-msg" src="${msg.imageData}" alt="imagen">`;
         if (msg.message) content += `<div style="margin-top:6px">${escapeHTML(msg.message)}</div>`;
     } else {
-        content = escapeHTML(msg.message);
+        content = renderMentions(escapeHTML(msg.message));
     }
 
     row.innerHTML = `
@@ -8521,6 +8837,375 @@ function enviarEmojiRapido(emoji) {
 // ============================================================
 // SESIÓN PERSISTENTE
 // ============================================================
+// ============================================================
+// FEATURE: BORRAR CHAT COMPLETO
+// ============================================================
+function confirmarBorrarChat() {
+    if (!currentChat) return;
+    if (!confirm('¿Borrar toda la conversación? Los mensajes se eliminarán para todos.')) return;
+    const convId = currentChat.startsWith('group_')
+        ? currentChat
+        : _getConversationId();
+    if (!convId) return;
+    socket.send(JSON.stringify({ type: 'clearConversation', conversationId: convId }));
+}
+
+function _getConversationId() {
+    // Calcular el conversationId para chats 1:1 (igual que el servidor: sorted join)
+    if (!currentChat || currentChat.startsWith('group_')) return currentChat;
+    const otherUser = currentChat.startsWith('phone:')
+        ? null
+        : currentChat;
+    if (!otherUser) {
+        // contacto offline — conversationId lo forma el servidor con phone, no podemos calcularlo aquí
+        // pero sí podemos buscar en conversations[]
+        const chatKey = currentChat;
+        const arr = conversations[chatKey];
+        if (arr && arr.length) return arr[0].conversationId;
+        return null;
+    }
+    const sorted = [username, otherUser].sort();
+    return sorted.join('_');
+}
+
+// Handler WS: conversation_cleared
+function onConversacionBorrada(conversationId) {
+    // Limpiar el array local y el DOM si es el chat activo
+    Object.keys(conversations).forEach(k => {
+        if (conversations[k] && conversations[k][0] && conversations[k][0].conversationId === conversationId) {
+            delete conversations[k];
+        }
+    });
+    if (conversations[conversationId]) delete conversations[conversationId];
+    if (currentChat) {
+        const chatKey = currentChat;
+        if (conversations[chatKey]) delete conversations[chatKey];
+        // Limpiar DOM del chat
+        chat.innerHTML = '';
+        mostrarToast('Conversación borrada ✓');
+    }
+}
+
+// ============================================================
+// FEATURE: BUSCAR EN CHAT
+// ============================================================
+let _searchActive = false;
+let _searchMatches = [];
+let _searchIdx = 0;
+
+function toggleSearchBar() {
+    const bar = document.getElementById('chatSearchBar');
+    _searchActive = !_searchActive;
+    bar.style.display = _searchActive ? 'block' : 'none';
+    document.getElementById('btnSearchChat').classList.toggle('active', _searchActive);
+    if (_searchActive) {
+        document.getElementById('chatSearchInput').focus();
+    } else {
+        // Limpiar highlights
+        document.getElementById('chatSearchInput').value = '';
+        buscarEnChat('');
+    }
+}
+
+function buscarEnChat(query) {
+    // Quitar highlights anteriores
+    chat.querySelectorAll('.search-highlight').forEach(el => {
+        const parent = el.parentNode;
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+    });
+    chat.querySelectorAll('.msg-row').forEach(r => r.classList.remove('search-match'));
+    _searchMatches = [];
+    document.getElementById('chatSearchCount').textContent = '';
+
+    const q = query.trim().toLowerCase();
+    if (!q) return;
+
+    // Buscar en todas las burbujas de texto
+    const rows = [...chat.querySelectorAll('.msg-row')];
+    rows.forEach(row => {
+        const bubble = row.querySelector('.bubble');
+        if (!bubble) return;
+        const textEl = bubble.querySelector('.msg-text');
+        if (!textEl) return;
+        // Solo texto plano (no reply-preview)
+        const cloned = textEl.cloneNode(true);
+        cloned.querySelectorAll('.reply-preview,.forward-label,.meta').forEach(el => el.remove());
+        const txt = cloned.textContent.toLowerCase();
+        if (txt.includes(q)) {
+            row.classList.add('search-match');
+            _searchMatches.push(row);
+            // Highlight en el DOM
+            _highlightText(textEl, q);
+        }
+    });
+
+    const count = _searchMatches.length;
+    document.getElementById('chatSearchCount').textContent =
+        count ? `${count} resultado${count > 1 ? 's' : ''}` : 'Sin resultados';
+
+    if (count > 0) {
+        _searchIdx = 0;
+        _searchMatches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function _highlightText(el, query) {
+    // Recorrer nodos de texto y envolver matches en <mark>
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            // No resaltar dentro de reply-preview ni meta
+            if (node.parentElement.closest('.reply-preview,.forward-label,.meta')) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+    const textNodes = [];
+    let node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+
+    textNodes.forEach(tn => {
+        const txt = tn.textContent;
+        const idx = txt.toLowerCase().indexOf(query);
+        if (idx < 0) return;
+        const range = document.createRange();
+        range.setStart(tn, idx);
+        range.setEnd(tn, idx + query.length);
+        const mark = document.createElement('mark');
+        mark.className = 'search-highlight';
+        range.surroundContents(mark);
+    });
+}
+
+// ============================================================
+// FEATURE: MENCIONES @USUARIO EN GRUPOS
+// ============================================================
+let _mentionQuery = '';
+let _mentionStart = -1;
+let _mentionSelectedIdx = 0;
+
+function _onInputMention(e) {
+    if (!currentChat || !currentChat.startsWith('group_')) return;
+    const val = input.value;
+    const pos = input.selectionStart;
+
+    // Detectar si estamos escribiendo @xxx
+    const before = val.slice(0, pos);
+    const match = before.match(/@([\wÀ-ſ]*)$/);
+    if (match) {
+        _mentionQuery = match[1].toLowerCase();
+        _mentionStart = pos - match[0].length;
+        _mostrarMentionList();
+    } else {
+        _cerrarMentionList();
+    }
+}
+
+function _mostrarMentionList() {
+    const grp = myGroups.get(currentChat.replace('group_', ''));
+    if (!grp) return;
+
+    // Buscar miembros que coincidan con el query
+    const matches = grp.members
+        .map(phone => {
+            const uname = window._phoneToUsername ? window._phoneToUsername[phone] : null;
+            const contact = myContacts.get(phone);
+            const displayName = contact ? contact.customName : (uname || phone);
+            return { phone, username: uname, displayName };
+        })
+        .filter(m => m.username && m.username !== username)
+        .filter(m => !_mentionQuery || m.displayName.toLowerCase().includes(_mentionQuery) || m.username.toLowerCase().includes(_mentionQuery));
+
+    const list = document.getElementById('mentionList');
+    if (!matches.length) { _cerrarMentionList(); return; }
+
+    list.className = 'visible';
+    _mentionSelectedIdx = 0;
+    list.innerHTML = matches.map((m, i) => {
+        const av = userAvatars[m.username] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(m.username)}`;
+        return `<div class="mention-item${i === 0 ? ' selected' : ''}" onclick="seleccionarMencion('${m.username.replace(/'/g,"\'")}')">
+            <img src="${av}" alt="${escapeHTML(m.displayName)}">
+            <div><div style="font-weight:600;font-size:13px;">${escapeHTML(m.displayName)}</div><div style="font-size:11px;color:var(--text-muted);">@${escapeHTML(m.username)}</div></div>
+        </div>`;
+    }).join('');
+    list._matches = matches;
+}
+
+function _cerrarMentionList() {
+    const list = document.getElementById('mentionList');
+    list.className = '';
+    list.innerHTML = '';
+    _mentionQuery = '';
+    _mentionStart = -1;
+}
+
+function seleccionarMencion(mentionUsername) {
+    const val = input.value;
+    const pos = input.selectionStart;
+    const before = val.slice(0, _mentionStart);
+    const after  = val.slice(pos);
+    input.value = before + '@' + mentionUsername + ' ' + after;
+    input.selectionStart = input.selectionEnd = before.length + mentionUsername.length + 2;
+    input.focus();
+    actualizarBtnEnviar();
+    _cerrarMentionList();
+}
+
+function _onKeydownMention(e) {
+    const list = document.getElementById('mentionList');
+    if (!list.classList.contains('visible')) return;
+    const items = list.querySelectorAll('.mention-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _mentionSelectedIdx = Math.min(_mentionSelectedIdx + 1, items.length - 1);
+        items.forEach((it, i) => it.classList.toggle('selected', i === _mentionSelectedIdx));
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _mentionSelectedIdx = Math.max(_mentionSelectedIdx - 1, 0);
+        items.forEach((it, i) => it.classList.toggle('selected', i === _mentionSelectedIdx));
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+        const matches = list._matches;
+        if (matches && matches[_mentionSelectedIdx]) {
+            e.preventDefault();
+            seleccionarMencion(matches[_mentionSelectedIdx].username);
+        }
+    } else if (e.key === 'Escape') {
+        _cerrarMentionList();
+    }
+}
+
+// ============================================================
+// FEATURE: MENSAJES AUTODESTRUCTIBLES
+// ============================================================
+let _autoDestructSettings = {}; // conversationId → seconds
+
+function abrirMenuAutoDestruct() {
+    if (!currentChat) return;
+    const menu = document.getElementById('autoDestructMenu');
+    const isOpen = menu.style.display === 'block';
+    // Cerrar otros menus abiertos
+    document.getElementById('autoDestructMenu').style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        // Cerrar al hacer click fuera
+        setTimeout(() => {
+            document.addEventListener('click', function _closeAD(e) {
+                if (!e.target.closest('#autoDestructMenu') && !e.target.closest('#btnAutoDestruct')) {
+                    document.getElementById('autoDestructMenu').style.display = 'none';
+                    document.removeEventListener('click', _closeAD);
+                }
+            });
+        }, 50);
+    }
+}
+
+function setAutoDestruct(seconds) {
+    if (!currentChat) return;
+    document.getElementById('autoDestructMenu').style.display = 'none';
+    const convId = _getConversationId() || currentChat;
+    socket.send(JSON.stringify({ type: 'setAutoDestruct', conversationId: convId, seconds }));
+}
+
+function _onAutoDestructSet(convId, seconds) {
+    _autoDestructSettings[convId] = seconds;
+    const btn = document.getElementById('btnAutoDestruct');
+    if (btn) btn.classList.toggle('active', seconds > 0);
+    const label = seconds === 0 ? '' : seconds < 3600 ? `⏱️ ${seconds/60}min`
+        : seconds < 86400 ? `⏱️ ${seconds/3600}h` : `⏱️ ${seconds/86400}d`;
+    mostrarToast(seconds === 0 ? 'Mensajes temporales desactivados' : `Mensajes temporales: ${label} ✓`);
+}
+
+// Actualizar indicador de autodestrucción al abrir un chat
+function _actualizarBtnAutoDestruct() {
+    const convId = _getConversationId() || currentChat;
+    const secs = convId ? (_autoDestructSettings[convId] || 0) : 0;
+    const btn = document.getElementById('btnAutoDestruct');
+    if (btn) btn.classList.toggle('active', secs > 0);
+}
+
+// ============================================================
+// FEATURE: ARCHIVAR CONVERSACIONES
+// ============================================================
+let _archivedChats = new Set();
+
+function toggleArchivarChat() {
+    if (!currentChat) return;
+    const convId = currentChat;
+    const isArchived = _archivedChats.has(convId);
+    socket.send(JSON.stringify({ type: 'archiveChat', conversationId: convId, archive: !isArchived }));
+}
+
+function _onChatArchivado(convId, archived) {
+    if (archived) {
+        _archivedChats.add(convId);
+        mostrarToast('Conversación archivada 📁');
+    } else {
+        _archivedChats.delete(convId);
+        mostrarToast('Conversación desarchivada ✓');
+    }
+    document.getElementById('btnArchiveChat').classList.toggle('active', _archivedChats.has(currentChat));
+    renderArchivedList();
+    renderContactsList();
+    renderGroupsList();
+}
+
+function toggleArchivedSection() {
+    const list = document.getElementById('archivedList');
+    list.classList.toggle('visible');
+}
+
+function renderArchivedList() {
+    const ul = document.getElementById('archivedList');
+    if (!ul) return;
+    const count = document.getElementById('archivedCount');
+
+    if (_archivedChats.size === 0) {
+        ul.innerHTML = '';
+        if (count) count.textContent = '';
+        return;
+    }
+    if (count) count.textContent = _archivedChats.size;
+
+    const items = [..._archivedChats].map(convId => {
+        let name = convId, avatarHtml = '', clickFn = '';
+        if (convId.startsWith('group_')) {
+            const gid = convId.replace('group_', '');
+            const g = myGroups.get(gid);
+            name = g ? g.name : gid;
+            avatarHtml = `<div class="group-avatar-circle" style="width:36px;height:36px;font-size:14px;">${g && g.avatar ? `<img src="${g.avatar}" alt="">` : name.charAt(0).toUpperCase()}</div>`;
+            clickFn = `seleccionarGrupo('${gid}')`;
+        } else {
+            const contact = myContacts.get(convId) || null;
+            const uname = window._phoneToUsername ? window._phoneToUsername[convId] : convId;
+            name = contact ? contact.customName : (uname || convId);
+            const av = (contact && contact.avatar) || userAvatars[uname] || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
+            avatarHtml = `<img class="user-avatar" src="${av}" alt="${escapeHTML(name)}" style="width:36px;height:36px;border-radius:50%;">`;
+            clickFn = uname && uname !== convId ? `seleccionarUsuario('${uname.replace(/'/g,"\'")}')` : `seleccionarContactoOffline('${convId.replace(/'/g,"\'")}')`;
+        }
+        return `<li style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;transition:background var(--transition);" onclick="${clickFn}" onmouseover="this.style.background='var(--purple-pale)'" onmouseout="this.style.background=''">
+            ${avatarHtml}
+            <div class="user-info"><div class="user-name">${escapeHTML(name)}</div><div class="user-preview" style="font-size:11px;color:var(--text-muted);">Archivada</div></div>
+        </li>`;
+    }).join('');
+    ul.innerHTML = items;
+}
+
+// ============================================================
+// CARGAR CONFIGURACIÓN DE USUARIO AL INICIAR SESIÓN
+// ============================================================
+async function cargarConfiguracionUsuario() {
+    if (!loginPhone) return;
+    try {
+        const res = await fetch(`/api/user/settings?phone=${encodeURIComponent(loginPhone)}`);
+        if (!res.ok) return;
+        const cfg = await res.json();
+        // Archivar chats
+        _archivedChats = new Set(cfg.archivedChats || []);
+        renderArchivedList();
+        // Autodestrucción
+        _autoDestructSettings = cfg.autoDestructSettings || {};
+    } catch(e) { console.warn('cargarConfiguracionUsuario error:', e); }
+}
+
 (function tryAutoLogin() {
     const saved = localStorage.getItem('kvs_session')
         || localStorage.getItem('kvs_session_pwa')

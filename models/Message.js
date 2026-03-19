@@ -116,6 +116,28 @@ const MessageSchema = new mongoose.Schema({
     threadCount: {
         type: Number,
         default: 0
+    },
+
+    // ── Autodestrucción ───────────────────────────────────────
+    // Fecha en que el mensaje debe eliminarse (null = no expira)
+    expiresAt: {
+        type: Date,
+        default: null,
+        index: true
+    },
+
+    // ── Audio escuchado ───────────────────────────────────────
+    // Array de usernames que ya escucharon el audio
+    audioReadBy: {
+        type: [String],
+        default: []
+    },
+
+    // ── Menciones ────────────────────────────────────────────
+    // Array de usernames mencionados con @ en el mensaje
+    mentions: {
+        type: [String],
+        default: []
     }
 
 });
