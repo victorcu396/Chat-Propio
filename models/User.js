@@ -27,6 +27,12 @@ const UserSchema = new mongoose.Schema({
     lastLogin: {
         type: Date,
         default: Date.now
+    },
+
+    // Array de teléfonos que este usuario ha bloqueado
+    blockedPhones: {
+        type: [String],
+        default: []
     }
 
 });

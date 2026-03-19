@@ -318,6 +318,16 @@ wss.on('connection', (ws) => {
 
                 if (!recipientUsername) break; // destinatario desconocido
 
+                // ── Comprobar bloqueo: si el destinatario ha bloqueado al remitente, descartar ──
+                if (recipientPhone) {
+                    const recipientUserDoc = await User.findOne({ phone: recipientPhone }).lean();
+                    if (recipientUserDoc && recipientUserDoc.blockedPhones && ws.phone &&
+                        recipientUserDoc.blockedPhones.includes(ws.phone)) {
+                        // Silencioso: el remitente no sabe que está bloqueado
+                        break;
+                    }
+                }
+
                 const usersSorted    = [ws.username, recipientUsername].sort();
                 const conversationId = usersSorted.join('_');
                 const id             = crypto.randomUUID();
@@ -361,6 +371,13 @@ wss.on('connection', (ws) => {
             ────────────────────────────────────── */
             case 'typing': {
                 if (!data.to) break;
+                // ── Comprobar bloqueo: no enviar indicador de escritura si bloqueado ──
+                if (ws.phone) {
+                    try {
+                        const typingTarget = await User.findOne({ username: data.to }).lean();
+                        if (typingTarget && typingTarget.blockedPhones && typingTarget.blockedPhones.includes(ws.phone)) break;
+                    } catch(_) {}
+                }
                 const target = users.get(data.to);
                 if (target) {
                     target.send(JSON.stringify({
@@ -427,6 +444,16 @@ wss.on('connection', (ws) => {
             ────────────────────────────────────── */
             case 'call_offer': {
                 if (!data.to) break;
+                // ── Comprobar bloqueo antes de enrutar la llamada ──
+                if (ws.phone) {
+                    try {
+                        const callTarget = await User.findOne({ username: data.to }).lean();
+                        if (callTarget && callTarget.blockedPhones && callTarget.blockedPhones.includes(ws.phone)) {
+                            ws.send(JSON.stringify({ type: 'call_rejected', from: data.to }));
+                            break;
+                        }
+                    } catch(_) {}
+                }
                 const target = users.get(data.to);
                 if (target && target.readyState === WebSocket.OPEN) {
                     target.send(JSON.stringify({
@@ -719,20 +746,46 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
-               ELIMINAR CONTACTO
+               BLOQUEAR CONTACTO
+               - Elimina el contacto de ambos lados
+               - Registra el bloqueo en BD (blockedPhones)
+               - Notifica al bloqueado si está online
+               - El servidor impedirá que el bloqueado
+                 envíe mensajes, llamadas o respuestas
+                 al bloqueador
             ────────────────────────────────────── */
-            case 'removeContact': {
+            case 'blockContact': {
                 if (!data.contactPhone) break;
                 if (!ws.phone) break;
 
                 try {
+                    // 1. Eliminar el contacto en ambas direcciones
                     await Contact.deleteOne({ ownerPhone: ws.phone, contactPhone: data.contactPhone });
+                    await Contact.deleteOne({ ownerPhone: data.contactPhone, contactPhone: ws.phone });
+
+                    // 2. Registrar el bloqueo en la BD del bloqueador
+                    await User.updateOne(
+                        { phone: ws.phone },
+                        { $addToSet: { blockedPhones: data.contactPhone } }
+                    );
+
+                    // 3. Confirmar al bloqueador
                     ws.send(JSON.stringify({
-                        type: 'contactRemoved',
+                        type: 'contactBlocked',
                         contactPhone: data.contactPhone
                     }));
+
+                    // 4. Notificar al bloqueado si está online
+                    const blockedWs = [...users.values()].find(u => u.phone === data.contactPhone);
+                    if (blockedWs && blockedWs.readyState === WebSocket.OPEN) {
+                        blockedWs.send(JSON.stringify({
+                            type:       'youWereBlocked',
+                            byPhone:    ws.phone,
+                            byUsername: ws.username
+                        }));
+                    }
                 } catch(e) {
-                    console.error('removeContact error:', e.message);
+                    console.error('blockContact error:', e.message);
                 }
                 break;
             }
@@ -1258,6 +1311,14 @@ wss.on('connection', (ws) => {
                             if (u) recipientUsername = u.username;
                         }
                         if (!recipientUsername) break;
+                        // ── Comprobar bloqueo en forwardMessage ──
+                        if (recipientPhone && ws.phone) {
+                            const recDoc = await User.findOne({ phone: recipientPhone }).lean();
+                            if (recDoc && recDoc.blockedPhones && recDoc.blockedPhones.includes(ws.phone)) break;
+                        } else if (recipientUsername && ws.phone) {
+                            const recDoc = await User.findOne({ username: recipientUsername }).lean();
+                            if (recDoc && recDoc.blockedPhones && recDoc.blockedPhones.includes(ws.phone)) break;
+                        }
                         conversationId = [ws.username, recipientUsername].sort().join('_');
                     }
 
@@ -1315,6 +1376,14 @@ wss.on('connection', (ws) => {
                             if (u) recipientUsername = u.username;
                         }
                         if (!recipientUsername) break;
+                        // ── Comprobar bloqueo en replyMessage ──
+                        if (recipientPhone && ws.phone) {
+                            const recDoc = await User.findOne({ phone: recipientPhone }).lean();
+                            if (recDoc && recDoc.blockedPhones && recDoc.blockedPhones.includes(ws.phone)) break;
+                        } else if (recipientUsername && ws.phone) {
+                            const recDoc = await User.findOne({ username: recipientUsername }).lean();
+                            if (recDoc && recDoc.blockedPhones && recDoc.blockedPhones.includes(ws.phone)) break;
+                        }
                         conversationId = [ws.username, recipientUsername].sort().join('_');
                     }
 

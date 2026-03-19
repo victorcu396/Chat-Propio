@@ -2209,7 +2209,7 @@ emoji-picker.visible { display: block; }
     .contact-actions { display: flex; }
 }
 
-.btn-contact-delete {
+.btn-contact-block {
     background: none;
     border: none;
     cursor: pointer;
@@ -2222,7 +2222,7 @@ emoji-picker.visible { display: block; }
     touch-action: manipulation;
 }
 
-.btn-contact-delete:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
+.btn-contact-block:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
 
 .status-dot.contact-offline { background: var(--offline); }
 
@@ -4594,6 +4594,30 @@ function handleMessage(data) {
         onContactRemoved(data.contactPhone);
         return;
     }
+    if (data.type === 'contactBlocked') {
+        // El bloqueo fue exitoso: quitar el contacto de la lista local
+        myContacts.delete(data.contactPhone);
+        renderContactsList();
+        mostrarToast('Contacto bloqueado 🚫');
+        return;
+    }
+    if (data.type === 'youWereBlocked') {
+        // El otro usuario nos ha bloqueado: quitarle de nuestra lista y avisar
+        myContacts.delete(data.byPhone);
+        renderContactsList();
+        // Si tenemos ese chat abierto, cerrarlo para que no quede en un estado roto
+        const blockedUsername = data.byUsername;
+        if (currentChat === blockedUsername || currentChat === 'phone:' + data.byPhone) {
+            currentChat = null;
+            document.getElementById('chat').innerHTML = '';
+            document.getElementById('chatName').textContent = '';
+            document.getElementById('chatStatus').textContent = '';
+            document.getElementById('chatPhone').style.display = 'none';
+            document.getElementById('chatAvatar').style.display = 'none';
+        }
+        mostrarToast('⚠️ ' + data.byUsername + ' te ha bloqueado', true);
+        return;
+    }
     if (data.type === 'contactRenamed') {
         onContactRenamed(data.contactPhone, data.newName);
         return;
@@ -6558,7 +6582,7 @@ function renderContactsList() {
             ${badge}
             <div class="contact-actions">
                 <button class="btn-contact-edit" onclick="event.stopPropagation();abrirModalRenombrar('${escapedPhone}','${escapedName}')" title="Editar nombre">✏️</button>
-                <button class="btn-contact-delete" onclick="event.stopPropagation();confirmarEliminarContacto('${escapedPhone}','${escapedName}')" title="Eliminar contacto">🗑</button>
+                <button class="btn-contact-block" onclick="event.stopPropagation();confirmarBloquearContacto('${escapedPhone}','${escapedName}')" title="Bloquear contacto">🚫</button>
             </div>
         </li>`;
     });
@@ -6660,10 +6684,10 @@ function onContactRemoved(contactPhone) {
     renderContactsList();
 }
 
-function confirmarEliminarContacto(phone, name) {
-    if (confirm(`¿Eliminar a "${name}" de tus contactos?`)) {
+function confirmarBloquearContacto(phone, name) {
+    if (confirm(`¿Bloquear a "${name}"?\n\nSe eliminará de tu lista de contactos y recibirá un aviso de que le has bloqueado. No podrá enviarte mensajes ni llamarte.`)) {
         socket.send(JSON.stringify({
-            type: 'removeContact',
+            type: 'blockContact',
             contactPhone: phone
         }));
     }
