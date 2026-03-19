@@ -4880,14 +4880,18 @@ function renderUsers(onlineList) {
 
     // Separar en contactos-online (ya se muestran en #contactsList) y desconocidos
     const onlineNotContact = onlineList.filter(u => {
-        if (u === username) return false; // nunca mostrar al propio usuario
-        // Comprobar por username directo
-        if (contactUsernames.has(u)) return false;
-        // Comprobar por phone (vía _phoneToUsername)
-        const phone = window._phoneToUsername
+        // Nunca mostrar al propio usuario (triple comprobación para cubrir cualquier timing)
+        if (u === username) return false;
+        if (u === loginUsername) return false;
+        // Comprobar también por phone propio: si este usuario online es el propio teléfono, excluir
+        const uPhone = window._phoneToUsername
             ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === u)?.[0]
             : null;
-        if (phone && contactPhones.has(phone)) return false;
+        if (uPhone && uPhone === loginPhone) return false;
+        // Comprobar por username directo en contactos
+        if (contactUsernames.has(u)) return false;
+        // Comprobar por phone en contactos (vía _phoneToUsername)
+        if (uPhone && contactPhones.has(uPhone)) return false;
         return true; // es un desconocido → mostrar en "Conectados ahora"
     });
 

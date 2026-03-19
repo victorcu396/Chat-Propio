@@ -1599,9 +1599,13 @@ function broadcastUsers() {
         phone:    ws.phone || null,
         isAway:   ws.isAway || false
     }));
-    broadcast({
-        type:   'users',
-        online: onlineWithAvatars
+    // Enviar a cada usuario la lista SIN él mismo incluido
+    users.forEach((ws) => {
+        if (ws.readyState !== 1 /* OPEN */) return;
+        const listForThisUser = onlineWithAvatars.filter(u => u.username !== ws.username);
+        try {
+            ws.send(JSON.stringify({ type: 'users', online: listForThisUser }));
+        } catch(_) {}
     });
 }
 
