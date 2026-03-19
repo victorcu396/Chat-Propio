@@ -1011,6 +1011,24 @@ wss.on('connection', (ws) => {
                     audioData = data.audioData;
                 }
 
+                // Extraer menciones del texto del mensaje de grupo
+                const gmMentionMatches = (data.message || '').match(/@([^\s<>&"']+)/g) || [];
+                let gmMentions = gmMentionMatches.map(m => m.slice(1));
+                // Si hay @todos, expandir a todos los miembros del grupo
+                if (gmMentions.includes('todos') || gmMentions.includes('all')) {
+                    const allMemberUsernames = grpMsg.members
+                        .map(phone => {
+                            const u = [...users.values()].find(u => u.phone === phone);
+                            return u ? u.username : null;
+                        })
+                        .filter(Boolean);
+                    // Reemplazar @todos por la lista real + mantener otras menciones
+                    gmMentions = [...new Set([
+                        ...gmMentions.filter(m => m !== 'todos' && m !== 'all'),
+                        ...allMemberUsernames
+                    ])];
+                }
+
                 const gmId = crypto.randomUUID();
                 const gmMessage = new Message({
                     id:             gmId,
@@ -1022,7 +1040,8 @@ wss.on('connection', (ws) => {
                     audioData,
                     avatar:         ws.avatar,
                     delivered:      true,
-                    read:           false
+                    read:           false,
+                    mentions:       gmMentions
                 });
                 await gmMessage.save();
 

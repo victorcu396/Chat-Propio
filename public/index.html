@@ -1934,8 +1934,49 @@ emoji-picker.visible { display: block; }
 .msg-row.search-current .bubble { outline: 2px solid var(--purple-deep); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(79,70,229,0.12); }
 
 /* Mención @usuario */
-.mention-chip { color: var(--purple-deep); font-weight: 600; }
-.mention-chip.me { background: rgba(79,70,229,0.12); border-radius: 3px; padding: 0 2px; }
+/* ── Menciones en mensajes ──────────────────────────────────────────────────
+   Hay 4 variantes según contexto:
+   1. .bubble.other  → fondo blanco:  chip con fondo amarillo-lima y texto morado
+   2. .bubble.me     → fondo morado:  chip con fondo blanco semitransparente y texto blanco
+   3. .mention-chip.self  → siempre con borde dorado (te mencionaron a ti)
+   4. .mention-chip.all   → @todos con fondo naranja/coral
+──────────────────────────────────────────────────────────────────────────── */
+.mention-chip {
+    display: inline-block;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 0 3px;
+    font-size: 0.95em;
+    line-height: 1.4;
+    /* Default (en burbuja blanca): fondo lima suave, texto morado */
+    background: rgba(79,70,229,0.10);
+    color: var(--purple-deep);
+}
+/* En burbuja propia (fondo morado/azul): texto blanco, fondo blanco semitransparente */
+.bubble.me .mention-chip {
+    background: rgba(255,255,255,0.22);
+    color: #ffffff;
+}
+/* Cuando nos mencionan a nosotros: resalte dorado, en cualquier burbuja */
+.mention-chip.self {
+    background: rgba(251,191,36,0.28);
+    color: #92400e;
+    box-shadow: 0 0 0 1.5px rgba(251,191,36,0.6);
+}
+.bubble.me .mention-chip.self {
+    background: rgba(255,255,255,0.30);
+    color: #fef3c7;
+    box-shadow: 0 0 0 1.5px rgba(255,255,255,0.55);
+}
+/* @todos: fondo coral/naranja, llamativo en ambos contextos */
+.mention-chip.all {
+    background: rgba(239,68,68,0.12);
+    color: #b91c1c;
+}
+.bubble.me .mention-chip.all {
+    background: rgba(255,255,255,0.22);
+    color: #fecaca;
+}
 
 /* Lista de sugerencias de mención — aparece justo encima del área de input */
 #mentionList {
@@ -1945,47 +1986,72 @@ emoji-picker.visible { display: block; }
     left: 0; right: 0;
     background: var(--white);
     border: 1px solid var(--border);
+    border-top: 2px solid var(--purple-light);
     border-radius: var(--radius-md) var(--radius-md) 0 0;
-    box-shadow: 0 -4px 20px rgba(79,70,229,0.13);
-    max-height: 220px;
+    box-shadow: 0 -6px 24px rgba(79,70,229,0.16);
+    max-height: 240px;
     overflow-y: auto;
+    overflow-x: hidden;
     z-index: 700;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch; /* smooth scroll en iOS */
 }
 #mentionList.visible { display: block; }
 /* Título de la sección */
 #mentionList .mention-header {
-    padding: 7px 14px 4px;
+    padding: 8px 14px 5px;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.7px;
     text-transform: uppercase;
     color: var(--text-muted);
+    background: var(--bg-body);
     border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 .mention-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 14px;
+    padding: 10px 14px;
     cursor: pointer;
     font-size: 14px;
-    transition: background var(--transition);
-    border-bottom: 1px solid rgba(0,0,0,0.03);
+    transition: background 0.1s ease;
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    /* Evitar flash en iOS al tocar */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 .mention-item:last-child { border-bottom: none; }
-.mention-item:hover, .mention-item.selected { background: var(--purple-pale); }
+.mention-item:hover { background: var(--purple-pale); }
+.mention-item.selected {
+    background: var(--purple-pale);
+    border-left: 3px solid var(--purple-deep);
+    padding-left: 11px;
+}
 .mention-item img {
-    width: 34px; height: 34px;
+    width: 36px; height: 36px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
     border: 2px solid var(--border);
 }
-.mention-item-info { display: flex; flex-direction: column; gap: 1px; }
-.mention-item-name { font-weight: 600; font-size: 13px; color: var(--text-dark); }
+.mention-item-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mention-item-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .mention-item-handle { font-size: 11px; color: var(--text-muted); }
 .mention-item.selected .mention-item-name { color: var(--purple-deep); }
+/* Indicador de @todos especial */
+.mention-item.todos-item img { border-color: rgba(239,68,68,0.4); }
+.mention-item.todos-item .mention-item-name { color: #b91c1c; }
 
 /* Indicador de mensajes temporales activo */
 #btnAutoDestruct.active { color: #ef4444; }
@@ -5813,7 +5879,12 @@ input.addEventListener('input', () => {
     actualizarBtnEnviar();
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-    _onInputMention();
+    // Solo activar menciones en grupos
+    if (currentChat && currentChat.startsWith('group_')) {
+        _onInputMention();
+    } else {
+        _cerrarMentionList();
+    }
 
     if (!socket || !currentChat) return;
     if (currentChat.startsWith('group_')) return; // no typing en grupos
@@ -5836,6 +5907,15 @@ input.addEventListener('keydown', (e) => {
         enviar();
     }
 });
+
+// Cerrar mention list al hacer click fuera del input o del panel de menciones
+document.addEventListener('click', (e) => {
+    const list = document.getElementById('mentionList');
+    if (!list || !list.classList.contains('visible')) return;
+    if (!list.contains(e.target) && e.target !== input) {
+        _cerrarMentionList();
+    }
+}, true);
 
 // ============================================================
 // ADD MESSAGE AL DOM
@@ -6047,9 +6127,15 @@ function escapeHTML(str) {
 
 function renderMentions(html) {
     if (!html) return html || '';
-    return html.replace(/@([\wÀ-ſ]+)/g, (match, uname) => {
-        const isMe = uname === username;
-        return `<span class="mention-chip${isMe ? ' me' : ''}">@${escapeHTML(uname)}</span>`;
+    // Match @username — letras, números, guión bajo, caracteres acentuados
+    return html.replace(/@([^\s<>&"']+)/g, (match, uname) => {
+        let cls = 'mention-chip';
+        if (uname === 'todos' || uname === 'all') {
+            cls += ' all';
+        } else if (uname === username) {
+            cls += ' self';
+        }
+        return `<span class="${cls}">@${escapeHTML(uname)}</span>`;
     });
 }
 
@@ -6967,8 +7053,20 @@ function onGroupMessage(data) {
     } else {
         unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
         if (data.from !== username) {
+            // Detectar si nos mencionaron (individual o @todos)
+            const msg = data.message || '';
+            const isMentioned = (data.mentions && (
+                data.mentions.includes(username) ||
+                data.mentions.includes('todos') ||
+                data.mentions.includes('all')
+            )) || msg.includes('@' + username) || msg.includes('@todos');
+
             playNotifSound();
-            mostrarNotificacion('👥 ' + data.groupName, lastMessages[chatKey]);
+            const notifTitle = isMentioned
+                ? '🔔 ' + (data.groupName || 'Grupo') + ' — te mencionaron'
+                : '👥 ' + (data.groupName || 'Grupo');
+            const notifBody = data.from + ': ' + (lastMessages[chatKey] || '');
+            mostrarNotificacion(notifTitle, notifBody);
         }
     }
     renderGroupsList();
@@ -9193,8 +9291,8 @@ function _mostrarMentionList() {
     const candidates = [];
 
     // Opción especial: mencionar a todos
-    const todoItem = { displayName: 'Todos', username: 'todos', isAll: true,
-        avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="#7c3aed"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="18" fill="white">👥</text></svg>') };
+    const todoItem = { displayName: 'Todos', username: 'todos', isAll: true, isTodos: true,
+        avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="#ef4444"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="18" fill="white">👥</text></svg>') };
 
     // Miembros del grupo (incluyendo al propio usuario para que pueda mencionarse en el historial)
     const memberItems = grp.members
@@ -9237,7 +9335,7 @@ function _mostrarMentionList() {
 
     candidates.forEach((m, i) => {
         const item = document.createElement('div');
-        item.className = 'mention-item' + (i === 0 ? ' selected' : '');
+        item.className = 'mention-item' + (i === 0 ? ' selected' : '') + (m.isTodos ? ' todos-item' : '');
         item.dataset.idx = i;
 
         const img = document.createElement('img');
