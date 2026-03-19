@@ -204,6 +204,57 @@ window.addEventListener('popstate', (e) => {
     --input-area-h-mob:  58px;
 }
 
+/* ── MODO OSCURO ──────────────────────────────────────────────────────────
+   Se activa añadiendo class="dark" a <html>.
+   Redefine las variables CSS; los componentes no necesitan cambios.
+────────────────────────────────────────────────────────────────────────── */
+html.dark {
+    --purple-deep:   #818cf8;
+    --purple-mid:    #a78bfa;
+    --purple-light:  #6d28d9;
+    --purple-pale:   #1e1b3a;
+    --pink-accent:   #f472b6;
+    --bg-body:       #0f0e1a;
+    --bg-sidebar:    #131220;
+    --bg-chat:       #111028;
+    --white:         #1a1930;
+    --text-dark:     #e8e6ff;
+    --text-mid:      #a5a3c0;
+    --text-muted:    #6b6985;
+    --border:        #2a2840;
+    --bubble-me:     linear-gradient(135deg, #3730a3, #6d28d9);
+    --bubble-other:  #1e1b36;
+    --online:        #34d399;
+    --offline:       #374151;
+    --shadow-soft:   0 4px 24px rgba(0,0,0,0.4);
+    --shadow-card:   0 8px 40px rgba(0,0,0,0.55);
+}
+html.dark .bubble.other            { border-color: #2a2840; color: #e8e6ff; }
+html.dark .bubble.other .msg-text  { color: #e8e6ff; }
+html.dark .input-area              { background: var(--white); border-top-color: var(--border); }
+html.dark #mensaje                 { background: #1e1b36; color: var(--text-dark); }
+html.dark #mensaje::placeholder    { color: var(--text-muted); }
+html.dark .login-card              { background: #1a1930; border: 1px solid var(--border); }
+html.dark .settings-card           { background: #1a1930; }
+html.dark #chatSearchBar           { background: var(--white); border-bottom-color: var(--border); }
+html.dark #chatSearchInput         { background: #1e1b36; color: var(--text-dark); border-color: var(--border); }
+html.dark .msg-ctx-menu            { background: #1e1b36; border-color: var(--border); }
+html.dark .ctx-item                { color: var(--text-dark); }
+html.dark .ctx-item:hover          { background: var(--purple-pale); }
+html.dark #mentionList             { background: #1a1930; border-color: var(--border); }
+html.dark .mention-header          { background: #131220; }
+html.dark .mention-item:hover,
+html.dark .mention-item.selected   { background: var(--purple-pale); }
+html.dark .reply-preview           { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
+html.dark .bubble.me .reply-preview{ background: rgba(255,255,255,0.1); }
+html.dark #autoDestructMenu        { background: #1a1930; border-color: var(--border); }
+html.dark .link-preview-card       { background: #1e1b36; border-color: var(--border); }
+html.dark .link-preview-card:hover { background: #242240; }
+html.dark .sound-option            { background: #1e1b36; border-color: var(--border); color: var(--text-dark); }
+html.dark .sound-option:hover      { background: var(--purple-pale); }
+html.dark .sound-option.active     { background: var(--purple-pale); border-color: var(--purple-deep); }
+html.dark .read-receipt-popover    { background: #1a1930; border-color: var(--border); }
+
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
 html {
@@ -1926,6 +1977,61 @@ emoji-picker.visible { display: block; }
 
 /* Indicador de audio escuchado */
 .audio-listened { font-size: 10px; color: var(--online); margin-left: 4px; }
+
+/* ── Previsualización de enlace ─────────────────────────────────── */
+.link-preview-card {
+    display: flex; flex-direction: column;
+    background: var(--bg-body); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); overflow: hidden;
+    margin-top: 8px; cursor: pointer; max-width: 300px;
+    text-decoration: none; transition: background var(--transition);
+}
+.link-preview-card:hover { background: var(--purple-pale); }
+.bubble.me .link-preview-card { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+.bubble.me .link-preview-card:hover { background: rgba(255,255,255,0.2); }
+.link-preview-img { width:100%; max-height:140px; object-fit:cover; display:block; }
+.link-preview-body { padding: 7px 10px 8px; }
+.link-preview-domain { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px; }
+.bubble.me .link-preview-domain { color:rgba(255,255,255,0.6); }
+.link-preview-title { font-size:13px; font-weight:600; color:var(--text-dark); line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.bubble.me .link-preview-title { color:#fff; }
+.link-preview-desc { font-size:11px; color:var(--text-muted); margin-top:2px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.bubble.me .link-preview-desc { color:rgba(255,255,255,0.7); }
+
+/* ── Sonidos personalizables ─────────────────────────────────────── */
+.sound-option {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-radius:var(--radius-md);
+    cursor:pointer; border:2px solid var(--border);
+    background:var(--bg-body); transition:all var(--transition);
+    font-family:inherit; font-size:14px; color:var(--text-dark); text-align:left; width:100%;
+}
+.sound-option:hover  { background:var(--purple-pale); border-color:var(--purple-light); }
+.sound-option.active { background:var(--purple-pale); border-color:var(--purple-deep); color:var(--purple-deep); font-weight:600; }
+.sound-check { margin-left:auto; color:var(--purple-deep); font-size:16px; display:none; }
+.sound-option.active .sound-check { display:block; }
+
+/* ── Confirmación de lectura granular en grupos ──────────────────── */
+.read-receipt-popover {
+    position:absolute; bottom:calc(100% + 6px); right:0;
+    background:var(--white); border:1px solid var(--border);
+    border-radius:var(--radius-md); box-shadow:var(--shadow-card);
+    padding:10px 14px; min-width:175px; max-width:230px; z-index:800;
+    font-size:12px; color:var(--text-dark);
+}
+.rr-title  { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:6px; }
+.rr-section{ margin-bottom:6px; }
+.rr-label  { font-weight:600; margin-bottom:2px; }
+.rr-names  { color:var(--text-mid); line-height:1.4; }
+/* El botón de lectura aparece solo en burbujas propias de grupo */
+.btn-group-read {
+    background:none; border:none; cursor:pointer; font-size:11px;
+    color:rgba(255,255,255,0.6); padding:0 2px; line-height:1;
+    transition:color var(--transition); vertical-align:middle;
+}
+.btn-group-read:hover { color:#fff; }
 
 /* Resaltado de búsqueda en chat */
 .search-highlight { background: #fde68a; border-radius: 2px; padding: 0 1px; }
@@ -5182,6 +5288,17 @@ function handleMessage(data) {
         }
         return;
     }
+    if (data.type === 'recording') {
+        if (data.username === username) return;
+        if (currentChat !== data.username) return;
+        if (data.status === 'stop') {
+            typingDiv.classList.remove('visible');
+        } else {
+            typingText.textContent = `${data.username} está grabando audio 🎙️`;
+            typingDiv.classList.add('visible');
+        }
+        return;
+    }
 
     if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); return; }
     if (data.type === 'read')      { updateEstado(data.id, '✔✔ leído'); return; }
@@ -5291,6 +5408,13 @@ function handleMessage(data) {
     }
     if (data.type === 'chat_archived') {
         _onChatArchivado(data.conversationId, data.archived);
+        return;
+    }
+    if (data.type === 'group_read') {
+        // Alguien leyó un mensaje de grupo — registrar y actualizar tick
+        if (data.id && data.by) {
+            _registrarGrupoLectura(data.id, data.by);
+        }
         return;
     }
     if (data.type === 'audio_read') {
@@ -6116,6 +6240,11 @@ function addMessage(msg) {
 
     chat.appendChild(row);
     _attachBubbleClickMenu(row, msg.id, isMe, isDeleted, isGroup);
+    // Previsualización de enlace en mensajes de texto
+    if (!isDeleted && !msg.imageData && !msg.audioData && msg.message) {
+        const bubble = row.querySelector('.bubble');
+        if (bubble) _adjuntarLinkPreview(bubble, msg.message);
+    }
     if (autoScroll) scrollChat();
     if (!isMe && socket && !isDeleted) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
 }
@@ -6533,6 +6662,9 @@ async function iniciarGrabacion() {
     document.getElementById('btnMic').textContent = '⏹️';
     document.getElementById('btnMic').style.background = '#fecaca';
 
+    // Notificar al destinatario que estamos grabando
+    _enviarEstadoGrabacion('start');
+
     recSeconds = 0;
     actualizarRecTimer();
     recTimerInterval = setInterval(() => {
@@ -6548,6 +6680,8 @@ function detenerGrabacion() {
     mediaRecorder.stop();
     isRecording = false;
     clearInterval(recTimerInterval);
+    // Notificar que dejamos de grabar
+    _enviarEstadoGrabacion('stop');
     // Detener animación de onda
     if (window._recWaveRAFRef) { cancelAnimationFrame(window._recWaveRAFRef.raf); window._recWaveRAFRef = null; }
     if (window._recAudioCtx)   { try { window._recAudioCtx.close(); } catch(_) {} window._recAudioCtx = null; }
@@ -6979,6 +7113,26 @@ function addGroupMessage(msg) {
 
     chat.appendChild(row);
     _attachBubbleClickMenu(row, msg.id, isMe, isDeleted, true);
+    // Previsualización de enlace en mensajes de grupo de texto
+    if (!isDeleted && !msg.imageData && !msg.audioData && msg.message) {
+        const bubble = row.querySelector('.bubble');
+        if (bubble) _adjuntarLinkPreview(bubble, msg.message);
+    }
+    // Botón de lectura granular (solo en mensajes propios no eliminados)
+    if (isMe && !isDeleted) {
+        const bubble = row.querySelector('.bubble');
+        if (bubble) {
+            const meta = bubble.querySelector('.meta');
+            if (meta) {
+                const readBtn = document.createElement('button');
+                readBtn.className = 'btn-group-read';
+                readBtn.title = 'Ver quién leyó';
+                readBtn.textContent = '✔';
+                readBtn.onclick = (e) => { e.stopPropagation(); mostrarLecturaGrupo(msg.id); };
+                meta.appendChild(readBtn);
+            }
+        }
+    }
     if (autoScroll) scrollChat();
 }
 
@@ -9646,6 +9800,244 @@ function mostrarConfirmLogout()  { document.getElementById('logoutConfirmBox').c
 function ocultarConfirmLogout()  { document.getElementById('logoutConfirmBox').classList.remove('open'); }
 function logoutConfirmado() { cerrarAjustes(); logout(); }
 
+// ============================================================
+// MODO OSCURO
+// ============================================================
+let _darkMode = false;
+
+function _initDarkMode() {
+    const saved = localStorage.getItem('kvs_dark_mode');
+    if (saved === '1') _darkMode = true;
+    else if (saved === '0') _darkMode = false;
+    else _darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    _aplicarDarkMode(false);
+}
+
+function toggleDarkMode() {
+    _darkMode = !_darkMode;
+    localStorage.setItem('kvs_dark_mode', _darkMode ? '1' : '0');
+    _aplicarDarkMode(true);
+}
+
+function _aplicarDarkMode(animate) {
+    if (animate) document.documentElement.style.transition = 'background .25s,color .25s';
+    document.documentElement.classList.toggle('dark', _darkMode);
+    if (animate) setTimeout(() => document.documentElement.style.transition = '', 300);
+    const icon  = document.getElementById('darkModeIcon');
+    const label = document.getElementById('darkModeLabel');
+    if (icon)  icon.textContent  = _darkMode ? '☀️' : '🌙';
+    if (label) label.textContent = _darkMode ? 'Modo claro' : 'Modo oscuro';
+}
+
+_initDarkMode();
+
+// ============================================================
+// SONIDOS PERSONALIZABLES
+// ============================================================
+const _SOUNDS = [
+    { id: 'default', label: '🎵 Clásico' },
+    { id: 'soft',    label: '🎶 Suave'   },
+    { id: 'ping',    label: '🔔 Ping'    },
+    { id: 'pop',     label: '🫧 Pop'     },
+];
+let _selectedSound = localStorage.getItem('kvs_notif_sound') || 'default';
+
+function _playSound(id) {
+    try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain();
+        gain.connect(ctx.destination);
+        if (id === 'soft') {
+            const osc = ctx.createOscillator();
+            osc.connect(gain); osc.type = 'sine';
+            osc.frequency.setValueAtTime(520, ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(620, ctx.currentTime + 0.08);
+            osc.frequency.linearRampToValueAtTime(520, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+            osc.start(); osc.stop(ctx.currentTime + 0.45);
+        } else if (id === 'ping') {
+            const osc = ctx.createOscillator();
+            osc.connect(gain); osc.type = 'triangle';
+            osc.frequency.setValueAtTime(1200, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.06);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+            osc.start(); osc.stop(ctx.currentTime + 0.28);
+        } else if (id === 'pop') {
+            const buf  = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.06), ctx.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let i = 0; i < data.length; i++) data[i] = (Math.random()*2-1)*(1-i/data.length);
+            const src  = ctx.createBufferSource();
+            src.buffer = buf;
+            const f = ctx.createBiquadFilter();
+            f.type = 'bandpass'; f.frequency.value = 1000;
+            src.connect(f); f.connect(gain);
+            gain.gain.setValueAtTime(0.4, ctx.currentTime);
+            src.start(); src.stop(ctx.currentTime + 0.06);
+        } else { // default
+            const osc = ctx.createOscillator();
+            osc.connect(gain); osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+            osc.start(); osc.stop(ctx.currentTime + 0.3);
+        }
+    } catch(_) {}
+}
+
+// Reemplazar playNotifSound con la versión personalizable
+function playNotifSound() { _playSound(_selectedSound); }
+
+function abrirSelectorSonido() {
+    const modal = document.getElementById('soundPickerModal');
+    const list  = document.getElementById('soundOptionsList');
+    if (!modal || !list) return;
+    list.innerHTML = '';
+    _SOUNDS.forEach(s => {
+        const btn = document.createElement('button');
+        btn.className = 'sound-option' + (s.id === _selectedSound ? ' active' : '');
+        btn.innerHTML = s.label + '<span class="sound-check">✓</span>';
+        btn.onclick = () => {
+            _selectedSound = s.id;
+            localStorage.setItem('kvs_notif_sound', s.id);
+            list.querySelectorAll('.sound-option').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _playSound(s.id);
+        };
+        list.appendChild(btn);
+    });
+    modal.style.display = 'flex';
+}
+function cerrarSelectorSonido() {
+    const m = document.getElementById('soundPickerModal');
+    if (m) m.style.display = 'none';
+}
+
+// ============================================================
+// INDICADOR "GRABANDO AUDIO"
+// ============================================================
+function _enviarEstadoGrabacion(status) {
+    if (!currentChat || currentChat.startsWith('group_') || currentChat.startsWith('phone:')) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'recording', to: currentChat, status }));
+}
+
+// ============================================================
+// PREVISUALIZACIÓN DE ENLACES
+// ============================================================
+const _linkCache = {}; // url → data | null
+
+function _firstURL(text) {
+    if (!text) return null;
+    const m = text.match(/https?:\/\/[^\s<>"']+/);
+    return m ? m[0] : null;
+}
+
+async function _fetchPreview(url) {
+    if (url in _linkCache) return _linkCache[url];
+    try {
+        const r = await fetch('/api/link-preview?url=' + encodeURIComponent(url));
+        const d = r.ok ? await r.json() : null;
+        _linkCache[url] = d;
+        return d;
+    } catch(_) { _linkCache[url] = null; return null; }
+}
+
+async function _adjuntarLinkPreview(bubble, text) {
+    const url = _firstURL(text);
+    if (!url) return;
+    if (bubble.querySelector('.link-preview-card')) return;
+    const prev = await _fetchPreview(url);
+    if (!prev || !prev.title) return;
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.className = 'link-preview-card';
+    let inner = '';
+    if (prev.image) inner += '<img class="link-preview-img" src="' + escapeHTML(prev.image) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
+    inner += '<div class="link-preview-body">';
+    inner += '<div class="link-preview-domain">' + escapeHTML(prev.domain || '') + '</div>';
+    inner += '<div class="link-preview-title">'  + escapeHTML(prev.title)        + '</div>';
+    if (prev.description) inner += '<div class="link-preview-desc">' + escapeHTML(prev.description) + '</div>';
+    inner += '</div>';
+    a.innerHTML = inner;
+    const meta = bubble.querySelector('.meta');
+    if (meta) meta.before(a); else bubble.appendChild(a);
+}
+
+// ============================================================
+// CONFIRMACIÓN DE LECTURA GRANULAR EN GRUPOS
+// ============================================================
+const _groupReadData = {}; // msgId → Set of usernames
+
+function _registrarGrupoLectura(msgId, reader) {
+    if (!_groupReadData[msgId]) _groupReadData[msgId] = new Set();
+    _groupReadData[msgId].add(reader);
+    // Actualizar el botón de tick en la burbuja del remitente
+    if (currentChat && currentChat.startsWith('group_')) {
+        const bubble = document.getElementById(msgId);
+        if (bubble) {
+            const readBtn = bubble.querySelector('.btn-group-read');
+            if (readBtn) {
+                const chatKey = currentChat;
+                const grp = myGroups.get(chatKey.replace('group_', ''));
+                const total = grp ? grp.members.length - 1 : 0; // -1 para excluir al remitente
+                const readCount = _groupReadData[msgId] ? _groupReadData[msgId].size : 0;
+                readBtn.textContent = readCount >= total ? '✔✔' : '✔';
+                readBtn.style.color = readCount >= total ? 'var(--online)' : 'rgba(255,255,255,0.6)';
+            }
+        }
+    }
+}
+
+function mostrarLecturaGrupo(msgId) {
+    const existing = document.getElementById('readReceiptPopover');
+    if (existing) {
+        if (existing.dataset.formsgid === msgId) { existing.remove(); return; }
+        existing.remove();
+    }
+    const row = document.querySelector('[data-msgid="' + msgId + '"]');
+    if (!row) return;
+    const bubbleWrap = row.querySelector('.bubble-wrap');
+    if (!bubbleWrap) return;
+    if (!currentChat || !currentChat.startsWith('group_')) return;
+    const grp = myGroups.get(currentChat.replace('group_', ''));
+    if (!grp) return;
+
+    const readBy  = _groupReadData[msgId] ? [..._groupReadData[msgId]].filter(u => u !== username) : [];
+    const allOthers = grp.members
+        .map(p => (window._phoneToUsername && window._phoneToUsername[p]) || null)
+        .filter(u => u && u !== username);
+    const pending = allOthers.filter(u => !readBy.includes(u));
+
+    const pop = document.createElement('div');
+    pop.className = 'read-receipt-popover';
+    pop.id = 'readReceiptPopover';
+    pop.dataset.formsgid = msgId;
+    pop.style.cssText = 'position:absolute;right:0;bottom:calc(100% + 6px);z-index:800;';
+
+    let html = '<div class="rr-title">Visto por</div>';
+    if (readBy.length) {
+        html += '<div class="rr-section"><div class="rr-label" style="color:var(--online)">✔✔ Leído (' + readBy.length + ')</div>';
+        html += '<div class="rr-names">' + readBy.map(u => escapeHTML(u)).join(', ') + '</div></div>';
+    }
+    if (pending.length) {
+        html += '<div class="rr-section"><div class="rr-label" style="color:var(--text-muted)">⏳ Pendiente (' + pending.length + ')</div>';
+        html += '<div class="rr-names">' + pending.map(u => escapeHTML(u)).join(', ') + '</div></div>';
+    }
+    if (!readBy.length && !pending.length) {
+        html += '<div style="color:var(--text-muted);font-size:12px;">Sin datos aún</div>';
+    }
+    pop.innerHTML = html;
+    bubbleWrap.style.position = 'relative';
+    bubbleWrap.appendChild(pop);
+    setTimeout(() => {
+        const close = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', close, true); } };
+        document.addEventListener('click', close, true);
+    }, 50);
+}
+
 
 </script>
 
@@ -9670,7 +10062,18 @@ function logoutConfirmado() { cerrarAjustes(); logout(); }
       <button class="btn-settings-action" onclick="cerrarAjustes();abrirModalAvatar()">
         <span class="action-icon">📷</span>
         <span>Cambiar foto de perfil</span>
-      </button><div class="settings-divider"></div>
+      </button>
+      <div class="settings-divider"></div>
+      <button class="btn-settings-action" onclick="toggleDarkMode()" id="btnDarkMode">
+        <span class="action-icon" id="darkModeIcon">🌙</span>
+        <span id="darkModeLabel">Modo oscuro</span>
+      </button>
+      <div class="settings-divider"></div>
+      <button class="btn-settings-action" onclick="cerrarAjustes();abrirSelectorSonido()">
+        <span class="action-icon">🔔</span>
+        <span>Tono de notificación</span>
+      </button>
+      <div class="settings-divider"></div>
       <button id="btnInstalarPWA" onclick="instalarPWA()">
         <span style="font-size:18px;">📲</span>
         <span>Instalar app en este dispositivo</span>
@@ -9691,5 +10094,17 @@ function logoutConfirmado() { cerrarAjustes(); logout(); }
   </div>
 </div>
 
+<!-- ── Modal selector de sonido ──────────────────────────────── -->
+<div id="soundPickerModal" style="display:none;position:fixed;inset:0;z-index:9600;align-items:center;justify-content:center;padding:16px;background:rgba(15,10,40,0.72);backdrop-filter:blur(6px);"
+     onclick="if(event.target===this)cerrarSelectorSonido()">
+  <div style="background:var(--white);border-radius:20px;padding:24px;max-width:340px;width:100%;box-shadow:var(--shadow-card);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;color:var(--text-dark);">🔔 Tono de notificación</h3>
+      <button onclick="cerrarSelectorSonido()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted);line-height:1;">×</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;" id="soundOptionsList"></div>
+    <button onclick="cerrarSelectorSonido()" style="margin-top:16px;width:100%;padding:10px;background:var(--bubble-me);color:white;border:none;border-radius:var(--radius-md);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Listo</button>
+  </div>
+</div>
 </body>
 </html>

@@ -217,6 +217,47 @@ app.get('/api/user/settings', async (req, res) => {
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+/* REST: previsualización de enlaces (Open Graph scraping)
+   GET /api/link-preview?url=https://...
+   Devuelve { title, description, image, domain } o error */
+app.get('/api/link-preview', async (req, res) => {
+    const { url } = req.query;
+    if (!url || !/^https?:\/\//.test(url)) {
+        return res.status(400).json({ error: 'url inválida' });
+    }
+    try {
+        // Timeout de 5 segundos para no bloquear
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5000);
+        const resp  = await fetch(url, {
+            signal:  ctrl.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; kiVooSpace/1.0; +https://kivoospace.app)' }
+        });
+        clearTimeout(timer);
+        const html = await resp.text();
+
+        // Extraer meta OG con regex (sin dependencia de parser HTML)
+        const getMeta = (prop) => {
+            const m = html.match(new RegExp('<meta[^>]+(?:property|name)=["']' + prop + '["'][^>]+content=["']([^"']*)["']', 'i'))
+                   || html.match(new RegExp('<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']' + prop + '["']', 'i'));
+            return m ? m[1].trim() : null;
+        };
+        const getTitle = () => {
+            const m = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+            return m ? m[1].trim() : null;
+        };
+
+        const title       = getMeta('og:title')       || getMeta('twitter:title')       || getTitle() || '';
+        const description = getMeta('og:description') || getMeta('twitter:description') || getMeta('description') || '';
+        const image       = getMeta('og:image')        || getMeta('twitter:image')        || '';
+        const domain      = new URL(url).hostname.replace(/^www\./, '');
+
+        res.json({ title: title.slice(0, 120), description: description.slice(0, 200), image, domain });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
 );
@@ -557,6 +598,25 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
+               GRABANDO AUDIO (1:1)
+               Mismo mecanismo que typing pero para
+               indicar que el usuario está grabando
+               un mensaje de voz.
+            ────────────────────────────────────── */
+            case 'recording': {
+                if (!data.to) break;
+                const recTarget = users.get(data.to);
+                if (recTarget && recTarget.readyState === WebSocket.OPEN) {
+                    recTarget.send(JSON.stringify({
+                        type:     'recording',
+                        username: ws.username,
+                        status:   data.status || 'start'
+                    }));
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
                CARGAR CONVERSACIÓN
                Acepta: with (username) o withPhone (teléfono)
             ────────────────────────────────────── */
@@ -595,12 +655,30 @@ wss.on('connection', (ws) => {
 
                 const msg = await Message.findOne({ id: data.id });
                 if (msg) {
-                    const senderWs = users.get(msg.from);
-                    if (senderWs) {
-                        senderWs.send(JSON.stringify({
-                            type: 'read',
-                            id:   data.id
-                        }));
+                    // Si es mensaje de grupo, notificar a todos los miembros con quién leyó
+                    if (msg.conversationId && msg.conversationId.startsWith('group_')) {
+                        const groupId = msg.conversationId.replace('group_', '');
+                        const grp = await Group.findOne({ groupId }).lean();
+                        if (grp) {
+                            const payload = JSON.stringify({
+                                type:     'group_read',
+                                id:       data.id,
+                                by:       ws.username,
+                                groupId
+                            });
+                            grp.members.forEach(memberPhone => {
+                                const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                                if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                                    try { memberWs.send(payload); } catch(_) {}
+                                }
+                            });
+                        }
+                    } else {
+                        // 1:1: notificar solo al remitente
+                        const senderWs = users.get(msg.from);
+                        if (senderWs) {
+                            senderWs.send(JSON.stringify({ type: 'read', id: data.id }));
+                        }
                     }
                 }
                 break;
