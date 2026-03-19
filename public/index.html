@@ -50,24 +50,18 @@ if ('serviceWorker' in navigator) {
         if (event.data && event.data.type === 'OPEN_CHAT') {
             const chatKey = event.data.chatKey;
             if (!chatKey || typeof chatKey !== 'string') return;
-            // Esperar a que la app esté lista antes de abrir el chat
-            const _tryOpen = () => {
-                if (chatKey.startsWith('group_')) {
-                    const groupId = chatKey.replace('group_', '');
-                    if (typeof seleccionarGrupo === 'function') seleccionarGrupo(groupId);
-                } else if (chatKey.startsWith('phone:')) {
-                    const phone = chatKey.replace('phone:', '');
-                    if (typeof seleccionarContactoOffline === 'function') seleccionarContactoOffline(phone);
-                } else {
-                    if (typeof seleccionarUsuario === 'function') seleccionarUsuario(chatKey);
+            // Guardar siempre como pendiente y usar el sistema reactivo,
+            // que espera a que contactos y grupos estén cargados antes de navegar
+            window._pendingOpenChat = chatKey;
+            // Si el socket ya está conectado y los datos ya cargaron, abrir de inmediato
+            if (typeof socket !== 'undefined' && socket && socket.readyState === 1
+                && typeof _contactosListos !== 'undefined' && _contactosListos
+                && typeof _gruposListos !== 'undefined' && _gruposListos) {
+                if (typeof _ejecutarAperturaChatPendiente === 'function') {
+                    _ejecutarAperturaChatPendiente();
                 }
-            };
-            // Si el socket ya está conectado, abrir directamente; si no, esperar
-            if (typeof socket !== 'undefined' && socket && socket.readyState === 1) {
-                _tryOpen();
-            } else {
-                window._pendingOpenChat = chatKey;
             }
+            // Si no, _abrirChatPendienteDesdeNotif se llamará cuando terminen cargarContactos/cargarGrupos
         }
     });
 }
@@ -4052,6 +4046,11 @@ function _limpiarEstadoGlobal() {
 
     // Limpiar ediciones pendientes
     window._pendingEdits = {};
+
+    // Resetear flags de carga de contactos/grupos (necesario para la apertura
+    // reactiva de chat al volver desde una notificación push)
+    _contactosListos = false;
+    _gruposListos    = false;
 }
 
 function logout() {
@@ -4227,6 +4226,101 @@ function mostrarNotificacion(from, text) {
     }
 }
 
+/* ── Abrir chat pendiente al volver desde una notificación push ──────────────
+   Se llama después de que cargarContactos() y cargarGrupos() terminen.
+   Espera hasta que ambas listas estén listas (máximo 5s) antes de navegar.
+────────────────────────────────────────────────────────────────────────────── */
+let _contactosListos = false;
+let _gruposListos    = false;
+
+function _abrirChatPendienteDesdeNotif() {
+    if (!window._pendingOpenChat) return;
+    // Si ya están listos ambos, abrir directamente
+    if (_contactosListos && _gruposListos) {
+        _ejecutarAperturaChatPendiente();
+        return;
+    }
+    // Si no, esperar polling con timeout de seguridad de 5s
+    let intentos = 0;
+    const intervalo = setInterval(() => {
+        intentos++;
+        if ((_contactosListos && _gruposListos) || intentos >= 50) {
+            clearInterval(intervalo);
+            if (window._pendingOpenChat) _ejecutarAperturaChatPendiente();
+        }
+    }, 100);
+}
+
+function _ejecutarAperturaChatPendiente() {
+    const chatToOpen = window._pendingOpenChat;
+    window._pendingOpenChat = null;
+    if (!chatToOpen) return;
+
+    if (chatToOpen.startsWith('group_')) {
+        const gid = chatToOpen.replace('group_', '');
+        if (typeof seleccionarGrupo === 'function') seleccionarGrupo(gid);
+    } else if (chatToOpen.startsWith('phone:')) {
+        const ph = chatToOpen.replace('phone:', '');
+        if (typeof seleccionarContactoOffline === 'function') seleccionarContactoOffline(ph);
+    } else {
+        // chatToOpen es un username — intentar abrir como online; si no, buscar por phone
+        if (typeof seleccionarUsuario === 'function') {
+            seleccionarUsuario(chatToOpen);
+        }
+    }
+    // Cerrar también las notificaciones al abrir
+    _cerrarNotificacionesDeChat(chatToOpen);
+}
+
+/* ── Cerrar notificaciones de la bandeja al entrar a un chat ──────────────────
+   chatKey puede ser:
+     - username        → tag msg_username  (chat 1:1 con usuario online)
+     - phone:+34XXX    → tag msg_+34XXX o msg_username (contacto offline)
+     - group_XXXX      → tag grp_XXXX
+   Envía un mensaje al SW para que cierre las notificaciones con ese tag.
+   También usa la API directa del registro si está disponible.
+────────────────────────────────────────────────────────────────────────────── */
+function _cerrarNotificacionesDeChat(chatKey) {
+    if (!chatKey) return;
+    if (!('serviceWorker' in navigator)) return;
+
+    // Calcular el tag que usó el servidor para este chat
+    let tag = null;
+    if (chatKey.startsWith('group_')) {
+        tag = 'grp_' + chatKey.replace('group_', '');
+    } else if (chatKey.startsWith('phone:')) {
+        // Para contactos offline el tag puede ser msg_+34XXX o msg_username
+        // Cerramos ambos: primero por phone, luego por username si lo conocemos
+        const phone = chatKey.replace('phone:', '');
+        _enviarClearNotif('msg_' + phone);
+        if (window._phoneToUsername && window._phoneToUsername[phone]) {
+            _enviarClearNotif('msg_' + window._phoneToUsername[phone]);
+        }
+        return;
+    } else {
+        tag = 'msg_' + chatKey;
+        // También cerrar por phone por si la notificación se generó con ese tag
+        if (window._phoneToUsername) {
+            const phone = Object.entries(window._phoneToUsername).find(([,un]) => un === chatKey)?.[0];
+            if (phone) _enviarClearNotif('msg_' + phone);
+        }
+    }
+    if (tag) _enviarClearNotif(tag);
+}
+
+function _enviarClearNotif(tag) {
+    // Método 1: pedir al SW via postMessage que cierre las notificaciones
+    if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_NOTIFICATIONS', tag });
+    }
+    // Método 2: usar la API del registro directamente (disponible en algunos navegadores)
+    if (_swRegistration && _swRegistration.getNotifications) {
+        _swRegistration.getNotifications({ tag })
+            .then(notifs => notifs.forEach(n => n.close()))
+            .catch(() => {});
+    }
+}
+
 // ============================================================
 // ESTADO GLOBAL
 // ============================================================
@@ -4346,20 +4440,9 @@ function conectarWS() {
         _suscribirAPush().catch(() => {});
 
         // Si venimos de una notificación push con chat pendiente, abrirlo
+        // en cuanto hayan cargado los contactos/grupos (sin timeout fijo)
         if (window._pendingOpenChat) {
-            const _chatToOpen = window._pendingOpenChat;
-            window._pendingOpenChat = null;
-            setTimeout(() => {
-                if (_chatToOpen.startsWith('group_')) {
-                    const gid = _chatToOpen.replace('group_', '');
-                    if (typeof seleccionarGrupo === 'function') seleccionarGrupo(gid);
-                } else if (_chatToOpen.startsWith('phone:')) {
-                    const ph = _chatToOpen.replace('phone:', '');
-                    if (typeof seleccionarContactoOffline === 'function') seleccionarContactoOffline(ph);
-                } else {
-                    if (typeof seleccionarUsuario === 'function') seleccionarUsuario(_chatToOpen);
-                }
-            }, 800); // dar tiempo a que carguen contactos y grupos
+            _abrirChatPendienteDesdeNotif();
         }
     };
 
@@ -5154,6 +5237,8 @@ function seleccionarUsuario(user) {
             unreadCounts[phoneKey] = 0;
         }
     }
+    // Cerrar notificaciones de la bandeja del sistema para este chat
+    _cerrarNotificacionesDeChat(user);
     chat.innerHTML = '';
 
     // Check if this user is a contact and get custom name
@@ -5233,6 +5318,8 @@ function seleccionarContactoOffline(phone) {
     if (window._phoneToUsername && window._phoneToUsername[phone]) {
         unreadCounts[window._phoneToUsername[phone]] = 0;
     }
+    // Cerrar notificaciones de la bandeja del sistema para este chat
+    _cerrarNotificacionesDeChat(chatKey);
     chat.innerHTML = '';
 
     const contact = myContacts.get(phone);
@@ -6273,8 +6360,12 @@ async function cargarGrupos() {
             });
         });
         renderGroupsList();
+        // Marcar grupos como listos y abrir chat pendiente si procede
+        _gruposListos = true;
+        if (window._pendingOpenChat) _abrirChatPendienteDesdeNotif();
     } catch(e) {
         console.error('Error cargando grupos:', e);
+        _gruposListos = true; // marcar igualmente para no bloquear el flujo
     }
 }
 
@@ -6332,6 +6423,8 @@ function seleccionarGrupo(groupId) {
     _limpiarEstadoChat();
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
+    // Cerrar notificaciones de la bandeja del sistema para este grupo
+    _cerrarNotificacionesDeChat(chatKey);
     chat.innerHTML = '';
 
     document.getElementById('chatName').textContent = '👥 ' + g.name;
@@ -6895,8 +6988,12 @@ async function cargarContactos() {
             }
         });
         renderContactsList();
+        // Marcar contactos como listos y abrir chat pendiente si procede
+        _contactosListos = true;
+        if (window._pendingOpenChat) _abrirChatPendienteDesdeNotif();
     } catch(e) {
         console.error('Error cargando contactos:', e);
+        _contactosListos = true; // marcar igualmente para no bloquear el flujo
     }
 }
 

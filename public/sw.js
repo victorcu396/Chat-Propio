@@ -3,7 +3,7 @@
    Estrategia: Network-first para HTML/JS, Cache-first para assets
 ============================================================ */
 
-const CACHE_NAME = 'kivoospace-v45';
+const CACHE_NAME = 'kivoospace-v46';
 
 // Archivos que se cachean al instalar la PWA
 const PRECACHE_ASSETS = [
@@ -85,6 +85,20 @@ self.addEventListener('fetch', (event) => {
       });
     })
   );
+});
+
+/* ── MESSAGE desde el cliente: cerrar notificaciones por tag ── */
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+
+  // El cliente pide cerrar todas las notificaciones de un tag concreto
+  if (event.data.type === 'CLEAR_NOTIFICATIONS') {
+    const tag = event.data.tag;
+    const promise = tag
+      ? self.registration.getNotifications({ tag }).then(notifs => notifs.forEach(n => n.close()))
+      : self.registration.getNotifications().then(notifs => notifs.forEach(n => n.close()));
+    event.waitUntil ? event.waitUntil(promise) : promise;
+  }
 });
 
 /* ── PUSH: recibir notificación del servidor y mostrarla ── */
