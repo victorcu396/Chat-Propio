@@ -4006,6 +4006,9 @@ function _limpiarEstadoGlobal() {
     _replyState = null;
     const replyBar = document.getElementById('replyBar');
     if (replyBar) replyBar.classList.remove('visible');
+
+    // Limpiar ediciones pendientes
+    window._pendingEdits = {};
 }
 
 function logout() {
@@ -4151,6 +4154,9 @@ function conectarWS() {
         conectado = true;
         reconnectInterval = 500; // reset
 
+        // Capturar si es sesión nueva ANTES de modificar el flag
+        const _fueNuevaSesion = _esSesionNueva;
+
         if (_esSesionNueva) {
             // ── Login fresco: limpiar TODO el estado del usuario anterior ──
             _limpiarEstadoGlobal();
@@ -4161,6 +4167,7 @@ function conectarWS() {
         }
 
         // Guardar el chat que estaba abierto para reabrirlo tras reconectar
+        // (solo relevante en reconexión; en login fresco _limpiarEstadoGlobal ya borró currentChat)
         const _chatAnterior = currentChat;
 
         socket.send(JSON.stringify({
@@ -4170,8 +4177,8 @@ function conectarWS() {
             avatar: myAvatarDataUrl
         }));
 
-        // Si había un chat abierto (solo en reconexión), recargar su historial
-        if (_chatAnterior && !_esSesionNueva) {
+        // Si había un chat abierto y es una RECONEXIÓN (no login fresco), recargar historial
+        if (_chatAnterior && !_fueNuevaSesion) {
             setTimeout(() => {
                 if (!currentChat || !socket || socket.readyState !== WebSocket.OPEN) return;
                 if (currentChat.startsWith('group_')) {
@@ -4574,13 +4581,29 @@ function handleMessage(data) {
                     const estadoEl = bubble ? bubble.querySelector(`#estado_${oldLocalId}`) : null;
                     if (estadoEl) estadoEl.id = `estado_${data.id}`;
                     // Actualizar el id en TODOS los arrays de conversations (alias incluidos)
+                    // y eliminar el duplicado del eco del servidor si ya fue añadido
                     for (const arr of Object.values(conversations)) {
-                        const m = arr.find(m => m.id === oldLocalId);
-                        if (m) { m.id = data.id; m.delivered = true; }
+                        const localIdx = arr.findIndex(m => m.id === oldLocalId);
+                        if (localIdx >= 0) {
+                            arr[localIdx].id = data.id;
+                            arr[localIdx].delivered = true;
+                            // Quitar duplicado: si el eco ya fue añadido con el id real, borrarlo
+                            const dupIdx = arr.findIndex((m, i) => i !== localIdx && m.id === data.id);
+                            if (dupIdx >= 0) arr.splice(dupIdx, 1);
+                        }
                     }
                     // Reasignar el menú contextual con el ID real
                     _attachBubbleClickMenu(matchedRow, data.id, true, false,
                         currentChat.startsWith('group_'));
+
+                    // Si había una edición pendiente para este mensaje local, enviarla ahora
+                    if (window._pendingEdits && window._pendingEdits[oldLocalId]) {
+                        const pendingText = window._pendingEdits[oldLocalId];
+                        delete window._pendingEdits[oldLocalId];
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify({ type: 'editMessage', id: data.id, newText: pendingText }));
+                        }
+                    }
                 } else {
                     addMessage(data);
                 }
@@ -5116,6 +5139,14 @@ function enviar() {
     // ── Mensaje de grupo ──────────────────────────────
     if (currentChat.startsWith('group_')) {
         const groupId = currentChat.replace('group_', '');
+        const grpChatKey = 'group_' + groupId;
+
+        // Helper: añade mensaje local al conversations[] del grupo
+        const _addLocalToGrpConversations = (localMsg) => {
+            if (!conversations[grpChatKey]) conversations[grpChatKey] = [];
+            conversations[grpChatKey].push(localMsg);
+        };
+
         if (_replyState && _replyState.id) {
             const replySnap = { ..._replyState };
             socket.send(JSON.stringify({
@@ -5125,7 +5156,7 @@ function enviar() {
                 imageData: pendingImage ? pendingImage.dataUrl : undefined,
                 replyToId: replySnap.id
             }));
-            addGroupMessage({
+            const localGrpReply = {
                 id: 'local_' + Date.now(),
                 from: username,
                 to: groupId,
@@ -5137,14 +5168,20 @@ function enviar() {
                 replyToId:   replySnap.id,
                 replyToFrom: replySnap.from === 'Tú' ? username : replySnap.from,
                 replyToText: replySnap.text
-            });
+            };
+            _addLocalToGrpConversations(localGrpReply);
+            addGroupMessage(localGrpReply);
             if (pendingImage) cancelarImagen();
             cancelarRespuesta();
         } else if (pendingImage) {
             socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text || '', imageData: pendingImage.dataUrl }));
+            const localGrpImg = { id: 'local_' + Date.now(), from: username, to: groupId, groupId, message: text || '', imageData: pendingImage.dataUrl, time: new Date(), avatar: myAvatarDataUrl };
+            _addLocalToGrpConversations(localGrpImg);
             cancelarImagen();
         } else {
             socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text }));
+            const localGrpMsg = { id: 'local_' + Date.now(), from: username, to: groupId, groupId, message: text, time: new Date(), avatar: myAvatarDataUrl };
+            _addLocalToGrpConversations(localGrpMsg);
         }
         input.value = '';
         input.style.height = 'auto';
@@ -5158,6 +5195,17 @@ function enviar() {
     const toPhone    = isOfflineChat ? currentChat.replace('phone:', '') : null;
     const toUsername = isOfflineChat ? null : currentChat;
 
+    // Helper: añade un mensaje local al array conversations[] para que
+    // iniciarEdicion() pueda encontrarlo antes de que llegue el eco del servidor.
+    const _addLocalToConversations = (localMsg) => {
+        const ck = toUsername || ('phone:' + toPhone);
+        if (!conversations[ck]) conversations[ck] = [];
+        conversations[ck].push(localMsg);
+        if (toUsername && ck !== toUsername) {
+            if (!conversations[toUsername]) conversations[toUsername] = conversations[ck];
+        }
+    };
+
     if (_replyState && _replyState.id) {
         const replySnap = { ..._replyState };
         socket.send(JSON.stringify({
@@ -5167,7 +5215,7 @@ function enviar() {
             imageData: pendingImage ? pendingImage.dataUrl : undefined,
             replyToId: replySnap.id
         }));
-        addMessage({
+        const localReply = {
             id: 'local_' + Date.now(),
             from: username,
             to: toUsername || null,
@@ -5179,7 +5227,9 @@ function enviar() {
             replyToId:   replySnap.id,
             replyToFrom: replySnap.from === 'Tú' ? username : replySnap.from,
             replyToText: replySnap.text
-        });
+        };
+        _addLocalToConversations(localReply);
+        addMessage(localReply);
         if (pendingImage) cancelarImagen();
         cancelarRespuesta();
     } else if (pendingImage) {
@@ -5189,7 +5239,9 @@ function enviar() {
             message: text || '',
             imageData: pendingImage.dataUrl
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text || '', time: new Date(), self: true, avatar: myAvatarDataUrl });
+        const localImg = { id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text || '', imageData: pendingImage.dataUrl, time: new Date(), self: true, avatar: myAvatarDataUrl };
+        _addLocalToConversations(localImg);
+        addMessage(localImg);
         cancelarImagen();
     } else {
         socket.send(JSON.stringify({
@@ -5197,7 +5249,9 @@ function enviar() {
             ...(toUsername ? { to: toUsername } : { toPhone }),
             message: text
         }));
-        addMessage({ id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, time: new Date(), self: true, avatar: myAvatarDataUrl });
+        const localMsg = { id: 'local_' + Date.now(), from: username, to: toUsername, toPhone, message: text, time: new Date(), self: true, avatar: myAvatarDataUrl };
+        _addLocalToConversations(localMsg);
+        addMessage(localMsg);
     }
 
     input.value = '';
@@ -6261,10 +6315,25 @@ function onGroupMessage(data) {
                 if (estadoEl) estadoEl.id = `estado_${data.id}`;
                 const convArr = conversations[chatKey];
                 if (convArr) {
-                    const m = convArr.find(m => m.id === oldLocalId);
-                    if (m) { m.id = data.id; m.delivered = true; }
+                    const localIdx = convArr.findIndex(m => m.id === oldLocalId);
+                    if (localIdx >= 0) {
+                        convArr[localIdx].id = data.id;
+                        convArr[localIdx].delivered = true;
+                        // Quitar duplicado del eco si ya fue añadido
+                        const dupIdx = convArr.findIndex((m, i) => i !== localIdx && m.id === data.id);
+                        if (dupIdx >= 0) convArr.splice(dupIdx, 1);
+                    }
                 }
                 _attachBubbleClickMenu(matchedRow, data.id, true, false, true);
+
+                // Si había una edición pendiente para este mensaje local, enviarla ahora
+                if (window._pendingEdits && window._pendingEdits[oldLocalId]) {
+                    const pendingText = window._pendingEdits[oldLocalId];
+                    delete window._pendingEdits[oldLocalId];
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'editMessage', id: data.id, newText: pendingText }));
+                    }
+                }
             } else {
                 addGroupMessage(data);
             }
@@ -7649,11 +7718,15 @@ function iniciarEdicion(msgId) {
         const m = arr.find(m => m.id === msgId);
         if (m && !m.deletedAt) { currentText = m.message || ''; break; }
     }
-    // Fallback al DOM si el mensaje no está en conversations aún (local reciente)
+    // Fallback robusto al DOM: clonar msg-text, quitar reply-preview/forward-label/meta
     if (!currentText) {
         const bubble = document.getElementById(msgId);
         const textEl = bubble ? bubble.querySelector('.msg-text') : null;
-        if (textEl) currentText = textEl.textContent.trim();
+        if (textEl) {
+            const cloned = textEl.cloneNode(true);
+            cloned.querySelectorAll('.reply-preview,.forward-label,.meta,.edited-label,.star-badge,.estado,.hora').forEach(el => el.remove());
+            currentText = cloned.textContent.trim();
+        }
     }
 
     // Cancelar cualquier respuesta pendiente sin borrar el input (lo ponemos nosotros)
@@ -7688,14 +7761,47 @@ function guardarEdicion() {
         return;
     }
 
-    socket.send(JSON.stringify({ type: 'editMessage', id: _editState.id, newText }));
+    const editId = _editState.id;
+
+    // Si el id todavía es local_ (eco aún no llegó), no enviamos la edición
+    // al servidor: actualizamos el texto local en conversations[] y en el DOM,
+    // y guardamos el nuevo texto para cuando llegue el id real.
+    if (editId.startsWith('local_')) {
+        // Actualizar texto en conversations[] (la fuente de verdad local)
+        for (const arr of Object.values(conversations)) {
+            const m = arr.find(m => m.id === editId);
+            if (m) { m.message = newText; m._pendingEdit = newText; break; }
+        }
+        // Actualizar DOM
+        const bubble = document.getElementById(editId);
+        if (bubble) {
+            const textEl = bubble.querySelector('.msg-text');
+            if (textEl) {
+                const replyPreview = textEl.querySelector('.reply-preview');
+                if (replyPreview) {
+                    textEl.innerHTML = '';
+                    textEl.appendChild(replyPreview);
+                    const span = document.createElement('span');
+                    span.innerHTML = escapeHTML(newText);
+                    textEl.appendChild(span);
+                } else {
+                    textEl.innerHTML = escapeHTML(newText);
+                }
+            }
+        }
+        // Marcar que cuando llegue el eco con el id real, hay que enviar una edición
+        window._pendingEdits = window._pendingEdits || {};
+        window._pendingEdits[editId] = newText;
+    } else {
+        socket.send(JSON.stringify({ type: 'editMessage', id: editId, newText }));
+    }
 
     // Reset limpio del estado
     _editState = null;
     _replyState = null;
     input.value = '';
     input.style.height = 'auto';
-    btnEnviar.onclick = enviar;  // restaurar al comportamiento por defecto (keydown Enter y onclick genérico)
+    btnEnviar.onclick = enviar;
     actualizarBtnEnviar();
     document.getElementById('replyBar').classList.remove('visible');
     document.getElementById('replyBarName').textContent = '';
