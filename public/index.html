@@ -3944,22 +3944,85 @@ function finishLogin() {
     // Cargar contactos guardados (después de que socket se conecte, lo llamamos desde onopen)
 }
 
-function logout() {
-    if (socket) { socket.close(); socket = null; }
-    localStorage.removeItem('kvs_session');
-    loginPhone = '';
-    loginUsername = '';
-    username = null;
-    document.getElementById('appContainer').style.display = 'none';
-    document.getElementById('loginModal').style.display = 'flex';
-    goToStep(1);
-    document.getElementById('phoneInput').value = '';
-    // Limpiar estado
+/* ── Limpia TODO el estado de la sesión actual ──────────────────
+   Se llama tanto en logout() como al inicio de un login fresco,
+   para asegurarse de que no quedan datos del usuario anterior.  */
+function _limpiarEstadoGlobal() {
+    // Estado de conversaciones y contadores
     Object.keys(conversations).forEach(k => delete conversations[k]);
     Object.keys(unreadCounts).forEach(k => delete unreadCounts[k]);
     Object.keys(lastMessages).forEach(k => delete lastMessages[k]);
+    Object.keys(userAvatars).forEach(k => delete userAvatars[k]);
+
+    // Maps de contactos y grupos
+    myContacts.clear();
+    myGroups.clear();
+
+    // Estado global de presencia
+    lastKnownUsers = [];
+    window._phoneToUsername = {};
+    window._awayUsers = new Set();
+    window._contactLastActivity = {};
+
+    // Chat abierto
     currentChat = null;
-    conectado = false;
+
+    // Limpiar DOM del chat
+    const chatEl = document.getElementById('chat');
+    if (chatEl) chatEl.innerHTML = '';
+    const chatNameEl = document.getElementById('chatName');
+    if (chatNameEl) chatNameEl.textContent = '';
+    const chatStatusEl = document.getElementById('chatStatus');
+    if (chatStatusEl) chatStatusEl.textContent = '';
+    const chatPhoneEl = document.getElementById('chatPhone');
+    if (chatPhoneEl) { chatPhoneEl.textContent = ''; chatPhoneEl.style.display = 'none'; }
+    const chatAvatarEl = document.getElementById('chatAvatar');
+    if (chatAvatarEl) chatAvatarEl.style.display = 'none';
+    const chatGroupAvatarEl = document.getElementById('chatGroupAvatar');
+    if (chatGroupAvatarEl) chatGroupAvatarEl.classList.remove('visible');
+
+    // Limpiar listas del sidebar
+    const contactsUl = document.getElementById('contactsList');
+    if (contactsUl) contactsUl.innerHTML = '';
+    const groupsUl = document.getElementById('groupsList');
+    if (groupsUl) groupsUl.innerHTML = '';
+    const usersUl = document.getElementById('users');
+    if (usersUl) usersUl.innerHTML = '';
+
+    // Limpiar buscador de contactos
+    const searchInput = document.getElementById('contactSearch');
+    if (searchInput) searchInput.value = '';
+
+    // Limpiar badge del header de contactos
+    const headerBadge = document.getElementById('contactsHeaderBadge');
+    if (headerBadge) { headerBadge.textContent = ''; headerBadge.style.display = 'none'; }
+
+    // Cerrar menú contextual si estaba abierto
+    const ctxMenu = document.getElementById('msgCtxMenu');
+    if (ctxMenu) ctxMenu.remove();
+
+    // Cancelar estado de edición/respuesta
+    _editState  = null;
+    _replyState = null;
+    const replyBar = document.getElementById('replyBar');
+    if (replyBar) replyBar.classList.remove('visible');
+}
+
+function logout() {
+    if (socket) { socket.close(); socket = null; }
+    localStorage.removeItem('kvs_session');
+    loginPhone    = '';
+    loginUsername = '';
+    username      = null;
+    conectado     = false;
+    _esSesionNueva = true; // el próximo login debe limpiar el estado
+
+    _limpiarEstadoGlobal();
+
+    document.getElementById('appContainer').style.display = 'none';
+    document.getElementById('loginModal').style.display   = 'flex';
+    goToStep(1);
+    document.getElementById('phoneInput').value = '';
 }
 
 // ============================================================
@@ -4061,6 +4124,7 @@ btnEnviar.onclick = enviar;
 // WEBSOCKET
 // ============================================================
 let reconnectInterval = 500;
+let _esSesionNueva = true; // true en login fresco, false en reconexión automática
 let reconnectTimer = null;
 
 function conectarWS() {
@@ -4087,9 +4151,17 @@ function conectarWS() {
         conectado = true;
         reconnectInterval = 500; // reset
 
-        // Invalidar caché para que se recarguen mensajes recibidos offline
+        if (_esSesionNueva) {
+            // ── Login fresco: limpiar TODO el estado del usuario anterior ──
+            _limpiarEstadoGlobal();
+            _esSesionNueva = false; // próximas reconexiones no limpian
+        } else {
+            // ── Reconexión automática: solo invalidar caché de mensajes ──
+            Object.keys(conversations).forEach(k => delete conversations[k]);
+        }
+
+        // Guardar el chat que estaba abierto para reabrirlo tras reconectar
         const _chatAnterior = currentChat;
-        Object.keys(conversations).forEach(k => delete conversations[k]);
 
         socket.send(JSON.stringify({
             type: 'join',
@@ -4098,8 +4170,8 @@ function conectarWS() {
             avatar: myAvatarDataUrl
         }));
 
-        // Si había un chat abierto, recargar su historial tras reconectar
-        if (_chatAnterior) {
+        // Si había un chat abierto (solo en reconexión), recargar su historial
+        if (_chatAnterior && !_esSesionNueva) {
             setTimeout(() => {
                 if (!currentChat || !socket || socket.readyState !== WebSocket.OPEN) return;
                 if (currentChat.startsWith('group_')) {
@@ -4468,17 +4540,26 @@ function handleMessage(data) {
                 // cuando se envían varios mensajes rápido.
                 const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
                 let matchedRow = null;
-                // Intentar match por texto/imagen del mensaje
+                // Intentar match por texto/imagen del mensaje.
+                // IMPORTANTE: para mensajes con reply-preview, el textContent del msg-text
+                // incluye el texto citado. Clonamos el nodo y eliminamos el reply-preview
+                // antes de comparar, para que el match funcione en mensajes respondidos.
                 for (const lr of localRows) {
                     const bubble = lr.querySelector('.bubble');
                     if (!bubble) continue;
                     const textEl = bubble.querySelector('.msg-text');
                     const imgEl  = bubble.querySelector('.img-msg');
-                    const rowText = textEl ? textEl.textContent.trim() : '';
                     const rowHasImg = !!imgEl;
+                    // Extraer solo el texto propio (sin reply-preview ni forward-label)
+                    let rowText = '';
+                    if (textEl) {
+                        const cloned = textEl.cloneNode(true);
+                        cloned.querySelectorAll('.reply-preview,.forward-label').forEach(el => el.remove());
+                        rowText = cloned.textContent.trim();
+                    }
                     if (data.imageData && rowHasImg) { matchedRow = lr; break; }
-                    if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
                     if (data.audioData && bubble.querySelector('.audio-msg-wrap')) { matchedRow = lr; break; }
+                    if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
                 }
                 // Fallback: usar el último local_ si no encontramos match por contenido
                 if (!matchedRow && localRows.length > 0) {
@@ -6158,10 +6239,16 @@ function onGroupMessage(data) {
                 if (!bubble) continue;
                 const textEl = bubble.querySelector('.msg-text');
                 const imgEl  = bubble.querySelector('.img-msg');
-                const rowText = textEl ? textEl.textContent.trim() : '';
+                // Extraer texto propio sin reply-preview ni forward-label
+                let rowText = '';
+                if (textEl) {
+                    const cloned = textEl.cloneNode(true);
+                    cloned.querySelectorAll('.reply-preview,.forward-label').forEach(el => el.remove());
+                    rowText = cloned.textContent.trim();
+                }
                 if (data.imageData && imgEl) { matchedRow = lr; break; }
-                if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
                 if (data.audioData && bubble.querySelector('.audio-msg-wrap')) { matchedRow = lr; break; }
+                if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
             }
             if (!matchedRow && localRows.length > 0) matchedRow = localRows[localRows.length - 1];
 
