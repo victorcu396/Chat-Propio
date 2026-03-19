@@ -8945,18 +8945,31 @@ function toggleSearchBar() {
 }
 
 function _limpiarBusqueda() {
-    // Quitar todos los highlights del DOM
-    chat.querySelectorAll('.search-highlight').forEach(el => {
-        const parent = el.parentNode;
-        if (parent) {
-            parent.replaceChild(document.createTextNode(el.textContent), el);
-            parent.normalize();
-        }
-    });
-    chat.querySelectorAll('.msg-row').forEach(r => {
-        r.classList.remove('search-match');
-        r.classList.remove('search-current');
-    });
+    // Quitar todos los highlights del DOM de forma segura
+    try {
+        // Reemplazar cada <mark class="search-highlight"> con su texto
+        // Hacer una snapshot del array antes de iterar (el DOM cambia al reemplazar)
+        const marks = [...chat.querySelectorAll('.search-highlight')];
+        marks.forEach(el => {
+            try {
+                const parent = el.parentNode;
+                if (parent && parent.contains(el)) {
+                    parent.replaceChild(document.createTextNode(el.textContent), el);
+                }
+            } catch(_) {}
+        });
+        // Normalizar los nodos de texto fusionando adyacentes
+        chat.querySelectorAll('.msg-text').forEach(el => {
+            try { el.normalize(); } catch(_) {}
+        });
+        // Quitar clases de resultado
+        chat.querySelectorAll('.msg-row').forEach(r => {
+            r.classList.remove('search-match');
+            r.classList.remove('search-current');
+        });
+    } catch(err) {
+        console.warn('[search] Error en _limpiarBusqueda:', err);
+    }
     _searchMatches = [];
     _searchIdx = -1;
     const countEl = document.getElementById('chatSearchCount');
@@ -8967,31 +8980,45 @@ function _limpiarBusqueda() {
 function buscarEnChat(query) {
     _limpiarBusqueda();
 
-    const q = query.trim().toLowerCase();
+    const q = (query || '').trim().toLowerCase();
     if (!q) return;
 
     // Buscar en todas las burbujas de texto del chat visible
-    const rows = [...chat.querySelectorAll('.msg-row')];
-    rows.forEach(row => {
-        const bubble = row.querySelector('.bubble');
-        if (!bubble) return;
-        const textEl = bubble.querySelector('.msg-text');
-        if (!textEl) return;
-        // Extraer texto puro (sin reply-preview, forward-label, meta)
-        const cloned = textEl.cloneNode(true);
-        cloned.querySelectorAll('.reply-preview,.forward-label,.meta,.edited-label,.star-badge,.estado,.hora').forEach(el => el.remove());
-        const txt = cloned.textContent.toLowerCase();
-        if (!txt.includes(q)) return;
+    try {
+        const rows = [...chat.querySelectorAll('.msg-row')];
+        rows.forEach(row => {
+            try {
+                const bubble = row.querySelector('.bubble');
+                if (!bubble || bubble.classList.contains('deleted')) return;
+                const textEl = bubble.querySelector('.msg-text');
+                if (!textEl) return;
 
-        row.classList.add('search-match');
-        // Resaltar todas las ocurrencias en el nodo real
-        const marks = _highlightText(textEl, q);
-        marks.forEach(mark => _searchMatches.push({ row, mark }));
-    });
+                // Extraer texto puro clonando y quitando elementos decorativos
+                const cloned = textEl.cloneNode(true);
+                cloned.querySelectorAll(
+                    '.reply-preview,.forward-label,.meta,.edited-label,.star-badge,.estado,.hora,.mention-chip'
+                ).forEach(el => el.remove());
+                const txt = cloned.textContent.toLowerCase();
+                if (!txt.includes(q)) return;
+
+                row.classList.add('search-match');
+                // Resaltar en el DOM real — _highlightText no muta mientras itera
+                const marks = _highlightText(textEl, q);
+                marks.forEach(mark => _searchMatches.push({ row, mark }));
+            } catch (rowErr) {
+                // Si falla en una fila, continuar con las demás
+                console.warn('[search] Error en fila:', rowErr);
+            }
+        });
+    } catch(err) {
+        console.error('[search] Error general:', err);
+        _limpiarBusqueda();
+        return;
+    }
 
     const total = _searchMatches.length;
+    const countEl = document.getElementById('chatSearchCount');
     if (total === 0) {
-        const countEl = document.getElementById('chatSearchCount');
         if (countEl) countEl.textContent = 'Sin resultados';
         _actualizarBotonesNavBusqueda();
         return;
@@ -9054,62 +9081,74 @@ function _actualizarBotonesNavBusqueda() {
 }
 
 function _highlightText(el, query) {
-    // Recorre nodos de texto y envuelve cada match en <mark class="search-highlight">
-    // Devuelve array de todos los marks creados
+    // Recorre nodos de texto y envuelve cada ocurrencia de query en <mark>.
+    // IMPORTANTE: recoge TODOS los nodos de texto ANTES de mutar el DOM
+    // para evitar que el TreeWalker quede en estado inválido (causa el crash).
     const marks = [];
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-            if (node.parentElement.closest('.reply-preview,.forward-label,.meta,.search-highlight')) {
-                return NodeFilter.FILTER_REJECT;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-        }
-    });
-    const textNodes = [];
-    let node;
-    while ((node = walker.nextNode())) textNodes.push(node);
 
+    // Paso 1: recoger todos los nodos de texto relevantes sin tocar el DOM
+    const textNodes = [];
+    const stack = [el];
+    while (stack.length) {
+        const current = stack.pop();
+        // Recorrer hijos en orden inverso para que stack los procese en orden normal
+        for (let i = current.childNodes.length - 1; i >= 0; i--) {
+            const child = current.childNodes[i];
+            if (child.nodeType === Node.TEXT_NODE) {
+                // Ignorar nodos dentro de elementos excluidos
+                if (!child.parentElement.closest('.reply-preview,.forward-label,.meta,.search-highlight,.edited-label,.star-badge,.estado,.hora')) {
+                    textNodes.push(child);
+                }
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                // No entrar en elementos excluidos
+                const tag = child.nodeName.toLowerCase();
+                if (!child.classList.contains('reply-preview') &&
+                    !child.classList.contains('forward-label') &&
+                    !child.classList.contains('meta') &&
+                    !child.classList.contains('search-highlight') &&
+                    !child.classList.contains('edited-label') &&
+                    !child.classList.contains('star-badge') &&
+                    !child.classList.contains('estado') &&
+                    !child.classList.contains('hora')) {
+                    stack.push(child);
+                }
+            }
+        }
+    }
+
+    // Paso 2: para cada nodo de texto, reemplazarlo por fragmento con marks
     textNodes.forEach(tn => {
+        const parent = tn.parentNode;
+        if (!parent) return;
         const txt = tn.textContent;
         const lowerTxt = txt.toLowerCase();
-        let searchFrom = 0;
+        if (!lowerTxt.includes(query)) return;
+
+        // Construir un DocumentFragment que reemplaza el nodo de texto
+        const frag = document.createDocumentFragment();
+        let cursor = 0;
         let idx;
-        // Encontrar TODAS las ocurrencias en este nodo de texto
-        while ((idx = lowerTxt.indexOf(query, searchFrom)) >= 0) {
-            // Partir el nodo: [antes][match][después]
-            const beforeNode = document.createTextNode(txt.slice(searchFrom, idx));
+        while ((idx = lowerTxt.indexOf(query, cursor)) >= 0) {
+            // Texto antes del match
+            if (idx > cursor) {
+                frag.appendChild(document.createTextNode(txt.slice(cursor, idx)));
+            }
+            // El match envuelto en <mark>
             const mark = document.createElement('mark');
             mark.className = 'search-highlight';
             mark.textContent = txt.slice(idx, idx + query.length);
-            const afterText = txt.slice(idx + query.length);
-            const parent = tn.parentNode;
-            // Insertar antes del nodo actual
-            parent.insertBefore(beforeNode, tn);
-            parent.insertBefore(mark, tn);
+            frag.appendChild(mark);
             marks.push(mark);
-            // Actualizar el nodo de texto restante para continuar buscando
-            tn.textContent = afterText;
-            searchFrom = 0; // el nodo ahora es solo el afterText
-            // Actualizar lowerTxt para la próxima iteración
-            const newTxt = tn.textContent;
-            const newLower = newTxt.toLowerCase();
-            // Buscar en el nuevo texto restante
-            let nextIdx = newLower.indexOf(query, 0);
-            while (nextIdx >= 0) {
-                const b2 = document.createTextNode(newTxt.slice(0, nextIdx));
-                const m2 = document.createElement('mark');
-                m2.className = 'search-highlight';
-                m2.textContent = newTxt.slice(nextIdx, nextIdx + query.length);
-                const rest = newTxt.slice(nextIdx + query.length);
-                parent.insertBefore(b2, tn);
-                parent.insertBefore(m2, tn);
-                marks.push(m2);
-                tn.textContent = rest;
-                nextIdx = rest.toLowerCase().indexOf(query, 0);
-            }
-            break; // ya procesamos todo este nodo
+            cursor = idx + query.length;
         }
+        // Texto después del último match
+        if (cursor < txt.length) {
+            frag.appendChild(document.createTextNode(txt.slice(cursor)));
+        }
+        // Reemplazar el nodo de texto original con el fragmento
+        parent.replaceChild(frag, tn);
     });
+
     return marks;
 }
 
@@ -9119,15 +9158,23 @@ function _highlightText(el, query) {
 let _mentionQuery = '';
 let _mentionStart = -1;
 let _mentionSelectedIdx = 0;
+// _mentionItems: array de { displayName, username, isAll, avatar }
+let _mentionItems = [];
 
-function _onInputMention(e) {
-    if (!currentChat || !currentChat.startsWith('group_')) return;
+function _onInputMention() {
+    // Solo activo en chats de grupo
+    if (!currentChat || !currentChat.startsWith('group_')) {
+        _cerrarMentionList();
+        return;
+    }
     const val = input.value;
-    const pos = input.selectionStart;
-
-    // Detectar si estamos escribiendo @xxx
+    // Usar selectionStart con fallback a longitud del texto
+    const pos = (input.selectionStart != null) ? input.selectionStart : val.length;
     const before = val.slice(0, pos);
-    const match = before.match(/@([\wÀ-ſ]*)$/);
+
+    // Detectar patrón @texto desde el cursor hacia atrás
+    // Acepta @  solo (sin texto después) o @letras
+    const match = before.match(/@([^\s@]*)$/);
     if (match) {
         _mentionQuery = match[1].toLowerCase();
         _mentionStart = pos - match[0].length;
@@ -9138,59 +9185,121 @@ function _onInputMention(e) {
 }
 
 function _mostrarMentionList() {
-    const grp = myGroups.get(currentChat.replace('group_', ''));
-    if (!grp) return;
+    const groupId = currentChat.replace('group_', '');
+    const grp = myGroups.get(groupId);
+    if (!grp) { _cerrarMentionList(); return; }
 
-    const matches = grp.members
+    // Construir lista de candidatos: primero "todos", luego miembros
+    const candidates = [];
+
+    // Opción especial: mencionar a todos
+    const todoItem = { displayName: 'Todos', username: 'todos', isAll: true,
+        avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="#7c3aed"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="18" fill="white">👥</text></svg>') };
+
+    // Miembros del grupo (incluyendo al propio usuario para que pueda mencionarse en el historial)
+    const memberItems = grp.members
         .map(phone => {
-            const uname = window._phoneToUsername ? window._phoneToUsername[phone] : null;
+            const uname = (window._phoneToUsername && window._phoneToUsername[phone]) || null;
             const contact = myContacts.get(phone);
             const displayName = contact ? contact.customName : (uname || phone);
-            return { phone, username: uname, displayName };
+            const av = (uname && userAvatars[uname])
+                || (contact && contact.avatar)
+                || ('https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(displayName));
+            return { phone, username: uname, displayName, isAll: false, avatar: av };
         })
-        .filter(m => m.username && m.username !== username)
-        .filter(m => {
-            if (!_mentionQuery) return true;
-            return m.displayName.toLowerCase().includes(_mentionQuery) ||
-                   m.username.toLowerCase().includes(_mentionQuery);
-        });
+        .filter(m => m.username && m.username !== username); // excluir al propio usuario
+
+    // Filtrar por query
+    const q = _mentionQuery;
+    const filterFn = (m) => {
+        if (!q) return true;
+        if (m.isAll) return 'todos'.startsWith(q) || q === 'all';
+        return m.displayName.toLowerCase().includes(q) || m.username.toLowerCase().includes(q);
+    };
+
+    if (!q || 'todos'.startsWith(q) || q === 'all') candidates.push(todoItem);
+    memberItems.filter(filterFn).forEach(m => candidates.push(m));
 
     const list = document.getElementById('mentionList');
-    if (!matches.length) { _cerrarMentionList(); return; }
+    if (!candidates.length) { _cerrarMentionList(); return; }
 
+    _mentionItems = candidates;
     _mentionSelectedIdx = 0;
-    list.innerHTML =
-        '<div class="mention-header">Mencionar</div>' +
-        matches.map((m, i) => {
-            const av = userAvatars[m.username]
-                || ('https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(m.username));
-            const safeName = m.username.replace(/'/g, "\\'");
-            return '<div class="mention-item' + (i === 0 ? ' selected' : '') + '" data-idx="' + i + '" onclick="seleccionarMencion(\'' + safeName + '\')">'
-                + '<img src="' + av + '" alt="' + escapeHTML(m.displayName) + '">'
-                + '<div class="mention-item-info">'
-                + '<div class="mention-item-name">' + escapeHTML(m.displayName) + '</div>'
-                + '<div class="mention-item-handle">@' + escapeHTML(m.username) + '</div>'
-                + '</div></div>';
-        }).join('');
-    list._matches = matches;
+
+    // Construir HTML usando DOM (no template strings con quotes) para evitar escapes rotos
+    const frag = document.createDocumentFragment();
+
+    // Encabezado
+    const header = document.createElement('div');
+    header.className = 'mention-header';
+    header.textContent = 'Mencionar';
+    frag.appendChild(header);
+
+    candidates.forEach((m, i) => {
+        const item = document.createElement('div');
+        item.className = 'mention-item' + (i === 0 ? ' selected' : '');
+        item.dataset.idx = i;
+
+        const img = document.createElement('img');
+        img.src = m.avatar;
+        img.alt = m.displayName;
+        img.onerror = function() {
+            this.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(m.displayName);
+        };
+
+        const info = document.createElement('div');
+        info.className = 'mention-item-info';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'mention-item-name';
+        nameEl.textContent = m.displayName;
+
+        const handleEl = document.createElement('div');
+        handleEl.className = 'mention-item-handle';
+        handleEl.textContent = '@' + m.username;
+
+        info.appendChild(nameEl);
+        info.appendChild(handleEl);
+        item.appendChild(img);
+        item.appendChild(info);
+
+        // Guardar referencia al username en dataset para evitar problemas con quotes
+        item.dataset.username = m.username;
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            seleccionarMencion(this.dataset.username);
+        });
+
+        frag.appendChild(item);
+    });
+
+    list.innerHTML = '';
+    list.appendChild(frag);
     list.className = 'visible';
 }
 
 function _cerrarMentionList() {
     const list = document.getElementById('mentionList');
+    if (!list) return;
     list.className = '';
     list.innerHTML = '';
     _mentionQuery = '';
     _mentionStart = -1;
+    _mentionItems = [];
 }
 
 function seleccionarMencion(mentionUsername) {
+    if (!mentionUsername) return;
     const val = input.value;
-    const pos = input.selectionStart;
+    // Recalcular la posición del cursor en el momento de seleccionar
+    const pos = (input.selectionStart != null) ? input.selectionStart : val.length;
     const before = val.slice(0, _mentionStart);
-    const after  = val.slice(pos);
-    input.value = before + '@' + mentionUsername + ' ' + after;
-    input.selectionStart = input.selectionEnd = before.length + mentionUsername.length + 2;
+    // "after" comienza desde donde estaba el cursor (no desde _mentionStart)
+    const after = val.slice(pos);
+    const inserted = '@' + mentionUsername + '\u00a0'; // non-breaking space tras la mención
+    input.value = before + inserted + after;
+    const newCursor = before.length + inserted.length;
+    input.selectionStart = input.selectionEnd = newCursor;
     input.focus();
     actualizarBtnEnviar();
     _cerrarMentionList();
@@ -9198,7 +9307,7 @@ function seleccionarMencion(mentionUsername) {
 
 function _onKeydownMention(e) {
     const list = document.getElementById('mentionList');
-    if (!list.classList.contains('visible')) return;
+    if (!list || !list.classList.contains('visible')) return;
     const items = [...list.querySelectorAll('.mention-item')];
     if (!items.length) return;
 
@@ -9213,10 +9322,9 @@ function _onKeydownMention(e) {
         items.forEach((it, i) => it.classList.toggle('selected', i === _mentionSelectedIdx));
         items[_mentionSelectedIdx].scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter' || e.key === 'Tab') {
-        const matches = list._matches;
-        if (matches && matches[_mentionSelectedIdx]) {
+        if (_mentionItems.length > 0 && _mentionItems[_mentionSelectedIdx]) {
             e.preventDefault();
-            seleccionarMencion(matches[_mentionSelectedIdx].username);
+            seleccionarMencion(_mentionItems[_mentionSelectedIdx].username);
         }
     } else if (e.key === 'Escape') {
         e.preventDefault();
