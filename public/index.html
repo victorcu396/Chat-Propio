@@ -9294,18 +9294,31 @@ function _mostrarMentionList() {
     const todoItem = { displayName: 'Todos', username: 'todos', isAll: true, isTodos: true,
         avatar: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="#ef4444"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="18" fill="white">👥</text></svg>') };
 
-    // Miembros del grupo (incluyendo al propio usuario para que pueda mencionarse en el historial)
+    // Miembros del grupo — incluir a todos los miembros excepto al propio usuario.
+    // Si _phoneToUsername no tiene el phone todavía (miembro offline al cargar),
+    // usamos el username del contacto o un placeholder, para que siempre aparezcan.
     const memberItems = grp.members
         .map(phone => {
-            const uname = (window._phoneToUsername && window._phoneToUsername[phone]) || null;
+            // 1. Buscar username en el mapa de usuarios online
+            let uname = (window._phoneToUsername && window._phoneToUsername[phone]) || null;
+            // 2. Si no está en el mapa online, intentar obtenerlo del contacto (tiene .username del servidor)
             const contact = myContacts.get(phone);
-            const displayName = contact ? contact.customName : (uname || phone);
+            if (!uname && contact && contact.username) uname = contact.username;
+            // 3. Nombre a mostrar: nombre personalizado del contacto > username > teléfono
+            const displayName = (contact && contact.customName) || uname || phone;
+            // 4. Avatar: preferir el online, luego el del contacto, luego dicebear
             const av = (uname && userAvatars[uname])
                 || (contact && contact.avatar)
+                || userAvatars['__phone__' + phone]
                 || ('https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(displayName));
-            return { phone, username: uname, displayName, isAll: false, avatar: av };
+            // mentionValue = lo que se inserta al mencionar:
+            //   si tenemos username real → @username
+            //   si solo tenemos phone → @displayName (sin espacios)
+            const mentionValue = uname || displayName.replace(/\s+/g, '_');
+            return { phone, username: mentionValue, displayName, isAll: false, avatar: av };
         })
-        .filter(m => m.username && m.username !== username); // excluir al propio usuario
+        // Excluir solo al propio usuario (por phone O por username)
+        .filter(m => m.phone !== loginPhone && m.username !== username);
 
     // Filtrar por query
     const q = _mentionQuery;
