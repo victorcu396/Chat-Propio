@@ -238,8 +238,13 @@ app.get('/api/link-preview', async (req, res) => {
 
         // Extraer meta OG con regex (sin dependencia de parser HTML)
         const getMeta = (prop) => {
-            const m = html.match(new RegExp('<meta[^>]+(?:property|name)=["']' + prop + '["'][^>]+content=["']([^"']*)["']', 'i'))
-                   || html.match(new RegExp('<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']' + prop + '["']', 'i'));
+            // Usar string literals sin comillas simples en el patrón para evitar
+            // errores de sintaxis. El patrón acepta tanto comillas dobles como simples
+            // en los atributos HTML (escapadas como \x27 para la comilla simple).
+            const q = '[\x22\x27]'; // clase que acepta " o '
+            const val = '([^\x22\x27]*)';
+            const m = html.match(new RegExp('<meta[^>]+(?:property|name)=' + q + prop + q + '[^>]+content=' + q + val + q, 'i'))
+                   || html.match(new RegExp('<meta[^>]+content=' + q + val + q + '[^>]+(?:property|name)=' + q + prop + q, 'i'));
             return m ? m[1].trim() : null;
         };
         const getTitle = () => {
