@@ -57,7 +57,11 @@ app.get('/api/contacts', async (req, res) => {
             };
         }));
 
-        res.json(enriched);
+        // Incluir la lista de teléfonos bloqueados por este usuario
+        const ownerUser = await User.findOne({ phone }).lean();
+        const blockedPhones = ownerUser ? (ownerUser.blockedPhones || []) : [];
+
+        res.json({ contacts: enriched, blockedPhones });
     } catch(e) {
         res.status(500).json({ error: e.message });
     }
@@ -786,6 +790,41 @@ wss.on('connection', (ws) => {
                     }
                 } catch(e) {
                     console.error('blockContact error:', e.message);
+                }
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               DESBLOQUEAR CONTACTO
+               - Elimina el phone de blockedPhones del bloqueador
+               - Notifica al desbloqueado si está online
+            ────────────────────────────────────── */
+            case 'unblockContact': {
+                if (!data.contactPhone) break;
+                if (!ws.phone) break;
+
+                try {
+                    await User.updateOne(
+                        { phone: ws.phone },
+                        { $pull: { blockedPhones: data.contactPhone } }
+                    );
+
+                    ws.send(JSON.stringify({
+                        type: 'contactUnblocked',
+                        contactPhone: data.contactPhone
+                    }));
+
+                    // Notificar al desbloqueado si está online
+                    const unblockedWs = [...users.values()].find(u => u.phone === data.contactPhone);
+                    if (unblockedWs && unblockedWs.readyState === WebSocket.OPEN) {
+                        unblockedWs.send(JSON.stringify({
+                            type:       'youWereUnblocked',
+                            byPhone:    ws.phone,
+                            byUsername: ws.username
+                        }));
+                    }
+                } catch(e) {
+                    console.error('unblockContact error:', e.message);
                 }
                 break;
             }

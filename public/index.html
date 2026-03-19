@@ -3319,8 +3319,13 @@ html.is-mobile .contact-actions { display: flex; }
 
       <!-- Contacts Section -->
       <div class="users-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
-        <span>Contactos</span>
+        <span>Contactos <span id="contactsHeaderBadge" style="display:none;background:var(--purple-deep);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;vertical-align:middle;margin-left:4px;"></span></span>
         <button class="btn-add-contact" onclick="abrirModalAgregarContacto()" title="Agregar contacto">＋</button>
+      </div>
+      <div style="padding:4px 8px 2px;">
+        <input id="contactSearch" type="search" placeholder="🔍 Buscar contacto…"
+          style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
+          oninput="renderContactsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
       </div>
       <ul id="contactsList"></ul>
 
@@ -4447,6 +4452,15 @@ function handleMessage(data) {
         lastMessages[chatKey]   = preview;
         lastMessages[otherUser] = preview;
 
+        // Registrar actividad reciente del contacto para ordenación
+        if (data.from !== username) {
+            window._contactLastActivity = window._contactLastActivity || {};
+            if (window._phoneToUsername) {
+                const senderPhone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === data.from)?.[0];
+                if (senderPhone) window._contactLastActivity[senderPhone] = Date.now();
+            }
+        }
+
         if (currentChat === chatKey || currentChat === otherUser) {
             if (data.from === username) {
                 // Propio mensaje: buscar el bubble local_ que corresponde a ESTE mensaje
@@ -4595,26 +4609,45 @@ function handleMessage(data) {
         return;
     }
     if (data.type === 'contactBlocked') {
-        // El bloqueo fue exitoso: quitar el contacto de la lista local
-        myContacts.delete(data.contactPhone);
+        // El bloqueo fue exitoso: marcar el contacto como bloqueado (NO eliminarlo de la lista)
+        if (myContacts.has(data.contactPhone)) {
+            const c = myContacts.get(data.contactPhone);
+            c.blocked = true;
+            myContacts.set(data.contactPhone, c);
+        }
         renderContactsList();
         mostrarToast('Contacto bloqueado 🚫');
         return;
     }
-    if (data.type === 'youWereBlocked') {
-        // El otro usuario nos ha bloqueado: quitarle de nuestra lista y avisar
-        myContacts.delete(data.byPhone);
-        renderContactsList();
-        // Si tenemos ese chat abierto, cerrarlo para que no quede en un estado roto
-        const blockedUsername = data.byUsername;
-        if (currentChat === blockedUsername || currentChat === 'phone:' + data.byPhone) {
-            currentChat = null;
-            document.getElementById('chat').innerHTML = '';
-            document.getElementById('chatName').textContent = '';
-            document.getElementById('chatStatus').textContent = '';
-            document.getElementById('chatPhone').style.display = 'none';
-            document.getElementById('chatAvatar').style.display = 'none';
+    if (data.type === 'contactUnblocked') {
+        // Desbloqueo exitoso: quitar flag blocked
+        if (myContacts.has(data.contactPhone)) {
+            const c = myContacts.get(data.contactPhone);
+            c.blocked = false;
+            myContacts.set(data.contactPhone, c);
         }
+        renderContactsList();
+        mostrarToast('Contacto desbloqueado ✅');
+        return;
+    }
+    if (data.type === 'youWereUnblocked') {
+        // El otro usuario nos desbloqueó: quitar flag blockedUs
+        if (myContacts.has(data.byPhone)) {
+            const c = myContacts.get(data.byPhone);
+            c.blockedUs = false;
+            myContacts.set(data.byPhone, c);
+        }
+        renderContactsList();
+        return;
+    }
+    if (data.type === 'youWereBlocked') {
+        // El otro usuario nos ha bloqueado: marcarlo en nuestra lista como que nos bloqueó
+        if (myContacts.has(data.byPhone)) {
+            const c = myContacts.get(data.byPhone);
+            c.blockedUs = true;
+            myContacts.set(data.byPhone, c);
+        }
+        renderContactsList();
         mostrarToast('⚠️ ' + data.byUsername + ' te ha bloqueado', true);
         return;
     }
@@ -4832,6 +4865,14 @@ function seleccionarUsuario(user) {
     _limpiarEstadoChat();
     currentChat = user;
     unreadCounts[user] = 0;
+    // Limpiar también la clave phone: si existía
+    if (window._phoneToUsername) {
+        const phoneKey = Object.entries(window._phoneToUsername).find(([,un]) => un === user)?.[0];
+        if (phoneKey) {
+            unreadCounts['phone:' + phoneKey] = 0;
+            unreadCounts[phoneKey] = 0;
+        }
+    }
     chat.innerHTML = '';
 
     // Check if this user is a contact and get custom name
@@ -4906,6 +4947,11 @@ function seleccionarContactoOffline(phone) {
     _limpiarEstadoChat();
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
+    unreadCounts[phone] = 0;
+    // Limpiar también por username si lo conocemos
+    if (window._phoneToUsername && window._phoneToUsername[phone]) {
+        unreadCounts[window._phoneToUsername[phone]] = 0;
+    }
     chat.innerHTML = '';
 
     const contact = myContacts.get(phone);
@@ -6492,14 +6538,20 @@ let myContacts = new Map();
 async function cargarContactos() {
     try {
         const res = await fetch(`/api/contacts?phone=${encodeURIComponent(loginPhone)}`);
-        const list = await res.json();
+        const data = await res.json();
+        // El servidor devuelve { contacts, blockedPhones }
+        const list         = Array.isArray(data) ? data : (data.contacts || []);
+        const blockedSet   = new Set(Array.isArray(data) ? [] : (data.blockedPhones || []));
+
         myContacts = new Map();
         list.forEach(c => {
             myContacts.set(c.contactPhone, {
                 contactPhone: c.contactPhone,
                 customName:   c.customName,
                 avatar:       c.avatar   || null,
-                username:     c.username || null
+                username:     c.username || null,
+                blocked:      blockedSet.has(c.contactPhone) || false,
+                blockedUs:    false  // se actualiza en tiempo real vía WS
             });
             // Pre-popular el caché de avatares para que estén disponibles aunque
             // el usuario esté offline. La clave es tanto el username (si lo tenemos)
@@ -6525,24 +6577,39 @@ function renderContactsList() {
         return;
     }
 
-    const items = [...myContacts.values()].map(c => {
+    // Filtrar por búsqueda si hay texto en el buscador
+    const searchInput = document.getElementById('contactSearch');
+    const searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+    // Ordenar: primero los no leídos, luego por actividad reciente (último mensaje)
+    const sortedContacts = [...myContacts.values()].sort((a, b) => {
+        const onlineA = getOnlineUsernameByPhone(a.contactPhone);
+        const onlineB = getOnlineUsernameByPhone(b.contactPhone);
+        const ckA = onlineA || ('phone:' + a.contactPhone);
+        const ckB = onlineB || ('phone:' + b.contactPhone);
+        const unA = (unreadCounts[onlineA] || 0) + (unreadCounts[ckA] || 0);
+        const unB = (unreadCounts[onlineB] || 0) + (unreadCounts[ckB] || 0);
+        if (unA > 0 && unB === 0) return -1;
+        if (unB > 0 && unA === 0) return 1;
+        const actA = (window._contactLastActivity && window._contactLastActivity[a.contactPhone]) || 0;
+        const actB = (window._contactLastActivity && window._contactLastActivity[b.contactPhone]) || 0;
+        return actB - actA;
+    });
+
+    const items = sortedContacts
+      .filter(c => !searchTerm || c.customName.toLowerCase().includes(searchTerm))
+      .map(c => {
         const onlineUsername = getOnlineUsernameByPhone(c.contactPhone);
         const displayName = c.customName;
 
         // Prioridad del avatar:
-        // 1. Si está online: userAvatars[username] (el más actualizado, refleja cambios recientes)
-        // 2. Avatar cacheado al cargar contactos / al añadir (offline pero con foto en BD)
-        // 3. Avatar por phone cacheado
-        // 4. Fallback dicebear con el nombre real del usuario (username), no el customName
-        const cachedAvatar = c.avatar
-            || userAvatars['__phone__' + c.contactPhone]
-            || null;
-        const seedName = c.username || displayName; // usar username real para el seed dicebear
+        const cachedAvatar = c.avatar || userAvatars['__phone__' + c.contactPhone] || null;
+        const seedName = c.username || displayName;
         const avatarUrl = onlineUsername
             ? (userAvatars[onlineUsername] || cachedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`)
             : (cachedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`);
 
-        // Si el usuario acaba de conectarse y tiene avatar actualizado, sincronizar caché
+        // Sincronizar caché de avatar si está online
         if (onlineUsername && userAvatars[onlineUsername]) {
             userAvatars['__phone__' + c.contactPhone] = userAvatars[onlineUsername];
             if (c.avatar !== userAvatars[onlineUsername]) {
@@ -6551,6 +6618,45 @@ function renderContactsList() {
             }
         }
 
+        const escapedPhone = c.contactPhone.replace(/'/g, "\\'");
+        const escapedName  = displayName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+        // ── Contacto bloqueado por nosotros ──────────────────────────────
+        if (c.blocked) {
+            return `<li class="contact-blocked-row" data-phone="${escapedPhone}" style="opacity:0.55;cursor:default;">
+                <div class="user-avatar-wrap">
+                    <img class="user-avatar" src="${avatarUrl}" alt="${escapedName}" style="filter:grayscale(1);">
+                    <span class="status-dot contact-offline"></span>
+                </div>
+                <div class="user-info">
+                    <div class="user-name">${displayName}</div>
+                    <div class="user-preview" style="color:#ef4444;">🚫 Bloqueado</div>
+                </div>
+                <div class="contact-actions">
+                    <button class="btn-contact-edit" onclick="event.stopPropagation();abrirModalRenombrar('${escapedPhone}','${escapedName}')" title="Editar nombre">✏️</button>
+                    <button class="btn-contact-block" onclick="event.stopPropagation();confirmarDesbloquearContacto('${escapedPhone}','${escapedName}')" title="Desbloquear" style="color:#10b981;">✅</button>
+                </div>
+            </li>`;
+        }
+
+        // ── El contacto nos ha bloqueado ─────────────────────────────────
+        if (c.blockedUs) {
+            return `<li class="contact-blocked-row" data-phone="${escapedPhone}" style="opacity:0.55;cursor:default;">
+                <div class="user-avatar-wrap">
+                    <img class="user-avatar" src="${avatarUrl}" alt="${escapedName}" style="filter:grayscale(1);">
+                    <span class="status-dot contact-offline"></span>
+                </div>
+                <div class="user-info">
+                    <div class="user-name">${displayName}</div>
+                    <div class="user-preview" style="color:#f59e0b;">⛔ Te ha bloqueado</div>
+                </div>
+                <div class="contact-actions">
+                    <button class="btn-contact-edit" onclick="event.stopPropagation();abrirModalRenombrar('${escapedPhone}','${escapedName}')" title="Editar nombre">✏️</button>
+                </div>
+            </li>`;
+        }
+
+        // ── Contacto normal ──────────────────────────────────────────────
         const isAway   = onlineUsername && window._awayUsers && window._awayUsers.has(onlineUsername);
         const dotClass = onlineUsername
             ? (isAway ? 'status-dot away' : 'status-dot')
@@ -6558,17 +6664,16 @@ function renderContactsList() {
         const isActive = (onlineUsername && currentChat === onlineUsername)
             || (!onlineUsername && currentChat === 'phone:' + c.contactPhone)
             ? 'active' : '';
-        const escapedPhone = c.contactPhone.replace(/'/g, "\'");
-        const escapedName = displayName.replace(/'/g, "\'").replace(/"/g, '&quot;');
-        const preview = onlineUsername ? (lastMessages[onlineUsername] || '') : '';
-        const unread = onlineUsername ? (unreadCounts[onlineUsername] || 0) : 0;
-        const badge = unread ? `<span class="unread-badge">${unread}</span>` : '';
+        const chatKey = onlineUsername || ('phone:' + c.contactPhone);
+        const preview = lastMessages[onlineUsername] || lastMessages[chatKey] || '';
+        const unread  = (unreadCounts[onlineUsername] || 0) + (unreadCounts[chatKey] || 0);
+        const badge   = unread ? `<span class="unread-badge">${unread}</span>` : '';
         const clickFn = onlineUsername
             ? `seleccionarUsuario('${onlineUsername}')`
             : `seleccionarContactoOffline('${escapedPhone}')`;
         const statusPreview = onlineUsername
             ? (isAway ? '🌙 Ausente' : (preview || ''))
-            : '● Desconectado';
+            : (preview || '● Desconectado');
 
         return `<li class="${isActive}" onclick="${clickFn}" data-phone="${escapedPhone}">
             <div class="user-avatar-wrap">
@@ -6587,7 +6692,20 @@ function renderContactsList() {
         </li>`;
     });
 
-    ul.innerHTML = items.join('');
+    ul.innerHTML = items.join('') || '<li class="contacts-empty" style="list-style:none;cursor:default;padding:8px 10px;color:var(--text-muted);font-size:13px;">Sin resultados</li>';
+
+    // Actualizar badge numérico en el encabezado "Contactos"
+    const totalUnread = [...myContacts.values()].reduce((acc, c) => {
+        if (c.blocked || c.blockedUs) return acc;
+        const un = getOnlineUsernameByPhone(c.contactPhone);
+        const ck = un || ('phone:' + c.contactPhone);
+        return acc + (unreadCounts[un] || 0) + (unreadCounts[ck] || 0);
+    }, 0);
+    const headerBadge = document.getElementById('contactsHeaderBadge');
+    if (headerBadge) {
+        headerBadge.textContent = totalUnread > 0 ? totalUnread : '';
+        headerBadge.style.display = totalUnread > 0 ? 'inline-flex' : 'none';
+    }
 }
 
 /* Obtener el username online a partir del phone de un contacto */
@@ -6685,9 +6803,18 @@ function onContactRemoved(contactPhone) {
 }
 
 function confirmarBloquearContacto(phone, name) {
-    if (confirm(`¿Bloquear a "${name}"?\n\nSe eliminará de tu lista de contactos y recibirá un aviso de que le has bloqueado. No podrá enviarte mensajes ni llamarte.`)) {
+    if (confirm(`¿Bloquear a "${name}"?\n\nSeguirá en tu lista de contactos marcado como bloqueado y recibirá un aviso. No podrá enviarte mensajes ni llamarte.`)) {
         socket.send(JSON.stringify({
             type: 'blockContact',
+            contactPhone: phone
+        }));
+    }
+}
+
+function confirmarDesbloquearContacto(phone, name) {
+    if (confirm(`¿Desbloquear a "${name}"?\n\nVolverá a poder enviarte mensajes.`)) {
+        socket.send(JSON.stringify({
+            type: 'unblockContact',
             contactPhone: phone
         }));
     }
