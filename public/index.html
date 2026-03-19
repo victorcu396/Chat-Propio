@@ -4787,16 +4787,17 @@ function handleMessage(data) {
         window._awayUsers.clear();
         const list = data.online.map(u => {
             if (typeof u === 'object') {
-                userAvatars[u.username] = u.avatar;
-                if (u.phone) {
+                if (u.avatar && u.username) userAvatars[u.username] = u.avatar;
+                if (u.phone && u.username) {
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
                 }
-                if (u.isAway) window._awayUsers.add(u.username);
-                return u.username;
+                if (u.isAway && u.username) window._awayUsers.add(u.username);
+                return u.username || null;
             }
-            return u;
-        });
+            return u || null;
+        // Eliminar entradas nulas, vacías o que no sean strings válidos
+        }).filter(u => u && typeof u === 'string' && u.trim() !== '');
         lastKnownUsers = list;
         renderUsers(list);
         renderContactsList(); // actualizar estado online de contactos
@@ -5036,6 +5037,8 @@ function renderUsers(onlineList) {
 
     // Separar en contactos-online (ya se muestran en #contactsList) y desconocidos
     const onlineNotContact = onlineList.filter(u => {
+        // Descartar entradas inválidas (null, undefined, string vacío)
+        if (!u || typeof u !== 'string' || u.trim() === '') return false;
         // Nunca mostrar al propio usuario (triple comprobación para cubrir cualquier timing)
         if (u === username) return false;
         if (u === loginUsername) return false;

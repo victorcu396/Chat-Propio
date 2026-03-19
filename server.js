@@ -1757,12 +1757,15 @@ function sendMessage(message) {
 }
 
 function broadcastUsers() {
-    const onlineWithAvatars = [...users.entries()].map(([name, ws]) => ({
-        username: name,
-        avatar:   ws.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-        phone:    ws.phone || null,
-        isAway:   ws.isAway || false
-    }));
+    // Filtrar sockets que aún no han enviado 'join' (username vacío o nulo)
+    const onlineWithAvatars = [...users.entries()]
+        .filter(([name]) => name && typeof name === 'string' && name.trim() !== '')
+        .map(([name, ws]) => ({
+            username: name,
+            avatar:   ws.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+            phone:    ws.phone || null,
+            isAway:   ws.isAway || false
+        }));
     // Enviar a cada usuario la lista SIN él mismo incluido
     users.forEach((ws) => {
         if (ws.readyState !== 1 /* OPEN */) return;
