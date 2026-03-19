@@ -31,14 +31,57 @@
 
 <!-- Service Worker + PWA Install + Botón Atrás -->
 <script>
-// ── Registro del Service Worker ──────────────────────────────
+// ── Registro del Service Worker + suscripción Push ──────────
+let _swRegistration = null;   // referencia global al SW registrado
+let _pushSubscription = null; // suscripción push activa
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('[SW] Registrado:', reg.scope))
+            .then(reg => {
+                console.log('[SW] Registrado:', reg.scope);
+                _swRegistration = reg;
+            })
             .catch(err => console.warn('[SW] Error al registrar:', err));
     });
+
+    // Escuchar mensajes del SW (p.ej. OPEN_CHAT al tocar una notificación)
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'OPEN_CHAT') {
+            const chatKey = event.data.chatKey;
+            if (!chatKey || typeof chatKey !== 'string') return;
+            // Esperar a que la app esté lista antes de abrir el chat
+            const _tryOpen = () => {
+                if (chatKey.startsWith('group_')) {
+                    const groupId = chatKey.replace('group_', '');
+                    if (typeof seleccionarGrupo === 'function') seleccionarGrupo(groupId);
+                } else if (chatKey.startsWith('phone:')) {
+                    const phone = chatKey.replace('phone:', '');
+                    if (typeof seleccionarContactoOffline === 'function') seleccionarContactoOffline(phone);
+                } else {
+                    if (typeof seleccionarUsuario === 'function') seleccionarUsuario(chatKey);
+                }
+            };
+            // Si el socket ya está conectado, abrir directamente; si no, esperar
+            if (typeof socket !== 'undefined' && socket && socket.readyState === 1) {
+                _tryOpen();
+            } else {
+                window._pendingOpenChat = chatKey;
+            }
+        }
+    });
 }
+
+// Abrir chat pendiente si venimos de una notificación push (URL con ?openChat=)
+window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const openChat = params.get('openChat');
+    if (openChat) {
+        window._pendingOpenChat = openChat;
+        // Limpiar la URL sin recargar
+        history.replaceState({}, '', '/');
+    }
+});
 
 // ── Capturar evento de instalación PWA ───────────────────────
 let deferredInstallPrompt = null;
@@ -4012,6 +4055,9 @@ function _limpiarEstadoGlobal() {
 }
 
 function logout() {
+    // Cancelar suscripción push antes de borrar loginPhone (necesitamos el phone para el endpoint)
+    _cancelarSuscripcionPush().catch(() => {});
+
     if (socket) { socket.close(); socket = null; }
     localStorage.removeItem('kvs_session');
     loginPhone    = '';
@@ -4076,18 +4122,108 @@ function stopRingtone() {
 // ============================================================
 // NOTIFICACIONES DEL NAVEGADOR
 // ============================================================
-function pedirPermisoNotificaciones() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
+/* ── Solicitar permiso de notificaciones y suscribirse al push ── */
+async function pedirPermisoNotificaciones() {
+    if (!('Notification' in window)) return;
+
+    let permission = Notification.permission;
+    if (permission === 'default') {
+        permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') return;
+
+    // Suscribir al push si el SW está listo y hay pushManager
+    await _suscribirAPush();
+}
+
+async function _suscribirAPush() {
+    try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+        // Obtener el SW activo (esperar si aún está instalando)
+        const reg = _swRegistration
+            || await navigator.serviceWorker.ready;
+        if (!reg || !reg.pushManager) return;
+
+        // Comprobar si ya tenemos una suscripción activa
+        let sub = await reg.pushManager.getSubscription();
+
+        if (!sub) {
+            // Obtener la clave pública VAPID del servidor
+            const resp = await fetch('/api/push/vapid-public-key');
+            if (!resp.ok) return;
+            const { publicKey } = await resp.json();
+            if (!publicKey) return;
+
+            // Suscribir
+            sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: _urlBase64ToUint8Array(publicKey)
+            });
+        }
+
+        _pushSubscription = sub;
+
+        // Enviar la suscripción al servidor si tenemos loginPhone
+        if (loginPhone) {
+            await fetch('/api/push/subscribe', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ phone: loginPhone, subscription: sub.toJSON() })
+            });
+        }
+    } catch(e) {
+        console.warn('[PUSH] Error al suscribir:', e.message);
     }
 }
 
+/* ── Cancelar suscripción push al hacer logout ── */
+async function _cancelarSuscripcionPush() {
+    try {
+        if (_pushSubscription) {
+            const endpoint = _pushSubscription.endpoint;
+            if (loginPhone && endpoint) {
+                await fetch('/api/push/unsubscribe', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ phone: loginPhone, endpoint })
+                });
+            }
+            await _pushSubscription.unsubscribe();
+            _pushSubscription = null;
+        }
+    } catch(e) {
+        console.warn('[PUSH] Error al cancelar suscripción:', e.message);
+    }
+}
+
+/* ── Convertir clave base64url a Uint8Array (necesario para subscribe) ── */
+function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw     = window.atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+/* ── Notificación local (cuando la app está en primer plano) ── */
 function mostrarNotificacion(from, text) {
-    if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`💬 ${from}`, {
-            body: text.length > 60 ? text.slice(0, 60) + '…' : text,
-            icon: `https://api.dicebear.com/7.x/initials/svg?seed=${from}`
+    // Si la app está en primer plano no necesitamos push; usamos la API nativa
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const body = text && text.length > 80 ? text.slice(0, 80) + '…' : (text || '…');
+    // Usar el SW para mostrar la notificación si está disponible
+    // (esto permite que aparezca incluso en tabs en background del mismo navegador)
+    if (_swRegistration && _swRegistration.showNotification) {
+        _swRegistration.showNotification(`💬 ${from}`, {
+            body,
+            icon:    '/icon-192.png',
+            badge:   '/icon-192.png',
+            tag:     'msg_' + from,
+            renotify: true,
+            vibrate: [200, 100, 200],
+            data:    { chatKey: from }
         });
+    } else {
+        new Notification(`💬 ${from}`, { body, icon: '/icon-192.png' });
     }
 }
 
@@ -4205,6 +4341,26 @@ function conectarWS() {
 
         cargarContactos();
         cargarGrupos();
+
+        // Suscribir (o renovar suscripción) al push tras conectar
+        _suscribirAPush().catch(() => {});
+
+        // Si venimos de una notificación push con chat pendiente, abrirlo
+        if (window._pendingOpenChat) {
+            const _chatToOpen = window._pendingOpenChat;
+            window._pendingOpenChat = null;
+            setTimeout(() => {
+                if (_chatToOpen.startsWith('group_')) {
+                    const gid = _chatToOpen.replace('group_', '');
+                    if (typeof seleccionarGrupo === 'function') seleccionarGrupo(gid);
+                } else if (_chatToOpen.startsWith('phone:')) {
+                    const ph = _chatToOpen.replace('phone:', '');
+                    if (typeof seleccionarContactoOffline === 'function') seleccionarContactoOffline(ph);
+                } else {
+                    if (typeof seleccionarUsuario === 'function') seleccionarUsuario(_chatToOpen);
+                }
+            }, 800); // dar tiempo a que carguen contactos y grupos
+        }
     };
 
     socket.onmessage = (event) => {

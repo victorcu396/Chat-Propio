@@ -3,7 +3,7 @@
    Estrategia: Network-first para HTML/JS, Cache-first para assets
 ============================================================ */
 
-const CACHE_NAME = 'kivoospace-v43';
+const CACHE_NAME = 'kivoospace-v44';
 
 // Archivos que se cachean al instalar la PWA
 const PRECACHE_ASSETS = [
@@ -83,6 +83,60 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         return response;
       });
+    })
+  );
+});
+
+/* ── PUSH: recibir notificación del servidor y mostrarla ── */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch(e) {
+    data = { title: '💬 kiVooSpace', body: event.data ? event.data.text() : 'Nuevo mensaje' };
+  }
+
+  const title   = data.title  || '💬 kiVooSpace';
+  const options = {
+    body:             data.body    || 'Nuevo mensaje',
+    icon:             data.icon    || '/icon-192.png',
+    badge:            data.badge   || '/icon-192.png',
+    tag:              data.tag     || 'kvs-msg',
+    renotify:         data.renotify !== undefined ? data.renotify : true,
+    requireInteraction: false,
+    silent:           false,
+    data:             data.data    || {},
+    // Vibración en móvil: patrón corto estilo WhatsApp
+    vibrate:          [200, 100, 200]
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+/* ── NOTIFICATIONCLICK: al tocar la notificación, abrir/enfocar la app ── */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const chatKey = event.notification.data && event.notification.data.chatKey;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Si ya hay una ventana/pestaña de la app abierta, enfocarla
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.focus();
+          // Enviar mensaje al cliente para que abra el chat correspondiente
+          if (chatKey) {
+            client.postMessage({ type: 'OPEN_CHAT', chatKey });
+          }
+          return;
+        }
+      }
+      // Si no hay ventana abierta, abrir una nueva
+      const url = chatKey ? `/?openChat=${encodeURIComponent(chatKey)}` : '/';
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
     })
   );
 });

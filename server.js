@@ -9,6 +9,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
+const webpush = require('web-push');
 
 const Message = require('./models/Message');
 const User = require('./models/User');
@@ -24,6 +25,28 @@ const port = process.env.PORT || 8080;
 mongoose.connect(mongoURI)
     .then(() => console.log("MongoDB conectado"))
     .catch(err => console.error("MongoDB error:", err));
+
+/* ── Web Push: configurar VAPID ─────────────────────────────────────────────
+   Las claves VAPID se generan una sola vez y se guardan en variables de entorno.
+   Si no existen, se generan automáticamente (solo válidas hasta reiniciar el proceso;
+   para producción, genera unas fijas con: npx web-push generate-vapid-keys
+   y guárdalas en VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY en el .env / Render env vars).
+─────────────────────────────────────────────────────────────────────────────── */
+let VAPID_PUBLIC_KEY  = process.env.VAPID_PUBLIC_KEY;
+let VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    const vapidKeys = webpush.generateVAPIDKeys();
+    VAPID_PUBLIC_KEY  = vapidKeys.publicKey;
+    VAPID_PRIVATE_KEY = vapidKeys.privateKey;
+    console.warn('[PUSH] Claves VAPID generadas al vuelo. Define VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY en las variables de entorno para persistencia.');
+}
+
+webpush.setVapidDetails(
+    'mailto:' + (process.env.VAPID_MAILTO || 'admin@kivoospace.app'),
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+);
 
 // Aumentar límite para base64 de imágenes (hasta ~5 MB por imagen)
 const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
@@ -94,6 +117,88 @@ app.get('/api/user', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+/* REST: devolver la clave pública VAPID al cliente
+   GET /api/push/vapid-public-key */
+app.get('/api/push/vapid-public-key', (req, res) => {
+    res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+/* REST: guardar suscripción push del cliente
+   POST /api/push/subscribe
+   Body: { phone, subscription: { endpoint, keys: { p256dh, auth } } } */
+app.post('/api/push/subscribe', async (req, res) => {
+    const { phone, subscription } = req.body;
+    if (!phone || !subscription || !subscription.endpoint) {
+        return res.status(400).json({ error: 'phone y subscription requeridos' });
+    }
+    try {
+        const user = await User.findOne({ phone });
+        if (!user) return res.status(404).json({ error: 'usuario no encontrado' });
+
+        // Evitar duplicados: comparar por endpoint
+        const exists = (user.pushSubscriptions || []).some(s => s.endpoint === subscription.endpoint);
+        if (!exists) {
+            user.pushSubscriptions = user.pushSubscriptions || [];
+            user.pushSubscriptions.push(subscription);
+            await user.save();
+        }
+        res.json({ ok: true });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/* REST: eliminar suscripción push (p.ej. al hacer logout)
+   POST /api/push/unsubscribe
+   Body: { phone, endpoint } */
+app.post('/api/push/unsubscribe', async (req, res) => {
+    const { phone, endpoint } = req.body;
+    if (!phone || !endpoint) return res.status(400).json({ error: 'phone y endpoint requeridos' });
+    try {
+        const user = await User.findOne({ phone });
+        if (user) {
+            user.pushSubscriptions = (user.pushSubscriptions || []).filter(s => s.endpoint !== endpoint);
+            await user.save();
+        }
+        res.json({ ok: true });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/* ── Helper: enviar notificación push a un usuario por phone ─────────────────
+   Si el usuario tiene múltiples suscripciones (varios dispositivos), envía a todas.
+   Elimina las suscripciones caducadas (410 Gone) automáticamente.
+─────────────────────────────────────────────────────────────────────────────── */
+async function enviarPushAPhone(phone, payload) {
+    try {
+        const user = await User.findOne({ phone }).lean();
+        if (!user || !user.pushSubscriptions || user.pushSubscriptions.length === 0) return;
+
+        const staleEndpoints = [];
+        await Promise.all(user.pushSubscriptions.map(async (sub) => {
+            try {
+                await webpush.sendNotification(sub, JSON.stringify(payload));
+            } catch(err) {
+                // 410 = suscripción caducada; 404 = no existe → limpiar
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                    staleEndpoints.push(sub.endpoint);
+                }
+            }
+        }));
+
+        // Limpiar suscripciones caducadas
+        if (staleEndpoints.length > 0) {
+            await User.updateOne(
+                { phone },
+                { $pull: { pushSubscriptions: { endpoint: { $in: staleEndpoints } } } }
+            );
+        }
+    } catch(e) {
+        console.error('[PUSH] enviarPushAPhone error:', e.message);
+    }
+}
 
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
@@ -869,10 +974,38 @@ wss.on('connection', (ws) => {
                     groupId:   data.groupId,
                     groupName: grpMsg.name
                 });
+                const grpPreviewText = gmMessage.imageData ? '📷 Imagen'
+                    : gmMessage.audioData ? '🎙️ Audio'
+                    : (gmMessage.message || '').slice(0, 80);
+
                 grpMsg.members.forEach(memberPhone => {
+                    if (memberPhone === ws.phone) return; // no notificar al remitente
                     const memberWs = [...users.values()].find(u => u.phone === memberPhone);
                     if (memberWs && memberWs.readyState === WebSocket.OPEN) {
                         memberWs.send(gmPayload);
+                        // Si está en background, también push
+                        if (memberWs.isAway) {
+                            enviarPushAPhone(memberPhone, {
+                                title: `👥 ${grpMsg.name}`,
+                                body:  `${ws.username}: ${grpPreviewText || '…'}`,
+                                icon:  '/icon-192.png',
+                                badge: '/icon-192.png',
+                                tag:   'grp_' + data.groupId,
+                                renotify: true,
+                                data:  { groupId: data.groupId, chatKey: 'group_' + data.groupId }
+                            });
+                        }
+                    } else {
+                        // Offline: enviar push
+                        enviarPushAPhone(memberPhone, {
+                            title: `👥 ${grpMsg.name}`,
+                            body:  `${ws.username}: ${grpPreviewText || '…'}`,
+                            icon:  '/icon-192.png',
+                            badge: '/icon-192.png',
+                            tag:   'grp_' + data.groupId,
+                            renotify: true,
+                            data:  { groupId: data.groupId, chatKey: 'group_' + data.groupId }
+                        });
                     }
                 });
                 break;
@@ -1588,8 +1721,39 @@ function sendMessage(message) {
         if (senderWs && senderWs.readyState === WebSocket.OPEN) {
             senderWs.send(JSON.stringify({ type: 'delivered', id: message.id }));
         }
+        // Si el destinatario está online pero en background (isAway), enviar push también
+        if (targetWs.isAway && targetWs.phone) {
+            const previewText = message.imageData ? '📷 Imagen'
+                : message.audioData ? '🎙️ Audio'
+                : (message.message || '').slice(0, 80);
+            enviarPushAPhone(targetWs.phone, {
+                title: `💬 ${message.from}`,
+                body:  previewText || '…',
+                icon:  '/icon-192.png',
+                badge: '/icon-192.png',
+                tag:   'msg_' + message.from,
+                data:  { from: message.from, chatKey: message.from }
+            });
+        }
+    } else if (!targetWs || targetWs.readyState !== WebSocket.OPEN) {
+        // Si offline: el mensaje queda en BD con delivered:false
+        // Enviar notificación push para que le llegue aunque tenga la app cerrada
+        User.findOne({ username: message.to }).lean().then(recipientUser => {
+            if (!recipientUser || !recipientUser.phone) return;
+            const previewText = message.imageData ? '📷 Imagen'
+                : message.audioData ? '🎙️ Audio'
+                : (message.message || '').slice(0, 80);
+            enviarPushAPhone(recipientUser.phone, {
+                title: `💬 ${message.from}`,
+                body:  previewText || '…',
+                icon:  '/icon-192.png',
+                badge: '/icon-192.png',
+                tag:   'msg_' + message.from,
+                renotify: true,
+                data:  { from: message.from, chatKey: message.from }
+            });
+        }).catch(() => {});
     }
-    // Si offline: el mensaje queda en BD con delivered:false y se entrega al reconectar
 }
 
 function broadcastUsers() {

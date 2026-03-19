@@ -33,6 +33,12 @@ const UserSchema = new mongoose.Schema({
     blockedPhones: {
         type: [String],
         default: []
+    },
+
+    // Suscripciones Web Push (puede haber varias: móvil, PC, tablet...)
+    pushSubscriptions: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: []
     }
 
 });
