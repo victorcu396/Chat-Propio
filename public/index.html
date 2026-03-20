@@ -6404,7 +6404,6 @@ function _attachBubbleClickMenu(row, msgId, isMe, isDeleted, isGroup) {
     const handler = (e) => {
         // En modo selección: seleccionar en lugar de abrir menú
         if (chat.classList.contains('chat-in-select-mode')) {
-            // No abrir menú sobre mensajes eliminados en modo selección
             if (bubble.classList.contains('deleted')) return;
             e.stopPropagation();
             _toggleSeleccion(msgId, row);
@@ -6414,14 +6413,8 @@ function _attachBubbleClickMenu(row, msgId, isMe, isDeleted, isGroup) {
         if (e.target.closest('.msg-ctx-menu')) return;
         if (e.target.closest('.reply-preview')) return;
         e.stopPropagation();
-
-        // Leer estado ACTUAL del mensaje desde conversations y del DOM —
-        // no confiar en los parámetros capturados al momento de renderizar,
-        // porque el mensaje pudo haberse eliminado, editado, reenviado, etc. después.
-        const isBubbleDeleted = bubble.classList.contains('deleted');
-        let isMeNow = isMe; // isMe no cambia, el remitente es inmutable
-
-        abrirMenuMensaje(e, msgId, isMeNow, isBubbleDeleted, isGroup);
+        // Pasar isMe e isDeleted como señales — abrirMenuMensaje los recalcula del DOM internamente
+        abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup);
     };
 
     bubble._kvsMenuHandler = handler;
@@ -8954,6 +8947,13 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
     if (!row) return;
     const bubbleWrap = row.querySelector('.bubble-wrap');
     if (!bubbleWrap) return;
+    const bubble = row.querySelector('.bubble');
+
+    // ── Determinar isMe e isDeleted directamente del DOM en el momento de abrir ──
+    // Esto es la fuente de verdad definitiva, sin depender de closures ni parámetros
+    // que pudieran haberse quedado obsoletos.
+    const isMeFinal      = row.classList.contains('me');
+    const isDeletedFinal = bubble ? bubble.classList.contains('deleted') : isDeleted;
 
     row.classList.add('menu-open');
     _openMenuRow = row;
@@ -8965,7 +8965,7 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
     menu.dataset.formsgid = msgId;
 
     // Barra de reacciones rápidas (solo si no eliminado)
-    if (!isDeleted) {
+    if (!isDeletedFinal) {
         const reactBar = document.createElement('div');
         reactBar.className = 'react-quick-bar';
         QUICK_EMOJIS.forEach(emoji => {
@@ -8981,16 +8981,14 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
 
     // Opciones del menú
     const ops = [];
-    if (!isDeleted) ops.push({ icon: '↩', label: 'Responder',   fn: () => iniciarRespuesta(msgId) });
-    if (!isDeleted) ops.push({ icon: '🧵', label: 'Ver hilo',    fn: () => abrirHilo(msgId) });
-    if (!isDeleted) ops.push({ icon: '↗', label: 'Reenviar',    fn: () => abrirModalReenviar(msgId) });
-    if (!isDeleted) ops.push({ icon: '☑️', label: 'Seleccionar', fn: () => entrarModoSeleccion(msgId) });
-    if (!isDeleted) ops.push({ icon: '⭐', label: 'Destacar',    fn: () => destacarMensaje(msgId) });
-    if (!isDeleted && isMe) ops.push({ icon: '✏️', label: 'Editar',    fn: () => iniciarEdicion(msgId) });
-    // Eliminar para todos: solo si el mensaje NO está ya eliminado y es tuyo
-    if (!isDeleted && isMe) ops.push({ icon: '🗑',  label: 'Eliminar para todos', fn: () => eliminarMensaje(msgId), danger: true });
-    // Ocultar para mí: disponible siempre (mensaje normal o ya eliminado), solo para el propio usuario
-    if (isMe) ops.push({ icon: '👁',  label: isDeleted ? 'Ocultar para mí' : 'Ocultar solo para mí', fn: () => ocultarMensajeParaMi(msgId), danger: true });
+    if (!isDeletedFinal) ops.push({ icon: '↩', label: 'Responder',   fn: () => iniciarRespuesta(msgId) });
+    if (!isDeletedFinal) ops.push({ icon: '🧵', label: 'Ver hilo',    fn: () => abrirHilo(msgId) });
+    if (!isDeletedFinal) ops.push({ icon: '↗', label: 'Reenviar',    fn: () => abrirModalReenviar(msgId) });
+    if (!isDeletedFinal) ops.push({ icon: '☑️', label: 'Seleccionar', fn: () => entrarModoSeleccion(msgId) });
+    if (!isDeletedFinal) ops.push({ icon: '⭐', label: 'Destacar',    fn: () => destacarMensaje(msgId) });
+    if (!isDeletedFinal && isMeFinal) ops.push({ icon: '✏️', label: 'Editar',              fn: () => iniciarEdicion(msgId) });
+    if (!isDeletedFinal && isMeFinal) ops.push({ icon: '🗑',  label: 'Eliminar para todos', fn: () => eliminarMensaje(msgId), danger: true });
+    if (isMeFinal)                    ops.push({ icon: '👁',  label: isDeletedFinal ? 'Ocultar para mí' : 'Ocultar solo para mí', fn: () => ocultarMensajeParaMi(msgId), danger: true });
 
     ops.forEach((op, i) => {
         if (op.danger && i > 0) {
@@ -9007,18 +9005,32 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
 
     bubbleWrap.appendChild(menu);
 
-    // Cerrar al pulsar fuera — esperar dos frames para que el evento actual termine
-    // completamente antes de añadir el listener global, evitando cierres inmediatos.
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            document.addEventListener('click', _onClickOutsideMenu);
-        });
-    });
+    // Cerrar al pulsar fuera.
+    // Usamos un timestamp para evitar que el mismo evento de click que abrió el menú
+    // lo cierre de inmediato en móvil (donde el evento sube por el DOM con pequeño delay).
+    const openedAt = Date.now();
+    const _closeHandler = (ev) => {
+        if (Date.now() - openedAt < 300) return; // ignorar clicks dentro de los primeros 300ms
+        const menu = document.getElementById('msgCtxMenu');
+        if (menu && menu.contains(ev.target)) return; // click dentro del menú — no cerrar
+        document.removeEventListener('click', _closeHandler, true);
+        document.removeEventListener('touchend', _closeHandler, true);
+        cerrarMenuMensaje();
+    };
+    // Usar capture:true para interceptar antes que otros handlers
+    setTimeout(() => {
+        document.addEventListener('click', _closeHandler, true);
+        document.addEventListener('touchend', _closeHandler, true);
+    }, 50);
+
+    // Guardar referencia para poder quitarlo en cerrarMenuMensaje
+    menu._closeHandler = _closeHandler;
 }
 
 function _onClickOutsideMenu(ev) {
+    // Legacy — kept for safety but new menus use menu._closeHandler
     const menu = document.getElementById('msgCtxMenu');
-    if (menu && menu.contains(ev.target)) return; // click dentro del menú — no cerrar
+    if (menu && menu.contains(ev.target)) return;
     document.removeEventListener('click', _onClickOutsideMenu);
     cerrarMenuMensaje();
 }
@@ -9026,7 +9038,14 @@ function _onClickOutsideMenu(ev) {
 function cerrarMenuMensaje() {
     document.removeEventListener('click', _onClickOutsideMenu);
     const existing = document.getElementById('msgCtxMenu');
-    if (existing) existing.remove();
+    if (existing) {
+        // Quitar el handler de cierre por click-fuera si existe
+        if (existing._closeHandler) {
+            document.removeEventListener('click',    existing._closeHandler, true);
+            document.removeEventListener('touchend', existing._closeHandler, true);
+        }
+        existing.remove();
+    }
     if (_openMenuRow) { _openMenuRow.classList.remove('menu-open'); _openMenuRow = null; }
 }
 
@@ -9472,6 +9491,7 @@ function onMensajeEliminado(msgId) {
             const handler = (e) => {
                 if (e.target.closest('.msg-ctx-menu')) return;
                 e.stopPropagation();
+                // abrirMenuMensaje lee isMe e isDeleted del DOM directamente
                 abrirMenuMensaje(e, msgId, true, true, isGrp);
             };
             bubble._kvsMenuHandler = handler;
