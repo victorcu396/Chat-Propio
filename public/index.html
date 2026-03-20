@@ -1083,7 +1083,14 @@ html, body {
     flex-shrink: 0;
 }
 
-.chat-header-info { flex: 1; min-width: 0; }
+.chat-header-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+}
 
 #chatName {
     font-size: 15px;
@@ -1092,12 +1099,19 @@ html, body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.3;
+    display: block;
 }
 
 #chatStatus {
     font-size: 12px;
     color: var(--text-muted);
-    margin-top: 2px;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    display: block;
 }
 
 #chatPhone {
@@ -1106,6 +1120,11 @@ html, body {
     font-family: 'DM Mono', monospace;
     margin-top: 1px;
     opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    display: block;
 }
 
 .chat-header-actions {
@@ -3688,8 +3707,26 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
     <div class="logo-wrap">
       <img src="Logo_kiVooSpace.png" alt="kiVooSpace Logo">
     </div>
-    <h2>Bienvenido</h2>
-    <p class="subtitle">Inicia sesión con tu número de teléfono</p>
+    <h2>Bienvenido a kiVooSpace</h2>
+    <p class="subtitle">Tu espacio de chat privado</p>
+    <div style="
+        background: linear-gradient(135deg, rgba(79,70,229,0.07), rgba(124,58,237,0.05));
+        border: 1px solid rgba(79,70,229,0.15);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 22px;
+        text-align: left;
+        width: 100%;
+        box-sizing: border-box;
+    ">
+        <p style="font-size:13px;color:var(--text-mid);margin:0 0 8px;line-height:1.55;">
+            💬 <strong>kiVooSpace</strong> es una aplicación de chat privada para hablar con tus contactos en tiempo real.
+        </p>
+        <p style="font-size:12.5px;color:var(--text-muted);margin:0;line-height:1.6;">
+            Envía mensajes, imágenes y audios · Crea grupos · Haz llamadas de voz · Todo de forma segura y sin publicidad.
+        </p>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:-10px 0 18px;text-align:center;">Entra con tu número de teléfono para comenzar</p>
 
     <div class="login-steps">
       <div class="step-dots">
@@ -3833,8 +3870,8 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
         <div id="chatGroupAvatar" onclick="onClickGroupAvatar()" title="Cambiar foto del grupo"></div>
         <div class="chat-header-info">
           <div id="chatName" style="color:var(--text-muted);font-weight:400;font-size:14px;">Selecciona un usuario para empezar</div>
-          <div id="chatStatus"></div>
           <div id="chatPhone" style="display:none"></div>
+          <div id="chatStatus"></div>
         </div>
         <div class="chat-header-actions">
           <button class="btn-header-action" id="btnSearchChat" onclick="toggleSearchBar()" title="Buscar en el chat">🔍</button>
@@ -11404,13 +11441,10 @@ function mostrarLecturaGrupo(msgId) {
       <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
         <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
           Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
-          <strong>privacidad@kivoospace.app</strong>
+          <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0171736877606268656065416a68776e6e72716061">[email&#160;protected]</a></strong>
         </p>
       </div>
-
     </div>
-  </div>
 </div>
-
 </body>
 </html>
