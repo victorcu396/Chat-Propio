@@ -250,6 +250,9 @@ html.dark .input-area              { background: var(--white); border-top-color:
 html.dark #mensaje                 { background: #1e1b36; color: var(--text-dark); }
 html.dark #mensaje::placeholder    { color: var(--text-muted); }
 html.dark .login-card              { background: #1a1930; border: 1px solid var(--border); }
+html.dark .welcome-features        { background: #1a1930; border-color: var(--border); }
+html.dark .welcome-title           { color: var(--text-dark); }
+html.dark .welcome-feature strong  { color: var(--text-dark); }
 html.dark .settings-card           { background: #1a1930; }
 html.dark #chatSearchBar           { background: var(--white); border-bottom-color: var(--border); }
 html.dark #chatSearchInput         { background: #1e1b36; color: var(--text-dark); border-color: var(--border); }
@@ -2375,6 +2378,110 @@ emoji-picker.visible { display: block; }
     opacity: 0.4;
 }
 
+/* ── Welcome panel ── */
+.welcome-panel {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    pointer-events: none;
+    z-index: 1;
+    overflow-y: auto;
+}
+.welcome-panel.hidden { display: none; }
+
+.welcome-panel-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+}
+
+.welcome-logo {
+    width: 80px;
+    height: auto;
+    opacity: 0.9;
+    margin-bottom: 4px;
+}
+
+.welcome-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    line-height: 1.2;
+}
+.welcome-title span { color: var(--purple-deep); }
+
+.welcome-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 6px;
+}
+
+.welcome-features {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 2px 12px rgba(79,70,229,0.06);
+    text-align: left;
+}
+
+.welcome-feature {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wf-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.welcome-feature div {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.welcome-feature strong {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dark);
+}
+
+.welcome-feature span {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.welcome-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 4px 0 0;
+    opacity: 0.7;
+}
+
+html.is-mobile .welcome-hint { font-size: 11px; }
+html.is-mobile .welcome-panel { padding: 20px 16px; }
+html.is-mobile .welcome-logo { width: 56px; }
+html.is-mobile .welcome-title { font-size: 17px; }
+html.is-mobile .welcome-features { padding: 12px; gap: 6px; }
+html.is-mobile .welcome-feature strong { font-size: 12px; }
+html.is-mobile .welcome-feature span { font-size: 11px; }
+
 /* ============================================================
    CALL OVERLAY (WebRTC)
 ============================================================ */
@@ -3707,26 +3814,8 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
     <div class="logo-wrap">
       <img src="Logo_kiVooSpace.png" alt="kiVooSpace Logo">
     </div>
-    <h2>Bienvenido a kiVooSpace</h2>
-    <p class="subtitle">Tu espacio de chat privado</p>
-    <div style="
-        background: linear-gradient(135deg, rgba(79,70,229,0.07), rgba(124,58,237,0.05));
-        border: 1px solid rgba(79,70,229,0.15);
-        border-radius: 14px;
-        padding: 14px 16px;
-        margin-bottom: 22px;
-        text-align: left;
-        width: 100%;
-        box-sizing: border-box;
-    ">
-        <p style="font-size:13px;color:var(--text-mid);margin:0 0 8px;line-height:1.55;">
-            💬 <strong>kiVooSpace</strong> es una aplicación de chat privada para hablar con tus contactos en tiempo real.
-        </p>
-        <p style="font-size:12.5px;color:var(--text-muted);margin:0;line-height:1.6;">
-            Envía mensajes, imágenes y audios · Crea grupos · Haz llamadas de voz · Todo de forma segura y sin publicidad.
-        </p>
-    </div>
-    <p style="font-size:12px;color:var(--text-muted);margin:-10px 0 18px;text-align:center;">Entra con tu número de teléfono para comenzar</p>
+    <h2>Bienvenido</h2>
+    <p class="subtitle">Inicia sesión con tu número de teléfono</p>
 
     <div class="login-steps">
       <div class="step-dots">
@@ -3915,6 +4004,53 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
         <button class="ctx-item" onclick="setAutoDestruct(3600)">1 hora</button>
         <button class="ctx-item" onclick="setAutoDestruct(86400)">24 horas</button>
         <button class="ctx-item" onclick="setAutoDestruct(604800)">7 días</button>
+      </div>
+
+      <!-- Panel de bienvenida (visible cuando no hay chat seleccionado) -->
+      <div id="welcomePanel" class="welcome-panel">
+        <div class="welcome-panel-inner">
+          <img src="Logo_kiVooSpace.png" alt="kiVooSpace" class="welcome-logo">
+          <h2 class="welcome-title">Bienvenido a <span>kiVooSpace</span></h2>
+          <p class="welcome-sub">Tu espacio de chat privado</p>
+          <div class="welcome-features">
+            <div class="welcome-feature">
+              <span class="wf-icon">💬</span>
+              <div>
+                <strong>Mensajes en tiempo real</strong>
+                <span>Chatea al instante con tus contactos</span>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <span class="wf-icon">🖼️</span>
+              <div>
+                <strong>Imágenes y audios</strong>
+                <span>Comparte fotos y mensajes de voz</span>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <span class="wf-icon">👥</span>
+              <div>
+                <strong>Grupos</strong>
+                <span>Habla con varias personas a la vez</span>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <span class="wf-icon">📞</span>
+              <div>
+                <strong>Llamadas de voz</strong>
+                <span>Llama a tus contactos directamente</span>
+              </div>
+            </div>
+            <div class="welcome-feature">
+              <span class="wf-icon">🔒</span>
+              <div>
+                <strong>Privado y sin publicidad</strong>
+                <span>Solo tú y tus contactos, sin interrupciones</span>
+              </div>
+            </div>
+          </div>
+          <p class="welcome-hint">← Selecciona un contacto para empezar a chatear</p>
+        </div>
       </div>
 
       <!-- Mensajes -->
@@ -4652,6 +4788,7 @@ function finishLogin() {
     // Ocultar modal, mostrar app
     document.getElementById('loginModal').style.display = 'none';
     document.getElementById('appContainer').style.display = 'flex';
+    _mostrarWelcomePanel(true);
 
     // Cargar avatar guardado o usar dicebear por defecto
     const savedAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
@@ -4763,6 +4900,7 @@ function logout() {
     _esSesionNueva = true; // el próximo login debe limpiar el estado
 
     _limpiarEstadoGlobal();
+    _mostrarWelcomePanel(true);
 
     document.getElementById('appContainer').style.display = 'none';
     document.getElementById('loginModal').style.display   = 'flex';
@@ -6181,6 +6319,16 @@ function onBtnCall() {
 // SELECCIONAR USUARIO
 // ============================================================
 // Limpia todos los estados transitorios al cambiar de chat
+function _mostrarWelcomePanel(visible) {
+    const wp = document.getElementById('welcomePanel');
+    if (!wp) return;
+    if (visible) {
+        wp.classList.remove('hidden');
+    } else {
+        wp.classList.add('hidden');
+    }
+}
+
 function _limpiarEstadoChat() {
     // Cerrar menú contextual abierto
     cerrarMenuMensaje();
@@ -6219,6 +6367,7 @@ function seleccionarUsuario(user) {
 
     if (currentChat === user) return;
     _limpiarEstadoChat();
+    _mostrarWelcomePanel(false);
     currentChat = user;
     unreadCounts[user] = 0;
     // Limpiar también la clave phone: si existía
@@ -6329,6 +6478,7 @@ function seleccionarContactoOffline(phone) {
     const chatKey = 'phone:' + phone;
     if (currentChat === chatKey) return;
     _limpiarEstadoChat();
+    _mostrarWelcomePanel(false);
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
     unreadCounts[phone] = 0;
@@ -7579,6 +7729,7 @@ function seleccionarGrupo(groupId) {
     if (currentChat === chatKey) return;
 
     _limpiarEstadoChat();
+    _mostrarWelcomePanel(false);
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
     // Cerrar notificaciones de la bandeja del sistema para este grupo
@@ -7929,6 +8080,7 @@ function onGroupDeleted(groupId) {
         document.getElementById('chatAvatar').style.display = 'none';
         document.getElementById('chatStatus').textContent = '';
         document.getElementById('chatPhone').style.display = 'none';
+        _mostrarWelcomePanel(true);
     }
     renderGroupsList();
 }
@@ -10719,7 +10871,7 @@ function completarLoginTrasSesionAprobada() {
     const appContainer = document.getElementById('appContainer');
     if (loginModal) loginModal.style.display = 'none';
     if (appContainer) appContainer.style.display = 'flex';
-    // Guardar sesión
+    _mostrarWelcomePanel(true);
     const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername });
     localStorage.setItem('kvs_session', sessionData);
     // Actualizar UI del sidebar
@@ -10952,6 +11104,7 @@ async function cargarConfiguracionUsuario() {
         myAvatarDataUrl = savedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
         document.getElementById('loginModal').style.display  = 'none';
         document.getElementById('appContainer').style.display = 'flex';
+        _mostrarWelcomePanel(true);
         document.getElementById('myName').textContent   = loginUsername;
         document.getElementById('myPhone').textContent  = formatearTelefono(loginPhone);
         document.getElementById('myAvatar').src         = myAvatarDataUrl;
@@ -11441,10 +11594,13 @@ function mostrarLecturaGrupo(msgId) {
       <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
         <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
           Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
-          <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0171736877606268656065416a68776e6e72716061">[email&#160;protected]</a></strong>
+          <strong>privacidad@kivoospace.app</strong>
         </p>
       </div>
+
     </div>
+  </div>
 </div>
+
 </body>
 </html>
