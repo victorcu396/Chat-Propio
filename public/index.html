@@ -471,6 +471,8 @@ html, body {
     gap: 8px;
     justify-content: center;
     flex-wrap: nowrap;
+    position: relative; /* para el input oculto absoluto */
+    cursor: text;
 }
 
 .otp-digit {
@@ -488,6 +490,26 @@ html, body {
     background: var(--bg-sidebar);
     flex-shrink: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    user-select: none;
+}
+
+.otp-digit.otp-active {
+    border-color: var(--purple-deep);
+    background: var(--white);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.12);
+}
+
+.otp-digit.otp-filled {
+    border-color: var(--purple-mid);
+    background: var(--white);
+}
+
+.otp-digit.otp-error {
+    border-color: #ef4444;
 }
 
 .otp-digit:focus {
@@ -2673,17 +2695,28 @@ emoji-picker.visible { display: block; }
     box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
 }
 
-.add-contact-phone-wrap .phone-prefix {
-    padding: 12px 14px;
+.add-contact-phone-wrap .phone-prefix,
+.contact-prefix-select {
+    padding: 12px 10px 12px 14px;
     font-size: 14px;
     font-weight: 600;
     color: var(--purple-deep);
     background: var(--purple-pale);
+    border: none;
     border-right: 1.5px solid var(--border);
     white-space: nowrap;
     user-select: none;
     font-family: 'DM Mono', monospace;
     flex-shrink: 0;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    /* mostrar flecha mínima para indicar que es desplegable */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234f46e5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
 }
 
 .add-contact-phone-wrap input {
@@ -3596,7 +3629,7 @@ html.is-mobile .contact-actions { display: flex; }
           <div class="phone-input-wrap">
             <span class="phone-prefix">+34</span>
             <input class="login-input" type="tel" id="phoneInput"
-              placeholder="612 345 678" maxlength="12"
+              placeholder="612 34 56 78" maxlength="12"
               oninput="formatPhone(this)" autocomplete="tel">
           </div>
         </div>
@@ -3620,13 +3653,18 @@ html.is-mobile .contact-actions { display: flex; }
         </div>
         <div class="login-field">
           <label>Introduce el código</label>
-          <div class="otp-wrap">
-            <input class="otp-digit" type="text" maxlength="1" id="otp0" inputmode="numeric">
-            <input class="otp-digit" type="text" maxlength="1" id="otp1" inputmode="numeric">
-            <input class="otp-digit" type="text" maxlength="1" id="otp2" inputmode="numeric">
-            <input class="otp-digit" type="text" maxlength="1" id="otp3" inputmode="numeric">
-            <input class="otp-digit" type="text" maxlength="1" id="otp4" inputmode="numeric">
-            <input class="otp-digit" type="text" maxlength="1" id="otp5" inputmode="numeric">
+          <div class="otp-wrap" id="otpWrap" onclick="document.getElementById('otpRealInput').focus()">
+            <div class="otp-digit" id="otpCell0"></div>
+            <div class="otp-digit" id="otpCell1"></div>
+            <div class="otp-digit" id="otpCell2"></div>
+            <div class="otp-digit" id="otpCell3"></div>
+            <div class="otp-digit" id="otpCell4"></div>
+            <div class="otp-digit" id="otpCell5"></div>
+            <!-- Input real: invisible, recibe todo el teclado (móvil + escritorio) -->
+            <input id="otpRealInput" type="text" inputmode="numeric" autocomplete="one-time-code"
+              maxlength="6" pattern="\d{6}"
+              style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"
+              oninput="onOtpInput(this)" onkeydown="onOtpKeydown(event)">
           </div>
         </div>
         <div class="login-error" id="otpError"></div>
@@ -3931,14 +3969,15 @@ html.is-mobile .contact-actions { display: flex; }
     <div class="add-contact-field">
       <label>Número de teléfono</label>
       <div class="add-contact-phone-wrap">
-        <span class="phone-prefix">+</span>
-        <input type="tel" id="contactPhoneInput" placeholder="34612345678"
-          maxlength="15" inputmode="numeric"
-          oninput="this.value=this.value.replace(/\D/g,'').slice(0,15)"
+        <select id="contactPrefixSelect" class="contact-prefix-select" title="Prefijo de país">
+          <option value="34" selected>🇪🇸 +34</option>
+        </select>
+        <input type="tel" id="contactPhoneInput" placeholder="612 34 56 78"
+          maxlength="11" inputmode="numeric"
           style="font-family:'DM Mono',monospace;letter-spacing:0.5px;">
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
-        Incluye el prefijo del país sin el +. Ej: España → 34612345678
+        Introduce solo los 9 dígitos del número, sin el prefijo. Ej: 612 34 56 78
       </div>
     </div>
 
@@ -4158,9 +4197,72 @@ let loginPhone = '';
 let loginUsername = '';
 let otpGenerado = '';
 
+// Aplica formato xxx xx xx xx preservando la posición del cursor
+function _applyPhoneFormat(el) {
+    const start = el.selectionStart;
+    const before = el.value.slice(0, start);
+    const digitsBeforeCursor = before.replace(/\D/g, '').length;
+
+    const digits = el.value.replace(/\D/g, '').slice(0, 9);
+    let formatted = digits;
+    if (digits.length > 6)      formatted = digits.slice(0,3) + ' ' + digits.slice(3,5) + ' ' + digits.slice(5,7) + ' ' + digits.slice(7);
+    else if (digits.length > 4) formatted = digits.slice(0,3) + ' ' + digits.slice(3,5) + ' ' + digits.slice(5);
+    else if (digits.length > 3) formatted = digits.slice(0,3) + ' ' + digits.slice(3);
+
+    el.value = formatted;
+
+    // Recalcular posición del cursor: contar cuántos dígitos hay antes del cursor
+    // en el nuevo valor formateado y colocar el cursor después de ellos
+    let newPos = 0, counted = 0;
+    for (let i = 0; i < formatted.length; i++) {
+        if (formatted[i] !== ' ') {
+            counted++;
+            if (counted === digitsBeforeCursor) { newPos = i + 1; break; }
+        }
+    }
+    // Si digitsBeforeCursor es 0 o no se encontró, dejar en la posición natural
+    if (digitsBeforeCursor === 0) newPos = 0;
+    else if (newPos === 0 && counted < digitsBeforeCursor) newPos = formatted.length;
+
+    el.setSelectionRange(newPos, newPos);
+}
+
 function formatPhone(el) {
-    let v = el.value.replace(/\D/g, '').slice(0, 9);
-    el.value = v;
+    _applyPhoneFormat(el);
+}
+
+// Formato igual para el campo de agregar contacto (9 dígitos → xxx xx xx xx)
+function formatContactPhone(el) {
+    _applyPhoneFormat(el);
+}
+
+// Devuelve un número E.164 con prefijo dado solo los dígitos del abonado
+// Ej: ('612345678', '34') → '+34612345678'
+function buildE164(digits9, prefix) {
+    return '+' + (prefix || '34') + digits9;
+}
+
+// Formatea un número E.164 o crudo para mostrarlo al usuario
+// Si empieza por +34 muestra: +34 xxx xx xx xx
+// Si no tiene prefijo conocido, lo muestra tal cual agrupado en bloques
+function formatearTelefono(phone) {
+    if (!phone) return '';
+    // Quitar + y prefijo 34
+    if (phone.startsWith('+34')) {
+        const digits = phone.slice(3).replace(/\D/g, '').slice(0, 9);
+        const fmt = formatDigits9(digits);
+        return '+34 ' + fmt;
+    }
+    // Número sin prefijo o con otro prefijo: mostrar tal cual
+    return phone;
+}
+
+function formatDigits9(v) {
+    v = (v || '').replace(/\D/g, '').slice(0, 9);
+    if (v.length > 6) return v.slice(0,3) + ' ' + v.slice(3,5) + ' ' + v.slice(5,7) + ' ' + v.slice(7);
+    if (v.length > 4) return v.slice(0,3) + ' ' + v.slice(3,5) + ' ' + v.slice(5);
+    if (v.length > 3) return v.slice(0,3) + ' ' + v.slice(3);
+    return v;
 }
 
 function goToStep(n) {
@@ -4183,15 +4285,13 @@ function sendOTP() {
     otpGenerado = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`[DEV] OTP para ${loginPhone}: ${otpGenerado}`);
 
-    document.getElementById('otpPhone').textContent = loginPhone;
+    document.getElementById('otpPhone').textContent = formatearTelefono(loginPhone);
 
     // Limpiar campos OTP
-    for (let i = 0; i < 6; i++) {
-        document.getElementById(`otp${i}`).value = '';
-    }
+    _otpClear();
 
     goToStep(2);
-    document.getElementById('otp0').focus();
+    _otpFocus();
 
     // Notificación visual de OTP enviado
     showOtpToast(otpGenerado);
@@ -4238,56 +4338,118 @@ function startOtpCountdown(seconds) {
 function regenOTP() {
     otpGenerado = Math.floor(100000 + Math.random() * 900000).toString();
     console.log(`[DEV] Nuevo OTP para ${loginPhone}: ${otpGenerado}`);
-    for (let i = 0; i < 6; i++) document.getElementById(`otp${i}`).value = '';
+    _otpClear();
     document.getElementById('otpError').textContent = '';
     const display = document.getElementById('otpCodeDisplay');
     if (display) display.style.opacity = '1';
-    document.getElementById('otp0').focus({ preventScroll: true });
+    _otpFocus();
     showOtpToast(otpGenerado);
 }
 
-// OTP navigation
-document.addEventListener('DOMContentLoaded', () => {
+// OTP — input único oculto + celdas visuales
+// Así funciona igual en móvil (sin problemas de Backspace entre inputs) y escritorio.
+function _otpSync(val) {
+    // val: solo dígitos, máx 6
+    const digits = val.replace(/\D/g, '').slice(0, 6);
     for (let i = 0; i < 6; i++) {
-        const el = document.getElementById(`otp${i}`);
-        el.addEventListener('input', () => {
-            el.value = el.value.replace(/\D/g,'').slice(0,1);
-            if (el.value && i < 5) document.getElementById(`otp${i+1}`).focus();
-            // Si se completó el último dígito, intentar verificar automáticamente
-            if (i === 5 && el.value) verifyOTP();
-        });
-        el.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' && !el.value && i > 0) {
-                document.getElementById(`otp${i-1}`).focus();
-            }
-        });
-        el.addEventListener('paste', (e) => {
-            const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g,'');
-            if (pasted.length === 6) {
-                e.preventDefault();
-                for (let j = 0; j < 6; j++) {
-                    document.getElementById(`otp${j}`).value = pasted[j] || '';
-                }
-                verifyOTP();
-            }
-        });
+        const cell = document.getElementById('otpCell' + i);
+        if (!cell) continue;
+        cell.textContent = digits[i] || '';
+        cell.classList.toggle('otp-filled', i < digits.length);
+        cell.classList.remove('otp-error');
     }
+    // Resaltar la celda activa (la que se va a escribir a continuación)
+    _otpMarkActive(digits.length);
+}
+
+function _otpMarkActive(activeIdx) {
+    for (let i = 0; i < 6; i++) {
+        const cell = document.getElementById('otpCell' + i);
+        if (!cell) continue;
+        cell.classList.toggle('otp-active', i === Math.min(activeIdx, 5));
+    }
+}
+
+function onOtpInput(el) {
+    // Permitir solo dígitos
+    const digits = el.value.replace(/\D/g, '').slice(0, 6);
+    el.value = digits;
+    _otpSync(digits);
+    // Auto-verificar al completar los 6
+    if (digits.length === 6) {
+        setTimeout(verifyOTP, 80); // pequeño delay para que se vea el último dígito
+    }
+}
+
+function onOtpKeydown(e) {
+    // No hace falta gestionar nada especial — el input nativo maneja todo
+    // (Backspace, flechas, etc.) y onOtpInput sincroniza las celdas
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const realInput = document.getElementById('otpRealInput');
+    if (!realInput) return;
+
+    // Al hacer foco en el input real, marcar la celda activa
+    realInput.addEventListener('focus', () => {
+        const digits = realInput.value.replace(/\D/g, '');
+        _otpMarkActive(digits.length);
+    });
+    realInput.addEventListener('blur', () => {
+        for (let i = 0; i < 6; i++) {
+            document.getElementById('otpCell' + i)?.classList.remove('otp-active');
+        }
+    });
+
+    // Pegado: aceptar código de 6 dígitos
+    realInput.addEventListener('paste', (e) => {
+        const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+        if (pasted.length >= 6) {
+            e.preventDefault();
+            realInput.value = pasted.slice(0, 6);
+            _otpSync(realInput.value);
+            setTimeout(verifyOTP, 80);
+        }
+    });
 });
 
+// Helpers de compatibilidad: funciones que el código existente llama con otp0..otp5
+// Las redirigimos al nuevo sistema de input único
+function _otpGetValue() {
+    const el = document.getElementById('otpRealInput');
+    return el ? el.value.replace(/\D/g, '') : '';
+}
+function _otpClear() {
+    const el = document.getElementById('otpRealInput');
+    if (el) { el.value = ''; }
+    _otpSync('');
+}
+function _otpFocus() {
+    const el = document.getElementById('otpRealInput');
+    if (el) el.focus({ preventScroll: true });
+    _otpMarkActive(0);
+}
+
 function verifyOTP() {
-    const entered = Array.from({length:6}, (_,i) => document.getElementById(`otp${i}`).value).join('');
+    const entered = _otpGetValue();
     if (entered.length < 6) {
         document.getElementById('otpError').textContent = 'Introduce los 6 dígitos.';
         return;
     }
     if (entered !== otpGenerado) {
         document.getElementById('otpError').textContent = 'Código incorrecto. Inténtalo de nuevo.';
-        // Shake animation
+        // Shake animation — marcar celdas en rojo
         for (let i = 0; i < 6; i++) {
-            const el = document.getElementById(`otp${i}`);
-            el.style.borderColor = '#ef4444';
-            setTimeout(() => el.style.borderColor = '', 1000);
+            const cell = document.getElementById('otpCell' + i);
+            if (cell) cell.classList.add('otp-error');
         }
+        setTimeout(() => {
+            for (let i = 0; i < 6; i++) {
+                const cell = document.getElementById('otpCell' + i);
+                if (cell) cell.classList.remove('otp-error');
+            }
+        }, 1000);
+        _otpFocus();
         return;
     }
     document.getElementById('otpError').textContent = '';
@@ -4348,7 +4510,7 @@ function finishLogin() {
 
     // Rellenar perfil sidebar
     document.getElementById('myName').textContent = loginUsername;
-    document.getElementById('myPhone').textContent = loginPhone;
+    document.getElementById('myPhone').textContent = formatearTelefono(loginPhone);
     document.getElementById('myAvatar').src = myAvatarDataUrl;
 
     // Iniciar WebSocket
@@ -5774,7 +5936,7 @@ function seleccionarUsuario(user) {
     // Mostrar teléfono del contacto si lo tenemos
     const chatPhoneEl = document.getElementById('chatPhone');
     if (phone) {
-        chatPhoneEl.textContent = phone;
+        chatPhoneEl.textContent = formatearTelefono(phone);
         chatPhoneEl.style.display = 'block';
     } else {
         chatPhoneEl.style.display = 'none';
@@ -5873,7 +6035,7 @@ function seleccionarContactoOffline(phone) {
 
     // Mostrar teléfono siempre en chats offline (tenemos el phone directamente)
     const chatPhoneEl = document.getElementById('chatPhone');
-    chatPhoneEl.textContent = phone;
+    chatPhoneEl.textContent = formatearTelefono(phone);
     chatPhoneEl.style.display = 'block';
 
     document.getElementById('chatStatus').textContent = '○ Desconectado';
@@ -7466,7 +7628,7 @@ function abrirModalVerMiembros(groupId) {
                 onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
             <div style="flex:1;min-width:0;">
                 <div class="group-member-name">${escapeHTML(displayName)}</div>
-                <div class="group-member-phone">${phone}</div>
+                <div class="group-member-phone">${formatearTelefono(phone)}</div>
             </div>
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${badges}${addBtn}</div>
         </div>`;
@@ -7482,10 +7644,27 @@ function cerrarModalVerMiembros() {
 // Abre el modal "Nuevo contacto" con el teléfono del miembro pre-rellenado
 function abrirModalAgregarContactoDesdeGrupo(phone, suggestedName) {
     cerrarModalVerMiembros();
-    // Quitar el '+' inicial y poner solo los dígitos (el input ahora asume formato internacional sin '+')
-    const digits = phone.replace(/^\+/, '').replace(/\D/g, '').slice(0, 15);
-    document.getElementById('contactPhoneInput').value = digits;
-    document.getElementById('contactNameInput').value = suggestedName || '';
+    // Separar prefijo y abonado
+    let prefix = '34';
+    let digits9 = '';
+    if (phone.startsWith('+34')) {
+        prefix  = '34';
+        digits9 = phone.slice(3).replace(/\D/g, '').slice(0, 9);
+    } else {
+        // Otro formato: quitar + y asumir los últimos 9 como abonado
+        const allDigits = phone.replace(/\D/g, '');
+        digits9 = allDigits.slice(-9);
+        prefix  = allDigits.slice(0, allDigits.length - 9) || '34';
+    }
+    const prefixSelect = document.getElementById('contactPrefixSelect');
+    if (prefixSelect) {
+        // Seleccionar la opción que coincida; si no existe, usar la primera
+        const opt = [...prefixSelect.options].find(o => o.value === prefix);
+        if (opt) prefixSelect.value = prefix;
+    }
+    // Mostrar formateado
+    document.getElementById('contactPhoneInput').value = formatDigits9(digits9);
+    document.getElementById('contactNameInput').value  = suggestedName || '';
     document.getElementById('addContactError').textContent = '';
     document.getElementById('btnGuardarContacto').disabled = false;
     document.getElementById('addContactModal').classList.add('visible');
@@ -7541,7 +7720,7 @@ function abrirModalEditarGrupo(groupId) {
                 onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
             <div style="flex:1;min-width:0;">
                 <div class="group-member-name">${escapeHTML(displayName)}</div>
-                <div class="group-member-phone">${phone}</div>
+                <div class="group-member-phone">${formatearTelefono(phone)}</div>
             </div>
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">${badge}${removeBtn}</div>
         </div>`;
@@ -7828,12 +8007,13 @@ function cerrarModalContacto() {
 }
 
 async function guardarContacto() {
-    const rawPhone = document.getElementById('contactPhoneInput').value.replace(/\D/g, '');
+    const rawPhone  = document.getElementById('contactPhoneInput').value.replace(/\D/g, '');
+    const prefix    = (document.getElementById('contactPrefixSelect')?.value || '34');
     const customName = document.getElementById('contactNameInput').value.trim();
     const errEl = document.getElementById('addContactError');
 
-    if (rawPhone.length < 7) {
-        errEl.textContent = 'Introduce un número válido con prefijo de país. Ej: 34612345678';
+    if (rawPhone.length < 9) {
+        errEl.textContent = 'Introduce los 9 dígitos del número (sin prefijo). Ej: 612 34 56 78';
         return;
     }
     if (!customName) {
@@ -7841,7 +8021,7 @@ async function guardarContacto() {
         return;
     }
 
-    const contactPhone = '+' + rawPhone;
+    const contactPhone = buildE164(rawPhone, prefix);
 
     if (contactPhone === loginPhone) {
         errEl.textContent = 'No puedes agregarte a ti mismo.';
@@ -7924,7 +8104,7 @@ let _renamePhone = null; // teléfono del contacto que se está renombrando
 
 function abrirModalRenombrar(phone, currentName) {
     _renamePhone = phone;
-    document.getElementById('renameContactPhone').textContent = phone;
+    document.getElementById('renameContactPhone').textContent = formatearTelefono(phone);
     document.getElementById('renameContactInput').value = currentName;
     document.getElementById('renameContactError').textContent = '';
     document.getElementById('btnGuardarRenombre').disabled = false;
@@ -7982,6 +8162,92 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('renameContactInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') guardarRenombre();
     });
+
+    // Campo de teléfono del contacto
+    const cpInput = document.getElementById('contactPhoneInput');
+    if (cpInput) {
+        // Guardar el valor anterior antes de cada pulsación de tecla
+        // para detectar si se borró un espacio en móvil (donde keydown no es fiable)
+        let _prevPhoneVal = '';
+
+        cpInput.addEventListener('focus', () => { _prevPhoneVal = cpInput.value; });
+
+        cpInput.addEventListener('keydown', (e) => {
+            _prevPhoneVal = cpInput.value;
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                guardarContacto();
+                return;
+            }
+
+            // Escritorio: si Backspace sobre un espacio, saltar el espacio
+            // y borrar el dígito anterior directamente
+            if (e.key === 'Backspace') {
+                const pos = cpInput.selectionStart;
+                if (cpInput.selectionStart === cpInput.selectionEnd &&
+                    pos > 0 && cpInput.value[pos - 1] === ' ') {
+                    e.preventDefault();
+                    // Eliminar el dígito antes del espacio (pos-2) y el espacio (pos-1)
+                    const val = cpInput.value;
+                    const digitsBeforeDeletion = val.slice(0, pos - 1).replace(/\D/g, '').length - 1;
+                    cpInput.value = val.slice(0, pos - 2) + val.slice(pos);
+                    _applyPhoneFormat(cpInput);
+                    // Colocar cursor después del último dígito restante antes de donde estábamos
+                    const newFmt = cpInput.value;
+                    let counted = 0, newPos = 0;
+                    for (let i = 0; i < newFmt.length; i++) {
+                        if (newFmt[i] !== ' ') {
+                            counted++;
+                            if (counted === Math.max(0, digitsBeforeDeletion)) {
+                                newPos = i + 1;
+                                break;
+                            }
+                        }
+                    }
+                    if (digitsBeforeDeletion <= 0) newPos = 0;
+                    cpInput.setSelectionRange(newPos, newPos);
+                }
+            }
+        });
+
+        // oninput ya llama a formatContactPhone → _applyPhoneFormat
+        // pero en móvil el backspace puede borrar un espacio sin pasar por keydown.
+        // Detectamos ese caso comparando con _prevPhoneVal:
+        cpInput.addEventListener('input', () => {
+            const cur  = cpInput.value;
+            const prev = _prevPhoneVal;
+            // Si el valor actual tiene exactamente un carácter menos y ese carácter era un espacio
+            // quiere decir que el teclado borró el espacio — en ese caso borramos también el dígito anterior
+            if (prev.length - cur.length === 1) {
+                // Encontrar qué carácter se borró
+                let diffIdx = -1;
+                for (let i = 0; i < prev.length; i++) {
+                    if (prev[i] !== cur[i]) { diffIdx = i; break; }
+                }
+                if (diffIdx !== -1 && prev[diffIdx] === ' ') {
+                    // Se borró un espacio: eliminar también el dígito antes del espacio
+                    const digitsTarget = cur.replace(/\D/g, '').length - 1;
+                    const onlyDigits = cur.replace(/\D/g, '').slice(0, Math.max(0, digitsTarget));
+                    // Re-formatear con un dígito menos
+                    cpInput.value = onlyDigits;
+                    _applyPhoneFormat(cpInput);
+                    _prevPhoneVal = cpInput.value;
+                    return;
+                }
+            }
+            _applyPhoneFormat(cpInput);
+            _prevPhoneVal = cpInput.value;
+        });
+    }
+
+    // Foco en el OTP al hacer click en el wrap
+    const otpWrap = document.getElementById('otpWrap');
+    if (otpWrap) {
+        otpWrap.addEventListener('click', () => {
+            document.getElementById('otpRealInput')?.focus();
+        });
+    }
 });
 
 // Cerrar modal al hacer click fuera
@@ -9741,7 +10007,7 @@ function completarLoginTrasSesionAprobada() {
     localStorage.setItem('kvs_session', sessionData);
     // Actualizar UI del sidebar
     document.getElementById('myName').textContent  = loginUsername;
-    document.getElementById('myPhone').textContent = loginPhone;
+    document.getElementById('myPhone').textContent = formatearTelefono(loginPhone);
     document.getElementById('myAvatar').src        = myAvatarDataUrl;
     // Cargar contactos, grupos y configuración
     cargarContactos();
@@ -9970,7 +10236,7 @@ async function cargarConfiguracionUsuario() {
         document.getElementById('loginModal').style.display  = 'none';
         document.getElementById('appContainer').style.display = 'flex';
         document.getElementById('myName').textContent   = loginUsername;
-        document.getElementById('myPhone').textContent  = loginPhone;
+        document.getElementById('myPhone').textContent  = formatearTelefono(loginPhone);
         document.getElementById('myAvatar').src         = myAvatarDataUrl;
         fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
             .then(r => r.ok ? r.json() : null)
@@ -10005,7 +10271,7 @@ function esPWA() {
 function abrirAjustes() {
     document.getElementById('settingsAvatar').src        = myAvatarDataUrl || '';
     document.getElementById('settingsName').textContent  = loginUsername || '';
-    document.getElementById('settingsPhone').textContent = loginPhone || '';
+    document.getElementById('settingsPhone').textContent = formatearTelefono(loginPhone) || '';
 
     ocultarConfirmLogout();
     document.getElementById('settingsModal').classList.add('open');
