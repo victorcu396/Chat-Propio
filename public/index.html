@@ -106,34 +106,52 @@ async function instalarPWA() {
 // Al pulsar atrás, el navegador dispara 'popstate' y nosotros volvemos
 // al sidebar en vez de salir de la app.
 
-function _pushChatState() {
-    // Solo en móvil o PWA donde el sidebar se oculta al abrir un chat
-    const esMobil = window.innerWidth <= 768
-        || document.documentElement.classList.contains('is-mobile');
-    if (!esMobil) return;
-    // Empujar un estado "chat abierto" si no lo hemos hecho ya
+// ── Helpers de navegación móvil ─────────────────────────────────────────────
+// Detectar si estamos en modo móvil (pantalla completa lista ↔ chat)
+function _esMobile() {
+    return window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+}
+
+// Abrir el chat en móvil: deslizar sidebar fuera y chat adentro
+function _abrirChatMobile() {
+    if (!_esMobile()) return;
+    const sidebar   = document.getElementById('sidebar');
+    const chatPanel = document.getElementById('chatPanel');
+    const window_   = document.querySelector('.window');
+    if (sidebar)   sidebar.classList.add('kvs-chat-open');
+    if (chatPanel) chatPanel.classList.add('kvs-chat-open');
+    if (window_)   window_.classList.add('kvs-chat-open');
+    // Push history state para que el botón atrás del sistema funcione
     if (!history.state || history.state.kvs !== 'chat') {
         history.pushState({ kvs: 'chat' }, '');
     }
 }
 
+// Volver a la lista en móvil: deslizar sidebar adentro y chat fuera
+function volverALista() {
+    if (!_esMobile()) return;
+    const sidebar   = document.getElementById('sidebar');
+    const chatPanel = document.getElementById('chatPanel');
+    const window_   = document.querySelector('.window');
+    if (sidebar)   sidebar.classList.remove('kvs-chat-open');
+    if (chatPanel) chatPanel.classList.remove('kvs-chat-open');
+    if (window_)   window_.classList.remove('kvs-chat-open');
+    // Actualizar tab activo en bottom nav
+    _bnavActualizarTabActivo('chats');
+}
+
+function _pushChatState() {
+    if (!_esMobile()) return;
+    _abrirChatMobile();
+}
+
 function _volverAlMenu() {
-    // Mostrar sidebar / volver a la lista
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    if (sidebar && !sidebar.classList.contains('visible')) {
-        sidebar.classList.add('visible');
-        if (overlay) overlay.classList.add('visible');
-    }
+    volverALista();
 }
 
 window.addEventListener('popstate', (e) => {
-    // Si el estado anterior era "chat abierto", interceptar y volver al menú
-    const esMobil = window.innerWidth <= 768
-        || document.documentElement.classList.contains('is-mobile');
-    if (!esMobil) return;
-
-    // Si hay algún modal abierto, cerrarlo primero (comportamiento natural)
+    if (!_esMobile()) return;
+    // Cerrar modales abiertos primero
     const modalesAbiertos = [
         document.getElementById('avatarModal'),
         document.getElementById('settingsModal'),
@@ -145,7 +163,6 @@ window.addEventListener('popstate', (e) => {
         || (m.style && m.style.display && m.style.display !== 'none')));
 
     if (modalesAbiertos.length > 0) {
-        // Cerrar el modal más reciente y volver a empujar estado chat
         modalesAbiertos.forEach(m => {
             m.classList.remove('visible');
             m.classList.remove('open');
@@ -154,16 +171,174 @@ window.addEventListener('popstate', (e) => {
         history.pushState({ kvs: 'chat' }, '');
         return;
     }
-
-    // Si el chat está abierto y el sidebar está oculto → volver al menú
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar && !sidebar.classList.contains('visible')) {
-        _volverAlMenu();
-        // Volver a empujar el estado base para que el próximo atrás salga de la app
-        // (no seguimos interceptando indefinidamente)
-        return;
+    // Si el chat está abierto, volver a la lista
+    const chatPanel = document.getElementById('chatPanel');
+    if (chatPanel && chatPanel.classList.contains('kvs-chat-open')) {
+        volverALista();
     }
 });
+
+// toggleSidebar: en móvil usa el nuevo sistema; en desktop el overlay clásico
+function toggleSidebar() {
+    if (_esMobile()) {
+        volverALista();
+        return;
+    }
+    document.getElementById('sidebar').classList.toggle('visible');
+    document.getElementById('sidebarOverlay').classList.toggle('visible');
+}
+
+// ── Bottom Navigation ────────────────────────────────────────────────────────
+// Secciones del sidebar que cada tab muestra/oculta
+const _BNAV_SECTIONS = {
+    chats:     ['contactsList', 'archivedList', 'archivedLabel'],
+    grupos:    ['groupsList'],
+    contactos: ['contactsList'],
+    ajustes:   [],
+};
+let _bnavTab = 'chats';
+
+function bnavSeleccionar(tab) {
+    if (tab === 'ajustes') {
+        abrirAjustes();
+        return;
+    }
+    _bnavTab = tab;
+    _bnavActualizarTabActivo(tab);
+
+    // En móvil: si hay chat abierto, volver a la lista primero
+    if (_esMobile()) {
+        volverALista();
+    }
+
+    // Hacer scroll al inicio del sidebar
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.scrollTop = 0;
+
+    // Mostrar/resaltar la sección correcta en el sidebar
+    if (tab === 'chats') {
+        // Mostrar todo: la vista por defecto
+        document.getElementById('contactsList')?.parentElement && null;
+        // Solo hacer scroll suave a los contactos
+    } else if (tab === 'grupos') {
+        const grpSection = document.getElementById('groupsList');
+        if (grpSection) grpSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (tab === 'contactos') {
+        const ctSection = document.getElementById('contactsList');
+        if (ctSection) ctSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function _bnavActualizarTabActivo(tab) {
+    ['chats', 'grupos', 'contactos', 'ajustes'].forEach(t => {
+        const btn = document.getElementById('bnav' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (btn) btn.classList.toggle('active', t === tab);
+    });
+}
+
+function _bnavActualizarBadges() {
+    // Badge de chats: total de no leídos en contactos
+    let totalChats = 0;
+    Object.entries(unreadCounts).forEach(([k, v]) => {
+        if (!k.startsWith('group_')) totalChats += (v || 0);
+    });
+    const chatsBadge = document.getElementById('bnavChatsBadge');
+    if (chatsBadge) {
+        chatsBadge.textContent = totalChats > 99 ? '99+' : (totalChats || '');
+        chatsBadge.classList.toggle('visible', totalChats > 0);
+    }
+    // Badge de grupos
+    let totalGrupos = 0;
+    Object.entries(unreadCounts).forEach(([k, v]) => {
+        if (k.startsWith('group_')) totalGrupos += (v || 0);
+    });
+    const gruposBadge = document.getElementById('bnavGruposBadge');
+    if (gruposBadge) {
+        gruposBadge.textContent = totalGrupos > 99 ? '99+' : (totalGrupos || '');
+        gruposBadge.classList.toggle('visible', totalGrupos > 0);
+    }
+}
+
+// ── Swipe derecho para volver a la lista ────────────────────────────────────
+(function _initSwipeBack() {
+    let _swipeStartX = 0;
+    let _swipeStartY = 0;
+    let _swipeTracking = false;
+    const EDGE_THRESHOLD = 40; // px desde el borde izquierdo para iniciar swipe
+    const SWIPE_MIN_DIST = 80; // px mínimos para considerar swipe
+
+    document.addEventListener('touchstart', (e) => {
+        if (!_esMobile()) return;
+        const chatPanel = document.getElementById('chatPanel');
+        if (!chatPanel || !chatPanel.classList.contains('kvs-chat-open')) return;
+        const touch = e.touches[0];
+        if (touch.clientX <= EDGE_THRESHOLD) {
+            _swipeStartX = touch.clientX;
+            _swipeStartY = touch.clientY;
+            _swipeTracking = true;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!_swipeTracking) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - _swipeStartX;
+        const dy = Math.abs(touch.clientY - _swipeStartY);
+        // Si el movimiento es más horizontal que vertical, dar feedback visual
+        if (dx > 10 && dy < dx) {
+            const chatPanel = document.getElementById('chatPanel');
+            const sidebar   = document.getElementById('sidebar');
+            const progress  = Math.min(dx / SWIPE_MIN_DIST, 1);
+            if (chatPanel) chatPanel.style.transform = `translateX(${dx * 0.4}px)`;
+            if (sidebar)   sidebar.style.transform   = `translateX(${-100 + progress * 100}%)`;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        if (!_swipeTracking) return;
+        _swipeTracking = false;
+        const touch = e.changedTouches[0];
+        const dx = touch.clientX - _swipeStartX;
+        const dy = Math.abs(touch.clientY - _swipeStartY);
+        const chatPanel = document.getElementById('chatPanel');
+        const sidebar   = document.getElementById('sidebar');
+        // Quitar transform inline para dejar que la CSS transition tome el control
+        if (chatPanel) chatPanel.style.transform = '';
+        if (sidebar)   sidebar.style.transform   = '';
+        if (dx >= SWIPE_MIN_DIST && dy < dx) {
+            volverALista();
+        }
+    }, { passive: true });
+})();
+
+// ── Safe area + teclado virtual (iPhone / Android) ─────────────────────────
+// Cuando el teclado virtual aparece en iOS Safari, el viewport se encoge.
+// Usamos la API visualViewport para ajustar el input area correctamente.
+(function _initVisualViewport() {
+    if (!window.visualViewport) return;
+    const inputArea = document.querySelector('.input-area');
+    if (!inputArea) return;
+
+    let _lastVVHeight = window.visualViewport.height;
+
+    window.visualViewport.addEventListener('resize', () => {
+        const vvHeight  = window.visualViewport.height;
+        const vvOffset  = window.visualViewport.offsetTop;
+        const diff      = _lastVVHeight - vvHeight;
+        _lastVVHeight   = vvHeight;
+
+        if (!_esMobile()) return;
+
+        // Cuando el teclado sube (diff > 80px), mover el input area hacia arriba
+        // para que quede visible sobre el teclado
+        if (diff > 80) {
+            // Teclado apareció: el input area ya es sticky/fixed, solo
+            // aseguramos que el chat scroll llegue al último mensaje
+            setTimeout(scrollChat, 100);
+        }
+        // El resto lo gestiona el position:sticky del input-area
+    });
+})();
 </script>
 
 <style>
@@ -3433,80 +3608,188 @@ emoji-picker.visible { display: block; }
         height: 100dvh;
         max-height: none;
         border-radius: 0;
+        /* En móvil usamos position relativa para las dos "pantallas" apiladas */
         grid-template-columns: 1fr;
         box-shadow: none;
         border: none;
+        overflow: hidden;
+        position: relative;
     }
 
-    /* Sidebar deslizante */
+    /* ── SIDEBAR: ocupa toda la pantalla, es la "pantalla Lista" ── */
     .sidebar {
-        position: fixed;
-        left: -100%;
-        top: 0;
-        bottom: 0;
-        width: 82vw;
-        max-width: 320px;
-        z-index: 100;
-        transition: left .28s cubic-bezier(.4,0,.2,1);
-        box-shadow: 4px 0 32px rgba(0,0,0,0.22);
-        background: var(--bg-sidebar);
-        overflow-y: auto;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        max-width: 100%;
         height: 100%;
         height: 100dvh;
+        z-index: 10;
+        background: var(--bg-sidebar);
+        overflow-y: auto;
+        overflow-x: hidden;
+        transform: translateX(0);
+        transition: transform .28s cubic-bezier(.4,0,.2,1);
+        box-shadow: none;
+        /* Espacio para bottom nav */
+        padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     }
 
-    .sidebar.visible { left: 0; }
-
-    #hamburger {
-        display: flex !important;
+    /* Cuando hay un chat abierto, el sidebar se desliza fuera a la izquierda */
+    .sidebar.kvs-chat-open {
+        transform: translateX(-100%);
+        pointer-events: none;
     }
 
-    /* Sidebar: contactos con altura adecuada */
-    #contactsList { max-height: 40%; }
-
-    /* Botones acción contactos: siempre visibles en móvil táctil */
-    .contact-actions { display: flex; }
-
-    /* OTP más compactos en pantallas pequeñas */
-    .otp-digit {
-        width: 44px;
-        height: 52px;
-        font-size: 20px;
+    /* ── CHAT PANEL: ocupa toda la pantalla, es la "pantalla Chat" ── */
+    .chat-panel {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        z-index: 5;
+        transform: translateX(100%);
+        transition: transform .28s cubic-bezier(.4,0,.2,1);
+        /* Espacio para bottom nav */
+        padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     }
 
-    /* Login card compacta */
-    .login-card {
-        padding: 28px 20px 24px;
-        max-width: calc(100vw - 28px);
+    /* Cuando hay un chat abierto, el panel entra desde la derecha */
+    .chat-panel.kvs-chat-open {
+        transform: translateX(0);
     }
 
-    /* Login - logo más pequeño */
-    .login-card .logo-wrap img { width: 110px; }
+    /* Hamburger oculto — navegamos con swipe/back, no con overlay */
+    #hamburger { display: none !important; }
 
-    /* Chat más cómodo */
+    /* Overlay ya no necesario — quitamos el overlay lateral */
+    #sidebarOverlay { display: none !important; }
+
+    /* ── BOTTOM NAVIGATION BAR ── */
+    #bottomNav {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0; right: 0;
+        height: calc(60px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: var(--white);
+        border-top: 1px solid var(--border);
+        z-index: 200;
+        align-items: stretch;
+        box-shadow: 0 -2px 12px rgba(79,70,229,0.08);
+    }
+
+    .bnav-btn {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background var(--transition);
+        position: relative;
+        padding-top: 6px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .bnav-btn:active { background: var(--purple-pale); }
+    .bnav-btn .bnav-icon { font-size: 20px; line-height: 1; }
+    .bnav-btn .bnav-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.2px;
+    }
+    .bnav-btn.active .bnav-label { color: var(--purple-deep); }
+    .bnav-btn.active .bnav-icon  { filter: none; }
+    .bnav-btn.active::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 25%; right: 25%;
+        height: 2.5px;
+        background: var(--purple-deep);
+        border-radius: 0 0 3px 3px;
+    }
+    /* Badge de no leídos en bottom nav */
+    .bnav-badge {
+        position: absolute;
+        top: 4px; right: calc(50% - 18px);
+        background: var(--purple-deep);
+        color: white;
+        font-size: 9px;
+        font-weight: 700;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        padding: 0 4px;
+        display: none;
+    }
+    .bnav-badge.visible { display: flex; }
+
+    /* En modo chat abierto, ocultar tabs que no aplican */
+    .window.kvs-chat-open #bottomNav { display: flex; }
+
+    /* ── SAFE AREA INPUT AREA ── */
+    .input-area {
+        padding: 8px 10px;
+        padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+        gap: 6px;
+        /* En móvil el input-area va pegado al teclado */
+        position: sticky;
+        bottom: 0;
+    }
+
+    /* Asegurar que el chat tenga espacio para el contenido */
     #chat { padding: 10px 12px 14px; gap: 2px; }
 
     .bubble      { font-size: 14.5px; }
     .bubble-wrap { max-width: 85%; }
 
-    /* Cabecera con más padding táctil */
+    /* Header más compacto */
     .chat-header {
         padding: 10px 14px;
-        min-height: 60px;
+        min-height: 58px;
         gap: 10px;
+        /* Safe area top (notch) */
+        padding-top: max(10px, env(safe-area-inset-top, 0px));
     }
 
-    /* Botón hamburguer más grande */
-    #hamburger { width: 44px; height: 44px; }
-
-    /* Input area + safe area para iOS */
-    .input-area {
-        padding: 8px 10px;
-        padding-bottom: max(8px, env(safe-area-inset-bottom));
-        gap: 6px;
+    /* Sidebar header safe area top */
+    .sidebar-header {
+        padding-top: max(0px, env(safe-area-inset-top, 0px));
     }
 
     .input-area .icon-btn { width: 40px; height: 40px; }
+
+    /* Contactos con altura adaptable */
+    #contactsList { max-height: 35vh; }
+
+    /* Botones acción contactos: siempre visibles */
+    .contact-actions { display: flex; }
+
+    /* OTP más compactos */
+    .otp-digit { width: 44px; height: 52px; font-size: 20px; }
+    .otp-wrap  { gap: 5px; }
+
+    /* Login */
+    .login-card {
+        padding: 28px 20px 24px;
+        max-width: calc(100vw - 28px);
+    }
+    .login-card .logo-wrap img { width: 110px; }
+
+    /* Flecha atrás en el header del chat */
+    #btnChatBack {
+        display: flex !important;
+    }
+
 
     #btnEnviar { width: 44px; height: 44px; }
 
@@ -3555,6 +3838,7 @@ emoji-picker.visible { display: block; }
     }
 }
 
+
 /* ============================================================
    PANTALLAS MUY PEQUEÑAS  (≤380px — iPhone SE, etc.)
 ============================================================ */
@@ -3591,50 +3875,74 @@ emoji-picker.visible { display: block; }
 }
 
 /* ============================================================
-   CLASE JS is-mobile (Xiaomi/MIUI y navegadores con viewport incorrecto)
+   CLASE JS is-mobile
+   Solo para dispositivos móviles detectados por JS que el media
+   query ≤768px no cubre (Xiaomi/MIUI, UA incorrecto, etc.)
+   Aplica EXACTAMENTE lo mismo que @media ≤768px, sin tocar PC ni tablet.
 ============================================================ */
 html.is-mobile .app    { padding: 0; }
 
 html.is-mobile .window {
-    width: 100%;
-    height: 100vh;
-    height: 100dvh;
-    max-height: none;
-    border-radius: 0;
+    width: 100%; max-width: 100%;
+    height: 100vh; height: 100dvh;
+    max-height: none; border-radius: 0;
     grid-template-columns: 1fr;
-    box-shadow: none;
-    border: none;
+    box-shadow: none; border: none;
+    overflow: hidden; position: relative;
 }
 
 html.is-mobile .sidebar {
-    position: fixed;
-    left: -100%;
-    top: 0;
-    bottom: 0;
-    width: 82vw;
-    max-width: 320px;
-    z-index: 100;
-    transition: left .28s cubic-bezier(.4,0,.2,1);
-    box-shadow: 4px 0 32px rgba(0,0,0,0.22);
-    background: var(--bg-sidebar);
-    overflow-y: auto;
+    position: absolute; inset: 0;
+    width: 100%; max-width: 100%;
+    height: 100%; height: 100dvh;
+    z-index: 10; box-shadow: none;
+    overflow-y: auto; overflow-x: hidden;
+    transform: translateX(0);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
 }
-
-html.is-mobile .sidebar.visible { left: 0; }
-
-html.is-mobile #hamburger {
-    display: flex !important;
+html.is-mobile .sidebar.kvs-chat-open {
+    transform: translateX(-100%);
+    pointer-events: none;
 }
+html.is-mobile .chat-panel {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; height: 100dvh;
+    z-index: 5;
+    transform: translateX(100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+}
+html.is-mobile .chat-panel.kvs-chat-open { transform: translateX(0); }
 
-html.is-mobile .bubble      { font-size: 14.5px; }
-html.is-mobile .bubble-wrap { max-width: 85%; }
+html.is-mobile #hamburger       { display: none !important; }
+html.is-mobile #sidebarOverlay  { display: none !important; }
+html.is-mobile #btnChatBack     { display: flex !important; }
+html.is-mobile #bottomNav       { display: flex; }
 
+html.is-mobile .bubble          { font-size: 14.5px; }
+html.is-mobile .bubble-wrap     { max-width: 85%; }
+html.is-mobile .contact-actions { display: flex; }
+
+html.is-mobile .sidebar-header {
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+}
+html.is-mobile .chat-header {
+    padding: 10px 14px;
+    min-height: 58px;
+    padding-top: max(10px, env(safe-area-inset-top, 0px));
+}
 html.is-mobile .input-area {
     padding: 8px 10px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    position: sticky;
+    bottom: 0;
 }
 
-html.is-mobile .contact-actions { display: flex; }
+/* ── Modo oscuro: bottom nav ── */
+html.dark #bottomNav                       { background: var(--white); border-top-color: var(--border); }
+html.dark .bnav-btn .bnav-label            { color: var(--text-muted); }
+html.dark .bnav-btn.active .bnav-label     { color: var(--purple-deep); }
 
 /* ============================================================
    LANDSCAPE MÓVIL  — evita que el login quede cortado
@@ -3817,6 +4125,9 @@ html.is-mobile .contact-actions { display: flex; }
     <section class="chat-panel" id="chatPanel">
       <!-- Header -->
       <div class="chat-header">
+        <!-- Botón atrás: solo en móvil, vuelve a la lista -->
+        <button id="btnChatBack" onclick="volverALista()" title="Volver"
+          style="display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px 4px 0;color:var(--purple-deep);line-height:1;touch-action:manipulation;flex-shrink:0;">‹</button>
         <button id="hamburger" onclick="toggleSidebar()">☰</button>
         <img id="chatAvatar" src="" style="display:none">
         <div id="chatGroupAvatar" onclick="onClickGroupAvatar()" title="Cambiar foto del grupo"></div>
@@ -3945,6 +4256,28 @@ html.is-mobile .contact-actions { display: flex; }
         </button>
       </div>
     </section>
+
+    <!-- ===== BOTTOM NAVIGATION (solo móvil) ===== -->
+    <nav id="bottomNav" style="display:none;">
+      <button class="bnav-btn active" id="bnavChats" onclick="bnavSeleccionar('chats')" aria-label="Chats">
+        <span class="bnav-icon">💬</span>
+        <span class="bnav-label">Chats</span>
+        <span class="bnav-badge" id="bnavChatsBadge"></span>
+      </button>
+      <button class="bnav-btn" id="bnavGrupos" onclick="bnavSeleccionar('grupos')" aria-label="Grupos">
+        <span class="bnav-icon">👥</span>
+        <span class="bnav-label">Grupos</span>
+        <span class="bnav-badge" id="bnavGruposBadge"></span>
+      </button>
+      <button class="bnav-btn" id="bnavContactos" onclick="bnavSeleccionar('contactos')" aria-label="Contactos">
+        <span class="bnav-icon">👤</span>
+        <span class="bnav-label">Contactos</span>
+      </button>
+      <button class="bnav-btn" id="bnavAjustes" onclick="bnavSeleccionar('ajustes')" aria-label="Ajustes">
+        <span class="bnav-icon">⚙️</span>
+        <span class="bnav-label">Ajustes</span>
+      </button>
+    </nav>
 
   </div>
 </div>
@@ -4241,28 +4574,28 @@ html.is-mobile .contact-actions { display: flex; }
 <script>
 // ============================================================
 // DETECCIÓN DE MÓVIL REAL (para Xiaomi/MIUI y navegadores con viewport incorrecto)
-// Se añade clase is-mobile al <html> si el dispositivo es realmente móvil
-// aunque el media query no lo detecte correctamente
-// ============================================================
+// Se añade clase is-mobile al <html> solo si el dispositivo es realmente móvil
+// (teléfono, no tablet ni PC). Así el layout de tablet y PC no se ve afectado.
 (function detectMobile() {
     const ua = navigator.userAgent || '';
-    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|MIUI|HarmonyOS|MiuiBrowser/i.test(ua);
+    // UA de móvil SIN iPad/tablet
+    const isMobileUA = /Android(?!.*Tablet)|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|MIUI|HarmonyOS|MiuiBrowser/i.test(ua)
+        && !/iPad|Tablet/i.test(ua);
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    const isSmallScreen = window.innerWidth <= 900 || window.screen.width <= 900;
+    // Pantalla de teléfono (≤768px) + táctil
+    const isPhoneScreen = window.innerWidth <= 768 || window.screen.width <= 768;
 
-    if (isMobileUA || (isTouchDevice && isSmallScreen)) {
-        document.documentElement.classList.add('is-mobile');
-    }
-
-    // Re-evaluar al cambiar orientación
-    window.addEventListener('resize', () => {
-        const stillSmall = window.innerWidth <= 900 || window.screen.width <= 900;
-        if (isMobileUA || (isTouchDevice && stillSmall)) {
+    const apply = () => {
+        const currentWidth = window.innerWidth;
+        if (isMobileUA || (isTouchDevice && currentWidth <= 768)) {
             document.documentElement.classList.add('is-mobile');
         } else {
             document.documentElement.classList.remove('is-mobile');
         }
-    });
+    };
+
+    apply();
+    window.addEventListener('resize', apply);
 })();
 
 // ============================================================
@@ -6858,13 +7191,7 @@ function updateEstado(id, estado) {
     if (el) el.textContent = estado;
 }
 
-// ============================================================
-// SIDEBAR MÓVIL
-// ============================================================
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('visible');
-    document.getElementById('sidebarOverlay').classList.toggle('visible');
-}
+// toggleSidebar: defined in the top <script> block
 
 // ============================================================
 // ============================================================
@@ -7530,6 +7857,8 @@ function renderGroupsList() {
     });
 
     ul.innerHTML = items.join('');
+    // Actualizar badges del bottom nav
+    if (typeof _bnavActualizarBadges === 'function') _bnavActualizarBadges();
 }
 
 function seleccionarGrupo(groupId) {
@@ -8385,6 +8714,8 @@ function renderContactsList() {
         headerBadge.textContent = totalUnread > 0 ? totalUnread : '';
         headerBadge.style.display = totalUnread > 0 ? 'inline-flex' : 'none';
     }
+    // Actualizar badges del bottom nav
+    if (typeof _bnavActualizarBadges === 'function') _bnavActualizarBadges();
 }
 
 /* Obtener el username online a partir del phone de un contacto */
