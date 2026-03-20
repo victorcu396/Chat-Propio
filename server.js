@@ -22,6 +22,45 @@ const server = http.createServer(app);
 const mongoURI = process.env.MONGODB_URI;
 const port = process.env.PORT || 8080;
 
+// ── Cloudinary (opcional) ────────────────────────────────────────────────────
+// Si tienes CLOUDINARY_URL o las tres variables sueltas en el .env,
+// las imágenes se suben a Cloudinary y en BD solo se guarda la URL.
+// Si NO están configuradas, las imágenes se guardan como base64 (comportamiento anterior).
+let cloudinary = null;
+const CLOUDINARY_URL = process.env.CLOUDINARY_URL;
+const CLD_CLOUD  = process.env.CLOUDINARY_CLOUD_NAME;
+const CLD_KEY    = process.env.CLOUDINARY_API_KEY;
+const CLD_SECRET = process.env.CLOUDINARY_API_SECRET;
+
+if (CLOUDINARY_URL || (CLD_CLOUD && CLD_KEY && CLD_SECRET)) {
+    try {
+        cloudinary = require('cloudinary').v2;
+        if (!CLOUDINARY_URL) {
+            cloudinary.config({ cloud_name: CLD_CLOUD, api_key: CLD_KEY, api_secret: CLD_SECRET });
+        }
+        console.log('[Cloudinary] Configurado correctamente.');
+    } catch(e) {
+        console.warn('[Cloudinary] No instalado (npm install cloudinary). Usando base64.');
+        cloudinary = null;
+    }
+}
+
+// Helper: subir base64 a Cloudinary y devolver URL segura
+async function subirImagenCloudinary(base64Data) {
+    if (!cloudinary) return null;
+    try {
+        const result = await cloudinary.uploader.upload(base64Data, {
+            folder: 'kivoospace',
+            resource_type: 'image',
+            transformation: [{ width: 1200, height: 1200, crop: 'limit', quality: 'auto:good', fetch_format: 'auto' }]
+        });
+        return result.secure_url;
+    } catch(e) {
+        console.error('[Cloudinary] Error al subir imagen:', e.message);
+        return null;
+    }
+}
+
 mongoose.connect(mongoURI)
     .then(() => console.log("MongoDB conectado"))
     .catch(err => console.error("MongoDB error:", err));
@@ -329,6 +368,27 @@ app.post('/api/gdpr/delete', async (req, res) => {
             { deletedAt: new Date(), message: '[cuenta eliminada]', imageData: null, audioData: null }
         );
         res.json({ ok: true, message: 'Cuenta y datos eliminados correctamente.' });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/* REST: subir imagen a Cloudinary (si está configurado) o devolver base64 tal cual
+   POST /api/upload-image
+   Body: { imageData: 'data:image/...' }
+   Response: { url } — puede ser URL de Cloudinary o el mismo base64 si no hay Cloudinary */
+app.post('/api/upload-image', async (req, res) => {
+    const { imageData } = req.body;
+    if (!imageData || !/^data:image\//.test(imageData)) {
+        return res.status(400).json({ error: 'imageData inválido' });
+    }
+    try {
+        if (cloudinary) {
+            const url = await subirImagenCloudinary(imageData);
+            if (url) return res.json({ url, type: 'cloudinary' });
+        }
+        // Sin Cloudinary: devolver el base64 tal cual (comportamiento anterior)
+        res.json({ url: imageData, type: 'base64' });
     } catch(e) {
         res.status(500).json({ error: e.message });
     }
@@ -765,11 +825,16 @@ wss.on('connection', (ws) => {
                 const conversationId = usersSorted.join('_');
                 const id             = crypto.randomUUID();
 
-                // Validar imagen base64 si viene
+                // Validar imagen base64 si viene; subir a Cloudinary si está configurado
                 let imageData = null;
                 if (data.imageData) {
                     if (/^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) {
-                        imageData = data.imageData;
+                        if (cloudinary) {
+                            const url = await subirImagenCloudinary(data.imageData);
+                            imageData = url || data.imageData;
+                        } else {
+                            imageData = data.imageData;
+                        }
                     }
                 }
 
@@ -874,13 +939,27 @@ wss.on('connection', (ws) => {
                 const usersSorted    = [ws.username, withUsername].sort();
                 const conversationId = usersSorted.join('_');
 
-                const history = await Message.find({ conversationId })
-                    .sort({ time: 1 });
+                // Paginación: cargar los últimos PAGE_SIZE mensajes.
+                // Si viene beforeId, cargar la página anterior a ese mensaje.
+                const PAGE_SIZE = 50;
+                const filter = { conversationId };
+                if (data.beforeId) {
+                    const anchor = await Message.findOne({ id: data.beforeId }).lean();
+                    if (anchor) filter.time = { $lt: anchor.time };
+                }
+                const history = await Message.find(filter)
+                    .sort({ time: -1 })
+                    .limit(PAGE_SIZE)
+                    .lean();
+                // Invertir para orden cronológico
+                history.reverse();
 
                 ws.send(JSON.stringify({
-                    type:     'history',
-                    messages: history,
-                    withUsername  // devolver el username resuelto al cliente
+                    type:        'history',
+                    messages:    history,
+                    withUsername,
+                    hasMore:     history.length === PAGE_SIZE,   // hay páginas anteriores
+                    isLoadMore:  !!data.beforeId                 // es una carga adicional
                 }));
                 break;
             }
@@ -1325,7 +1404,12 @@ wss.on('connection', (ws) => {
 
                 let imageData = null;
                 if (data.imageData && /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) {
-                    imageData = data.imageData;
+                    if (cloudinary) {
+                        const url = await subirImagenCloudinary(data.imageData);
+                        imageData = url || data.imageData;
+                    } else {
+                        imageData = data.imageData;
+                    }
                 }
                 let audioData = null;
                 if (data.audioData && /^data:audio\/[a-zA-Z0-9]+/.test(data.audioData)) {
@@ -1417,13 +1501,24 @@ wss.on('connection', (ws) => {
                 const grpHist = await Group.findOne({ groupId: data.groupId });
                 if (!grpHist || !grpHist.members.includes(ws.phone)) break;
 
-                const grpHistory = await Message.find({ conversationId: 'group_' + data.groupId })
-                    .sort({ time: 1 });
+                const PAGE_SIZE = 50;
+                const grpFilter = { conversationId: 'group_' + data.groupId };
+                if (data.beforeId) {
+                    const anchor = await Message.findOne({ id: data.beforeId }).lean();
+                    if (anchor) grpFilter.time = { $lt: anchor.time };
+                }
+                const grpHistory = await Message.find(grpFilter)
+                    .sort({ time: -1 })
+                    .limit(PAGE_SIZE)
+                    .lean();
+                grpHistory.reverse();
 
                 ws.send(JSON.stringify({
-                    type:     'groupHistory',
-                    groupId:  data.groupId,
-                    messages: grpHistory
+                    type:       'groupHistory',
+                    groupId:    data.groupId,
+                    messages:   grpHistory,
+                    hasMore:    grpHistory.length === PAGE_SIZE,
+                    isLoadMore: !!data.beforeId
                 }));
                 break;
             }
@@ -1994,7 +2089,14 @@ wss.on('connection', (ws) => {
                     }
 
                     let imageData = null;
-                    if (data.imageData && /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) imageData = data.imageData;
+                    if (data.imageData && /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(data.imageData)) {
+                        if (cloudinary) {
+                            const url = await subirImagenCloudinary(data.imageData);
+                            imageData = url || data.imageData;
+                        } else {
+                            imageData = data.imageData;
+                        }
+                    }
 
                     const newId = crypto.randomUUID();
                     const replyMsg = new Message({

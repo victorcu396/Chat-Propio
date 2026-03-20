@@ -3870,6 +3870,8 @@ html.is-mobile .contact-actions { display: flex; }
       </div>
 
       <!-- Mensajes -->
+      <!-- Indicador de paginación: aparece al top cuando hay mensajes anteriores -->
+      <div id="historyLoadingIndicator" style="display:none;justify-content:center;align-items:center;padding:10px 0;font-size:12px;color:var(--text-muted);font-style:italic;flex-shrink:0;"></div>
       <ul id="chat"></ul>
 
       <!-- Typing -->
@@ -4989,6 +4991,13 @@ let autoScroll = true;
 let pendingImage = null;
 let ringtoneInterval = null;
 
+// ── Paginación de historial ──────────────────────────────────────────────────
+// Guardamos el id del mensaje más antiguo cargado para pedir la página anterior
+// cuando el usuario hace scroll hasta arriba.
+let _historyHasMore   = false;  // hay mensajes anteriores disponibles
+let _historyLoading   = false;  // evitar peticiones simultáneas
+let _historyOldestId  = null;   // id del mensaje más antiguo visible
+
 const chat = document.getElementById('chat');
 const input = document.getElementById('mensaje');
 const usersUl = document.getElementById('users');
@@ -5303,18 +5312,45 @@ function toggleEmoji() {
 // ============================================================
 // IMAGEN
 // ============================================================
+// ── Comprimir imagen antes de enviarla ──────────────────────────────────────
+// Redimensiona al máximo 1200px y comprime al 82% JPEG con Canvas.
+// No requiere librerías externas. Si la imagen ya es pequeña, no la agranda.
+function comprimirImagen(file, callback) {
+    const MAX_PX   = 1200;
+    const QUALITY  = 0.82;
+    const reader   = new FileReader();
+    reader.onload  = (ev) => {
+        const img  = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            // Solo reducir, nunca agrandar
+            if (width > MAX_PX || height > MAX_PX) {
+                const ratio = Math.min(MAX_PX / width, MAX_PX / height);
+                width  = Math.round(width  * ratio);
+                height = Math.round(height * ratio);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width  = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', QUALITY);
+            callback(dataUrl);
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
 function seleccionarImagen(event) {
     const file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        pendingImage = { dataUrl: e.target.result, file };
-        imgPreviewEl.src = e.target.result;
+    comprimirImagen(file, (dataUrl) => {
+        pendingImage = { dataUrl, file };
+        imgPreviewEl.src = dataUrl;
         document.getElementById('imgPreviewName').textContent = file.name;
         imgPreviewContainer.classList.add('visible');
         actualizarBtnEnviar();
-    };
-    reader.readAsDataURL(file);
+    });
 }
 
 document.addEventListener('paste', (e) => {
@@ -5324,15 +5360,13 @@ document.addEventListener('paste', (e) => {
     for (let item of items) {
         if (item.type.startsWith('image/')) {
             const file = item.getAsFile();
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                pendingImage = { dataUrl: ev.target.result, file };
-                imgPreviewEl.src = ev.target.result;
+            comprimirImagen(file, (dataUrl) => {
+                pendingImage = { dataUrl, file };
+                imgPreviewEl.src = dataUrl;
                 document.getElementById('imgPreviewName').textContent = 'Imagen del portapapeles';
                 imgPreviewContainer.classList.add('visible');
                 actualizarBtnEnviar();
-            };
-            reader.readAsDataURL(file);
+            });
             break;
         }
     }
@@ -5370,6 +5404,14 @@ function obtenerDia(date) {
     return d.toDateString() === hoy.toDateString() ? 'Hoy' : d.toLocaleDateString();
 }
 
+function _actualizarIndicadorPaginacion() {
+    const el = document.getElementById('historyLoadingIndicator');
+    if (!el) return;
+    // Mostrar el indicador de "scroll para cargar más" solo si hay mensajes anteriores
+    el.style.display = _historyHasMore ? 'flex' : 'none';
+    el.textContent   = _historyHasMore ? '⬆ Cargando mensajes anteriores…' : '';
+}
+
 function scrollChat() {
     chat.scrollTop = chat.scrollHeight;
 }
@@ -5379,9 +5421,43 @@ chat.addEventListener('scroll', () => {
     if (_scrollRafId) return;
     _scrollRafId = requestAnimationFrame(() => {
         autoScroll = (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 50;
+
+        // Scroll infinito hacia arriba: cuando el usuario llega al top, cargar página anterior
+        if (chat.scrollTop < 80 && _historyHasMore && !_historyLoading && _historyOldestId && socket && socket.readyState === WebSocket.OPEN) {
+            _cargarHistorialAnterior();
+        }
+
         _scrollRafId = null;
     });
 }, { passive: true });
+
+function _cargarHistorialAnterior() {
+    if (_historyLoading || !_historyHasMore || !_historyOldestId) return;
+    _historyLoading = true;
+    // Mostrar indicador de carga al top
+    const loadingEl = document.getElementById('historyLoadingIndicator');
+    if (loadingEl) loadingEl.style.display = 'flex';
+
+    if (currentChat && currentChat.startsWith('group_')) {
+        socket.send(JSON.stringify({
+            type:     'loadGroupConversation',
+            groupId:  currentChat.replace('group_', ''),
+            beforeId: _historyOldestId
+        }));
+    } else if (currentChat && currentChat.startsWith('phone:')) {
+        socket.send(JSON.stringify({
+            type:      'loadConversation',
+            withPhone: currentChat.replace('phone:', ''),
+            beforeId:  _historyOldestId
+        }));
+    } else if (currentChat) {
+        socket.send(JSON.stringify({
+            type:     'loadConversation',
+            with:     currentChat,
+            beforeId: _historyOldestId
+        }));
+    }
+}
 
 function actualizarBtnEnviar() {
     // Habilitado si: hay texto, hay imagen pendiente, o estamos editando con texto
@@ -5394,26 +5470,92 @@ function actualizarBtnEnviar() {
 function handleMessage(data) {
 
     if (data.type === 'history') {
-        // El servidor puede devolver withUsername (resuelto desde withPhone)
-        // En ese caso, guardamos también bajo el chatKey de username para cuando se conecte
         const chatKey = currentChat;
-        conversations[chatKey] = data.messages;
-        if (data.withUsername && currentChat.startsWith('phone:')) {
-            // También indexar por username para cuando el contacto se conecte
-            conversations[data.withUsername] = data.messages;
+        const isLoadMore = !!data.isLoadMore;
+
+        // Ocultar indicador de carga
+        _historyLoading = false;
+        const loadingEl = document.getElementById('historyLoadingIndicator');
+        if (loadingEl) loadingEl.style.display = 'none';
+
+        // Actualizar paginación
+        _historyHasMore = !!data.hasMore;
+        if (data.messages && data.messages.length > 0) {
+            _historyOldestId = data.messages[0].id;
         }
-        chat.innerHTML = '';
-        let lastDay = '';
+
         // Obtener lista de mensajes ocultos localmente
         let _hiddenMsgs;
         try { _hiddenMsgs = new Set(JSON.parse(localStorage.getItem('kvs_hidden_msgs') || '[]')); }
         catch(_) { _hiddenMsgs = new Set(); }
-        data.messages.forEach(msg => {
-            if (_hiddenMsgs.has(msg.id)) return; // saltar ocultos
-            const day = obtenerDia(msg.time);
-            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-            addMessage(msg);
-        });
+
+        if (!isLoadMore) {
+            // Primera carga: reemplazar todo el historial
+            conversations[chatKey] = data.messages;
+            if (data.withUsername && currentChat.startsWith('phone:')) {
+                conversations[data.withUsername] = data.messages;
+            }
+            chat.innerHTML = '';
+            let lastDay = '';
+            data.messages.forEach(msg => {
+                if (_hiddenMsgs.has(msg.id)) return;
+                const day = obtenerDia(msg.time);
+                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+                addMessage(msg);
+            });
+            // Mostrar indicador de "más mensajes" al top si hay paginación
+            _actualizarIndicadorPaginacion();
+        } else {
+            // Load more: PREPEND mensajes al inicio, conservando posición de scroll
+            if (!conversations[chatKey]) conversations[chatKey] = [];
+            conversations[chatKey].unshift(...data.messages);
+
+            const scrollHeightBefore = chat.scrollHeight;
+            const scrollTopBefore    = chat.scrollTop;
+
+            // Crear un contenedor temporal, renderizar ahí, luego mover al inicio
+            const tempList = document.createElement('ul');
+            tempList.style.display = 'none';
+            document.body.appendChild(tempList);
+
+            // Guardar y redirigir temporalmente el chat target
+            const realChat = chat;
+            // Monkey-patch appendChild para redirigir a tempList
+            const origAppendChild  = realChat.appendChild.bind(realChat);
+            const origInsertBefore = realChat.insertBefore.bind(realChat);
+            realChat.appendChild  = (n) => tempList.appendChild(n);
+            realChat.insertBefore = (n, ref) => tempList.insertBefore(n, ref);
+
+            let lastDay = '';
+            data.messages.forEach(msg => {
+                if (_hiddenMsgs.has(msg.id)) return;
+                const day = obtenerDia(msg.time);
+                if (day !== lastDay) {
+                    const sep = document.createElement('li');
+                    sep.className = 'day-separator';
+                    sep.textContent = day;
+                    tempList.appendChild(sep);
+                    lastDay = day;
+                }
+                addMessage(msg);
+            });
+
+            // Restaurar métodos originales
+            realChat.appendChild  = origAppendChild;
+            realChat.insertBefore = origInsertBefore;
+
+            // Mover los nodos renderizados al inicio del chat real
+            const nodes = [...tempList.childNodes];
+            nodes.reverse().forEach(n => {
+                realChat.insertBefore(n, realChat.firstChild);
+            });
+            document.body.removeChild(tempList);
+
+            // Restaurar posición de scroll para que no salte
+            chat.scrollTop = scrollTopBefore + (chat.scrollHeight - scrollHeightBefore);
+
+            _actualizarIndicadorPaginacion();
+        }
         return;
     }
 
@@ -5997,6 +6139,10 @@ function _limpiarEstadoChat() {
     cerrarMenuMensaje();
     // Salir del modo selección si estaba activo
     salirModoSeleccion();
+    // Resetear paginación
+    _historyHasMore  = false;
+    _historyLoading  = false;
+    _historyOldestId = null;
     // Cancelar edición o respuesta activa sin pedir confirmación
     if (_editState || _replyState) {
         _editState  = null;
@@ -7650,16 +7796,73 @@ function onGroupMessage(data) {
 }
 
 function onGroupHistory(data) {
-    const chatKey = 'group_' + data.groupId;
-    conversations[chatKey] = data.messages;
-    if (currentChat === chatKey) {
+    const chatKey    = 'group_' + data.groupId;
+    const isLoadMore = !!data.isLoadMore;
+
+    _historyLoading = false;
+    const loadingEl = document.getElementById('historyLoadingIndicator');
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    _historyHasMore = !!data.hasMore;
+    if (data.messages && data.messages.length > 0) {
+        _historyOldestId = data.messages[0].id;
+    }
+
+    let _hiddenMsgs;
+    try { _hiddenMsgs = new Set(JSON.parse(localStorage.getItem('kvs_hidden_msgs') || '[]')); }
+    catch(_) { _hiddenMsgs = new Set(); }
+
+    if (currentChat !== chatKey) return;
+
+    if (!isLoadMore) {
+        conversations[chatKey] = data.messages;
         chat.innerHTML = '';
         let lastDay = '';
         data.messages.forEach(msg => {
+            if (_hiddenMsgs.has(msg.id)) return;
             const day = obtenerDia(msg.time);
             if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
             addGroupMessage(msg);
         });
+        _actualizarIndicadorPaginacion();
+    } else {
+        if (!conversations[chatKey]) conversations[chatKey] = [];
+        conversations[chatKey].unshift(...data.messages);
+
+        const scrollHeightBefore = chat.scrollHeight;
+        const scrollTopBefore    = chat.scrollTop;
+
+        const tempList = document.createElement('ul');
+        tempList.style.display = 'none';
+        document.body.appendChild(tempList);
+        const origAppendChild  = chat.appendChild.bind(chat);
+        const origInsertBefore = chat.insertBefore.bind(chat);
+        chat.appendChild  = (n) => tempList.appendChild(n);
+        chat.insertBefore = (n, ref) => tempList.insertBefore(n, ref);
+
+        let lastDay = '';
+        data.messages.forEach(msg => {
+            if (_hiddenMsgs.has(msg.id)) return;
+            const day = obtenerDia(msg.time);
+            if (day !== lastDay) {
+                const sep = document.createElement('li');
+                sep.className = 'day-separator';
+                sep.textContent = day;
+                tempList.appendChild(sep);
+                lastDay = day;
+            }
+            addGroupMessage(msg);
+        });
+
+        chat.appendChild  = origAppendChild;
+        chat.insertBefore = origInsertBefore;
+
+        const nodes = [...tempList.childNodes];
+        nodes.reverse().forEach(n => chat.insertBefore(n, chat.firstChild));
+        document.body.removeChild(tempList);
+
+        chat.scrollTop = scrollTopBefore + (chat.scrollHeight - scrollHeightBefore);
+        _actualizarIndicadorPaginacion();
     }
 }
 
