@@ -5488,11 +5488,12 @@ function handleMessage(data) {
                     const textEl = bubble.querySelector('.msg-text');
                     const imgEl  = bubble.querySelector('.img-msg');
                     const rowHasImg = !!imgEl;
-                    // Extraer solo el texto propio (sin reply-preview ni forward-label)
+                    // Extraer solo el texto propio: quitar reply-preview, forward-label,
+                    // edited-label, meta, sender-label y cualquier otro decorador
                     let rowText = '';
                     if (textEl) {
                         const cloned = textEl.cloneNode(true);
-                        cloned.querySelectorAll('.reply-preview,.forward-label').forEach(el => el.remove());
+                        cloned.querySelectorAll('.reply-preview,.forward-label,.meta,.edited-label,.star-badge,.estado,.hora,.audio-msg-wrap').forEach(el => el.remove());
                         rowText = cloned.textContent.trim();
                     }
                     if (data.imageData && rowHasImg) { matchedRow = lr; break; }
@@ -5516,7 +5517,11 @@ function handleMessage(data) {
                     for (const arr of Object.values(conversations)) {
                         const localIdx = arr.findIndex(m => m.id === oldLocalId);
                         if (localIdx >= 0) {
-                            arr[localIdx].id = data.id;
+                            // Propagar editedAt si el mensaje fue editado mientras era local_
+                            if (arr[localIdx].editedAt && !data.editedAt) {
+                                data.editedAt = arr[localIdx].editedAt;
+                            }
+                            arr[localIdx].id        = data.id;
                             arr[localIdx].delivered = true;
                             // Quitar duplicado: si el eco ya fue añadido con el id real, borrarlo
                             const dupIdx = arr.findIndex((m, i) => i !== localIdx && m.id === data.id);
@@ -5944,16 +5949,14 @@ function renderUsers(onlineList) {
         }).join('');
     }
 
-    // Actualizar botón de llamada si el chat activo es 1:1
-    if (currentChat && !currentChat.startsWith('group_')) {
+    // Actualizar título del botón de llamada si el chat activo es 1:1
+    // (solo el título cambia según si está online o no, nunca lo deshabilitamos)
+    if (currentChat && !currentChat.startsWith('group_') && !currentChat.startsWith('phone:')) {
         const btnU = document.getElementById('btnCallUnified');
         if (btnU && btnU.dataset.mode === '1to1') {
-            // Solo habilitar llamada si es contacto
-            const chatPhone = window._phoneToUsername
-                ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === currentChat)?.[0]
-                : null;
-            const isContact = chatPhone && myContacts.has(chatPhone);
-            btnU.disabled = !onlineList.includes(currentChat) || !isContact;
+            const isCurrentOnline = onlineList.includes(currentChat);
+            btnU.title = isCurrentOnline ? 'Llamada de voz' : 'Llamar (dejará notificación de llamada perdida)';
+            // Nunca deshabilitar: iniciarLlamada() maneja el caso offline correctamente
         }
     }
 }
@@ -6084,9 +6087,11 @@ function seleccionarUsuario(user) {
     document.getElementById('chatStatus').textContent = statusText;
     document.getElementById('chatStatus').style.color = statusColor;
     const btnU = document.getElementById('btnCallUnified');
-    btnU.disabled = !isOnline;
+    // El botón de llamada siempre está disponible en chats 1:1.
+    // Si el contacto está offline, iniciarLlamada() deja una llamada perdida.
+    btnU.disabled = false;
     btnU.dataset.mode = '1to1';
-    btnU.title = 'Llamada de voz';
+    btnU.title = isOnline ? 'Llamada de voz' : 'Llamar (dejará notificación de llamada perdida)';
 
     if (conversations[user]) {
         let lastDay = '';
@@ -7544,11 +7549,11 @@ function onGroupMessage(data) {
                 if (!bubble) continue;
                 const textEl = bubble.querySelector('.msg-text');
                 const imgEl  = bubble.querySelector('.img-msg');
-                // Extraer texto propio sin reply-preview ni forward-label
+                // Extraer texto propio sin reply-preview, forward-label, edited-label, etc.
                 let rowText = '';
                 if (textEl) {
                     const cloned = textEl.cloneNode(true);
-                    cloned.querySelectorAll('.reply-preview,.forward-label').forEach(el => el.remove());
+                    cloned.querySelectorAll('.reply-preview,.forward-label,.meta,.edited-label,.star-badge,.estado,.hora,.audio-msg-wrap').forEach(el => el.remove());
                     rowText = cloned.textContent.trim();
                 }
                 if (data.imageData && imgEl) { matchedRow = lr; break; }
@@ -7568,6 +7573,10 @@ function onGroupMessage(data) {
                 if (convArr) {
                     const localIdx = convArr.findIndex(m => m.id === oldLocalId);
                     if (localIdx >= 0) {
+                        // Propagar editedAt si el mensaje fue editado mientras era local_
+                        if (convArr[localIdx].editedAt && !data.editedAt) {
+                            data.editedAt = convArr[localIdx].editedAt;
+                        }
                         convArr[localIdx].id = data.id;
                         convArr[localIdx].delivered = true;
                         // Quitar duplicado del eco si ya fue añadido
@@ -9139,9 +9148,9 @@ function guardarEdicion() {
         // Actualizar texto en conversations[] (la fuente de verdad local)
         for (const arr of Object.values(conversations)) {
             const m = arr.find(m => m.id === editId);
-            if (m) { m.message = newText; m._pendingEdit = newText; break; }
+            if (m) { m.message = newText; m._pendingEdit = newText; m.editedAt = new Date(); break; }
         }
-        // Actualizar DOM
+        // Actualizar DOM: texto + label (editado)
         const bubble = document.getElementById(editId);
         if (bubble) {
             const textEl = bubble.querySelector('.msg-text');
@@ -9156,6 +9165,11 @@ function guardarEdicion() {
                 } else {
                     textEl.innerHTML = escapeHTML(newText);
                 }
+            }
+            // Añadir (editado) en .meta si no existe aún
+            const meta = bubble.querySelector('.meta');
+            if (meta && !meta.querySelector('.edited-label')) {
+                meta.insertAdjacentHTML('beforeend', '<span class="edited-label">(editado)</span>');
             }
         }
         // Marcar que cuando llegue el eco con el id real, hay que enviar una edición
@@ -9181,20 +9195,17 @@ function onMensajeEditado(msgId, newText, editedAt) {
     // Actualizar en conversations
     Object.values(conversations).forEach(arr => {
         const m = arr.find(m => m.id === msgId);
-        if (m) { m.message = newText; m.editedAt = editedAt; }
+        if (m) { m.message = newText; m.editedAt = editedAt || m.editedAt || new Date(); }
     });
-    // Actualizar en DOM — solo el span.msg-text, preservando reply-preview si existe
+    // Actualizar en DOM — preservando reply-preview si existe
     const bubble = document.getElementById(msgId);
     if (!bubble) return;
     const textEl = bubble.querySelector('.msg-text');
     if (textEl) {
-        // Si hay reply-preview dentro del msg-text, preservarlo
         const replyPreview = textEl.querySelector('.reply-preview');
         if (replyPreview) {
-            // Reconstruir: reply-preview + nuevo texto
             textEl.innerHTML = '';
             textEl.appendChild(replyPreview);
-            const textNode = document.createTextNode('');
             const span = document.createElement('span');
             span.innerHTML = escapeHTML(newText);
             textEl.appendChild(span);
@@ -9202,9 +9213,12 @@ function onMensajeEditado(msgId, newText, editedAt) {
             textEl.innerHTML = escapeHTML(newText);
         }
     }
-    // Añadir/actualizar label "(editado)" en .meta
+    // Añadir o mantener label "(editado)" en .meta
     const meta = bubble.querySelector('.meta');
-    if (meta && !meta.querySelector('.edited-label')) {
+    if (meta) {
+        // Quitar cualquier edited-label existente y añadir uno fresco
+        const existing = meta.querySelector('.edited-label');
+        if (existing) existing.remove();
         meta.insertAdjacentHTML('beforeend', '<span class="edited-label">(editado)</span>');
     }
 }
@@ -11111,11 +11125,13 @@ function mostrarLecturaGrupo(msgId) {
       <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
         <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
           Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
-          <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2d5d5f445b4c4e44494c496d46445b424e49454c0d404c4e">[email&#160;protected]</a></strong>
+          <strong>privacidad@kivoospace.app</strong>
         </p>
       </div>
+
     </div>
-    </div>
+  </div>
 </div>
+
 </body>
 </html>
