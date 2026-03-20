@@ -239,6 +239,48 @@ async function enviarPushAPhone(phone, payload) {
     }
 }
 
+/* ── Helper: incrementar contador de no leídos y enviar push con el total ────
+   recipientPhone : teléfono del destinatario
+   senderKey      : username (1:1) o 'group_'+groupId (grupo)
+   payload        : objeto de notificación push (title, body, icon, badge, tag…)
+                    El body se reemplaza con el texto que incluye el conteo total.
+─────────────────────────────────────────────────────────────────────────────── */
+async function enviarPushConConteo(recipientPhone, senderKey, payload) {
+    const mapKey = `${recipientPhone}:${senderKey}`;
+    const count  = (pendingUnread.get(mapKey) || 0) + 1;
+    pendingUnread.set(mapKey, count);
+
+    // Construir body con conteo: "Víctor: hola (3 sin leer)" o "1 mensaje sin leer" si solo hay 1
+    const baseBody = payload.body || '…';
+    const bodyConConteo = count === 1
+        ? baseBody
+        : `${baseBody}  ·  ${count} sin leer`;
+
+    await enviarPushAPhone(recipientPhone, {
+        ...payload,
+        body: bodyConConteo,
+        // El badge numérico del sistema (Chrome/Android) usa este campo
+        badge: '/icon-192.png',
+    });
+}
+
+/* ── Helper: resetear contador de no leídos cuando el usuario conecta o lee ──
+   Se llama al hacer join/reconexión del WS (resetea todos sus pendientes)
+   y cuando el cliente envía 'markRead' para un chat concreto.
+─────────────────────────────────────────────────────────────────────────────── */
+function resetearPendingUnread(recipientPhone, senderKey) {
+    if (senderKey) {
+        pendingUnread.delete(`${recipientPhone}:${senderKey}`);
+    } else {
+        // Resetear todos los contadores de este destinatario (al conectarse)
+        for (const key of pendingUnread.keys()) {
+            if (key.startsWith(recipientPhone + ':')) {
+                pendingUnread.delete(key);
+            }
+        }
+    }
+}
+
 /* REST: obtener chats archivados y configuraciones de autodestrucción
    GET /api/user/settings?phone=+34XXX */
 app.get('/api/user/settings', async (req, res) => {
@@ -451,6 +493,12 @@ const pendingContactRequests = new Map();
 // Solicitudes de autorización de nueva sesión pendientes de respuesta
 const pendingSessionRequests = new Map();
 
+// Map de no leídos para notificaciones push cuando el destinatario está offline/ausente.
+// Estructura: 'recipientPhone:senderKey' → count
+// senderKey = username para 1:1, 'group_'+groupId para grupos
+// Se incrementa al enviar push y se resetea cuando el destinatario se conecta o lee el chat.
+const pendingUnread = new Map();
+
 // ── Heartbeat de aplicación (JS-level) ───────────────────────────────────
 // El cliente envía 'kvs_ping' cada 15s desde JS activo.
 // Si no recibimos un ping en 25s → marcamos isAway.
@@ -601,6 +649,9 @@ wss.on('connection', (ws) => {
                     phoneSessions.set(ws.phone, ws);
                 }
                 // ─────────────────────────────────────────────────────────
+
+                // Al conectarse, resetear todos sus contadores de no leídos en push
+                if (ws.phone) resetearPendingUnread(ws.phone);
 
                 // Usar avatar personalizado si lo manda el cliente, si no dicebear
                 const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(ws.username)}`;
@@ -1465,9 +1516,9 @@ wss.on('connection', (ws) => {
                     const memberWs = [...users.values()].find(u => u.phone === memberPhone);
                     if (memberWs && memberWs.readyState === WebSocket.OPEN) {
                         memberWs.send(gmPayload);
-                        // Si está en background, también push
+                        // Si está en background, también push con conteo
                         if (memberWs.isAway) {
-                            enviarPushAPhone(memberPhone, {
+                            enviarPushConConteo(memberPhone, 'group_' + data.groupId, {
                                 title: `👥 ${grpMsg.name}`,
                                 body:  `${ws.username}: ${grpPreviewText || '…'}`,
                                 icon:  '/icon-192.png',
@@ -1478,8 +1529,8 @@ wss.on('connection', (ws) => {
                             });
                         }
                     } else {
-                        // Offline: enviar push
-                        enviarPushAPhone(memberPhone, {
+                        // Offline: enviar push con conteo
+                        enviarPushConConteo(memberPhone, 'group_' + data.groupId, {
                             title: `👥 ${grpMsg.name}`,
                             body:  `${ws.username}: ${grpPreviewText || '…'}`,
                             icon:  '/icon-192.png',
@@ -1698,6 +1749,18 @@ wss.on('connection', (ws) => {
                 }
                 // Responder con pong para que el cliente sepa que el servidor está vivo
                 try { ws.send(JSON.stringify({ type: 'kvs_pong' })); } catch(_) {}
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               MARK READ: el cliente abrió un chat concreto.
+               Reseteamos el contador de no leídos push para ese par.
+               Mensaje: { type: 'markRead', chatKey: 'username' | 'group_XXX' }
+            ────────────────────────────────────── */
+            case 'markRead': {
+                if (ws.phone && data.chatKey) {
+                    resetearPendingUnread(ws.phone, data.chatKey);
+                }
                 break;
             }
 
@@ -2350,12 +2413,13 @@ function sendMessage(message) {
             const previewText = message.imageData ? '📷 Imagen'
                 : message.audioData ? '🎙️ Audio'
                 : (message.message || '').slice(0, 80);
-            enviarPushAPhone(targetWs.phone, {
+            enviarPushConConteo(targetWs.phone, message.from, {
                 title: `💬 ${message.from}`,
                 body:  previewText || '…',
                 icon:  '/icon-192.png',
                 badge: '/icon-192.png',
                 tag:   'msg_' + message.from,
+                renotify: true,
                 data:  { from: message.from, chatKey: message.from }
             });
         }
@@ -2367,7 +2431,7 @@ function sendMessage(message) {
             const previewText = message.imageData ? '📷 Imagen'
                 : message.audioData ? '🎙️ Audio'
                 : (message.message || '').slice(0, 80);
-            enviarPushAPhone(recipientUser.phone, {
+            enviarPushConConteo(recipientUser.phone, message.from, {
                 title: `💬 ${message.from}`,
                 body:  previewText || '…',
                 icon:  '/icon-192.png',

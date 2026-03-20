@@ -1042,6 +1042,25 @@ html, body {
     margin-top: 2px;
 }
 
+/* Estado con mensajes sin leer — estilo WhatsApp */
+li.has-unread .user-name {
+    font-weight: 700;
+    color: var(--text-dark);
+}
+li.has-unread .user-preview {
+    color: var(--text-dark);
+    font-weight: 600;
+}
+li.has-unread .unread-badge {
+    background: var(--purple-deep);
+    animation: badgePop .25s cubic-bezier(.4,0,.2,1);
+}
+@keyframes badgePop {
+    0%   { transform: scale(0.6); }
+    70%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
 .unread-badge {
     background: var(--purple-deep);
     color: white;
@@ -4818,6 +4837,10 @@ function _limpiarEstadoGlobal() {
     Object.keys(lastMessages).forEach(k => delete lastMessages[k]);
     Object.keys(userAvatars).forEach(k => delete userAvatars[k]);
 
+    // Limpiar badge del sistema y título de pestaña
+    document.title = 'kiVooSpace – Chat';
+    if ('clearAppBadge' in navigator) navigator.clearAppBadge().catch(() => {});
+
     // Maps de contactos y grupos
     myContacts.clear();
     myGroups.clear();
@@ -5117,6 +5140,14 @@ function _ejecutarAperturaChatPendiente() {
 ────────────────────────────────────────────────────────────────────────────── */
 function _cerrarNotificacionesDeChat(chatKey) {
     if (!chatKey) return;
+
+    // Informar al servidor para resetear el contador de no leídos push
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        try {
+            socket.send(JSON.stringify({ type: 'markRead', chatKey }));
+        } catch(_) {}
+    }
+
     if (!('serviceWorker' in navigator)) return;
 
     // Calcular el tag que usó el servidor para este chat
@@ -6378,6 +6409,7 @@ function seleccionarUsuario(user) {
             unreadCounts[phoneKey] = 0;
         }
     }
+    _actualizarBadgeGlobal();
     // Cerrar notificaciones de la bandeja del sistema para este chat
     _cerrarNotificacionesDeChat(user);
     // Actualizar botones de cabecera
@@ -6486,6 +6518,7 @@ function seleccionarContactoOffline(phone) {
     if (window._phoneToUsername && window._phoneToUsername[phone]) {
         unreadCounts[window._phoneToUsername[phone]] = 0;
     }
+    _actualizarBadgeGlobal();
     // Cerrar notificaciones de la bandeja del sistema para este chat
     _cerrarNotificacionesDeChat(chatKey);
     chat.innerHTML = '';
@@ -7677,6 +7710,44 @@ async function cargarGrupos() {
     }
 }
 
+/* ── Badge global: título de pestaña + icono PWA ─────────────────────────────
+   Suma todos los mensajes sin leer (contactos + grupos) y actualiza:
+   - document.title  →  "(12) kiVooSpace – Chat"
+   - navigator.setAppBadge()  →  número en el icono de la PWA / escritorio
+   Se llama al final de renderContactsList y renderGroupsList.
+──────────────────────────────────────────────────────────────────────────── */
+function _actualizarBadgeGlobal() {
+    // Sumar no leídos de contactos
+    let total = 0;
+    if (myContacts) {
+        myContacts.forEach(c => {
+            if (c.blocked || c.blockedUs) return;
+            const un = getOnlineUsernameByPhone ? getOnlineUsernameByPhone(c.contactPhone) : null;
+            const ck = un || ('phone:' + c.contactPhone);
+            total += (unreadCounts[un] || 0) + (unreadCounts[ck] || 0);
+        });
+    }
+    // Sumar no leídos de grupos
+    if (myGroups) {
+        myGroups.forEach((g, gid) => {
+            total += unreadCounts['group_' + gid] || 0;
+        });
+    }
+
+    // Actualizar título de la pestaña/ventana
+    const baseTitle = 'kiVooSpace – Chat';
+    document.title = total > 0 ? `(${total}) ${baseTitle}` : baseTitle;
+
+    // Actualizar badge en el icono de la PWA (Chrome/Android/Edge)
+    if ('setAppBadge' in navigator) {
+        if (total > 0) {
+            navigator.setAppBadge(total).catch(() => {});
+        } else {
+            navigator.clearAppBadge().catch(() => {});
+        }
+    }
+}
+
 function renderGroupsList() {
     const ul = document.getElementById('groupsList');
     if (!ul) return;
@@ -7695,6 +7766,10 @@ function renderGroupsList() {
         const isOwner = g.ownerPhone === loginPhone;
         const initial = g.name.charAt(0).toUpperCase();
         const escapedName = g.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
+        const unreadClass = unread ? 'has-unread' : '';
+        const previewText = unread
+            ? (unread === 1 ? '1 mensaje sin leer' : `${unread} mensajes sin leer`)
+            : (preview || g.members.length + ' miembros');
 
         const ownerBadge = isOwner ? `<span class="group-badge-owner">Admin</span>` : '';
         const viewBtn    = `<button class="btn-group-action" onclick="event.stopPropagation();abrirModalVerMiembros('${g.groupId}')" title="Ver miembros">👁️</button>`;
@@ -7708,11 +7783,11 @@ function renderGroupsList() {
             ? `<button class="btn-group-action danger" onclick="event.stopPropagation();eliminarGrupo('${g.groupId}','${escapedName}')" title="Eliminar grupo">🗑</button>`
             : '';
 
-        return `<li class="${isActive}" onclick="seleccionarGrupo('${g.groupId}')">
+        return `<li class="${isActive} ${unreadClass}" onclick="seleccionarGrupo('${g.groupId}')">
             <div class="group-avatar-circle">${g.avatar ? `<img src="${g.avatar}" alt="${g.name}">` : initial}</div>
             <div class="user-info" style="flex:1;min-width:0;">
                 <div class="user-name" style="display:flex;align-items:center;gap:6px;">${g.name} ${ownerBadge}</div>
-                <div class="user-preview">${preview || g.members.length + ' miembros'}</div>
+                <div class="user-preview">${previewText}</div>
             </div>
             ${badge}
             <div class="contact-actions">${viewBtn}${editBtn}${leaveBtn}${deleteBtn}</div>
@@ -7720,6 +7795,7 @@ function renderGroupsList() {
     });
 
     ul.innerHTML = items.join('');
+    _actualizarBadgeGlobal();
 }
 
 function seleccionarGrupo(groupId) {
@@ -7732,6 +7808,7 @@ function seleccionarGrupo(groupId) {
     _mostrarWelcomePanel(false);
     currentChat = chatKey;
     unreadCounts[chatKey] = 0;
+    _actualizarBadgeGlobal();
     // Cerrar notificaciones de la bandeja del sistema para este grupo
     _cerrarNotificacionesDeChat(chatKey);
     // Actualizar botones de cabecera
@@ -8545,15 +8622,19 @@ function renderContactsList() {
         const statusPreview = onlineUsername
             ? (isAway ? '🌙 Ausente' : (preview || ''))
             : (preview || '● Desconectado');
+        const unreadClass = unread ? 'has-unread' : '';
+        const previewText = unread
+            ? (unread === 1 ? '1 mensaje sin leer' : `${unread} mensajes sin leer`)
+            : (preview || statusPreview);
 
-        return `<li class="${isActive}" onclick="${clickFn}" data-phone="${escapedPhone}">
+        return `<li class="${isActive} ${unreadClass}" onclick="${clickFn}" data-phone="${escapedPhone}">
             <div class="user-avatar-wrap">
                 <img class="user-avatar" src="${avatarUrl}" alt="${escapedName}">
                 <span class="${dotClass}"></span>
             </div>
             <div class="user-info">
                 <div class="user-name">${displayName}</div>
-                <div class="user-preview">${preview || statusPreview}</div>
+                <div class="user-preview">${previewText}</div>
             </div>
             ${badge}
             <div class="contact-actions">
@@ -8577,6 +8658,7 @@ function renderContactsList() {
         headerBadge.textContent = totalUnread > 0 ? totalUnread : '';
         headerBadge.style.display = totalUnread > 0 ? 'inline-flex' : 'none';
     }
+    _actualizarBadgeGlobal();
 }
 
 /* Obtener el username online a partir del phone de un contacto */
@@ -11062,7 +11144,7 @@ function renderArchivedList() {
         }
         return `<li style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;transition:background var(--transition);" onclick="${clickFn}" onmouseover="this.style.background='var(--purple-pale)'" onmouseout="this.style.background=''">
             ${avatarHtml}
-            <div class="user-info"><div class="user-name">${escapeHTML(name)}</div><div class="user-preview" style="font-size:11px;color:var(--text-muted);">Archivada</div></div>
+            <div class="user-info"><div class="user-name">${escapeHTML(name)}</div><div class="user-preview" style="font-size:11px;color:var(--text-muted);">📁 Archivada</div></div>
         </li>`;
     }).join('');
     ul.innerHTML = items;
