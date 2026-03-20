@@ -5532,6 +5532,22 @@ function handleMessage(data) {
                     _attachBubbleClickMenu(matchedRow, data.id, true, false,
                         currentChat.startsWith('group_'));
 
+                    // Si había una eliminación pendiente para este mensaje local, enviarla ahora
+                    if (window._pendingDeletes && window._pendingDeletes[oldLocalId]) {
+                        delete window._pendingDeletes[oldLocalId];
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify({ type: 'deleteMessage', id: data.id }));
+                        }
+                        // Limpiar también del DOM y conversations por si aún están
+                        const rowStill = document.querySelector(`[data-msgid="${data.id}"]`);
+                        if (rowStill) rowStill.remove();
+                        Object.values(conversations).forEach(arr => {
+                            const idx = arr.findIndex(m => m.id === data.id);
+                            if (idx >= 0) arr.splice(idx, 1);
+                        });
+                        return; // no procesar más (el mensaje ya fue eliminado)
+                    }
+
                     // Si había una edición pendiente para este mensaje local, enviarla ahora
                     if (window._pendingEdits && window._pendingEdits[oldLocalId]) {
                         const pendingText = window._pendingEdits[oldLocalId];
@@ -6250,11 +6266,13 @@ function enviar() {
             socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text || '', imageData: pendingImage.dataUrl }));
             const localGrpImg = { id: 'local_' + Date.now(), from: username, to: groupId, groupId, message: text || '', imageData: pendingImage.dataUrl, time: new Date(), avatar: myAvatarDataUrl };
             _addLocalToGrpConversations(localGrpImg);
+            addGroupMessage(localGrpImg);
             cancelarImagen();
         } else {
             socket.send(JSON.stringify({ type: 'groupMessage', groupId, message: text }));
             const localGrpMsg = { id: 'local_' + Date.now(), from: username, to: groupId, groupId, message: text, time: new Date(), avatar: myAvatarDataUrl };
             _addLocalToGrpConversations(localGrpMsg);
+            addGroupMessage(localGrpMsg);
         }
         input.value = '';
         input.style.height = 'auto';
@@ -7578,6 +7596,22 @@ function onGroupMessage(data) {
                     }
                 }
                 _attachBubbleClickMenu(matchedRow, data.id, true, false, true);
+
+                // Si había una eliminación pendiente para este mensaje local, enviarla ahora
+                if (window._pendingDeletes && window._pendingDeletes[oldLocalId]) {
+                    delete window._pendingDeletes[oldLocalId];
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'deleteMessage', id: data.id }));
+                    }
+                    const rowStill = document.querySelector(`[data-msgid="${data.id}"]`);
+                    if (rowStill) rowStill.remove();
+                    const convArr2 = conversations[chatKey];
+                    if (convArr2) {
+                        const di = convArr2.findIndex(m => m.id === data.id);
+                        if (di >= 0) convArr2.splice(di, 1);
+                    }
+                    return;
+                }
 
                 // Si había una edición pendiente para este mensaje local, enviarla ahora
                 if (window._pendingEdits && window._pendingEdits[oldLocalId]) {
@@ -9409,13 +9443,32 @@ function selEliminar() {
 /* ─── ELIMINAR ──────────────────────────────────────────────── */
 function eliminarMensaje(msgId) {
     cerrarMenuMensaje();
-    // Pequeño delay para que el menú desaparezca antes de mostrar el confirm en móvil
     setTimeout(() => {
         if (!confirm('¿Eliminar este mensaje para todos?')) return;
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             mostrarToast('Sin conexión. Inténtalo de nuevo.', true);
             return;
         }
+
+        // Si el id todavía es local_ (el eco del servidor no ha llegado aún):
+        // ocultar el mensaje del DOM inmediatamente y marcar como "pendiente de eliminar".
+        // Cuando llegue el eco con el id real, lo eliminaremos del servidor.
+        if (typeof msgId === 'string' && msgId.startsWith('local_')) {
+            // Ocultar del DOM
+            const row = document.querySelector(`[data-msgid="${msgId}"]`);
+            if (row) row.remove();
+            // Quitar de conversations
+            Object.values(conversations).forEach(arr => {
+                const idx = arr.findIndex(m => m.id === msgId);
+                if (idx >= 0) arr.splice(idx, 1);
+            });
+            // Marcar como pendiente de eliminar cuando llegue el id real
+            window._pendingDeletes = window._pendingDeletes || {};
+            window._pendingDeletes[msgId] = true;
+            mostrarToast('Mensaje eliminado ✓');
+            return;
+        }
+
         socket.send(JSON.stringify({ type: 'deleteMessage', id: msgId }));
     }, 50);
 }
