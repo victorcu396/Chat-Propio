@@ -5404,7 +5404,12 @@ function handleMessage(data) {
         }
         chat.innerHTML = '';
         let lastDay = '';
+        // Obtener lista de mensajes ocultos localmente
+        let _hiddenMsgs;
+        try { _hiddenMsgs = new Set(JSON.parse(localStorage.getItem('kvs_hidden_msgs') || '[]')); }
+        catch(_) { _hiddenMsgs = new Set(); }
         data.messages.forEach(msg => {
+            if (_hiddenMsgs.has(msg.id)) return; // saltar ocultos
             const day = obtenerDia(msg.time);
             if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
             addMessage(msg);
@@ -6376,34 +6381,61 @@ document.addEventListener('click', (e) => {
 // Click en la burbuja → abre/cierra el menú. Click en imagen → lightbox (no menú).
 function _attachBubbleClickMenu(row, msgId, isMe, isDeleted, isGroup) {
     const bubble = row.querySelector('.bubble');
-    if (!bubble || isDeleted) return;
-    bubble.addEventListener('click', (e) => {
-        // Si estamos en modo selección, el click en la burbuja también selecciona
+    if (!bubble) return;
+
+    // Usar una propiedad en el elemento para guardar el handler y poder reemplazarlo.
+    // Así si se llama de nuevo (al reemplazar local_ por id real) no acumulamos listeners.
+    if (bubble._kvsMenuHandler) {
+        bubble.removeEventListener('click', bubble._kvsMenuHandler);
+    }
+
+    // Si el mensaje está eliminado solo adjuntamos el handler si es propio
+    // (para poder hacer "ocultar para mí")
+    if (isDeleted && !isMe) {
+        bubble._kvsMenuHandler = null;
+        return;
+    }
+
+    const handler = (e) => {
+        // En modo selección: seleccionar en lugar de abrir menú
         if (chat.classList.contains('chat-in-select-mode')) {
+            // No abrir menú sobre mensajes eliminados en modo selección
+            if (bubble.classList.contains('deleted')) return;
             e.stopPropagation();
             _toggleSeleccion(msgId, row);
             return;
         }
-        // Si el click fue en una imagen, no abrir el menú (el lightbox lo maneja)
         if (e.target.tagName === 'IMG' && e.target.classList.contains('img-msg')) return;
-        // Si el click fue dentro del menú ya abierto, no hacer nada
         if (e.target.closest('.msg-ctx-menu')) return;
-        // Si el click fue en un link de reply-preview, no abrir el menú
         if (e.target.closest('.reply-preview')) return;
         e.stopPropagation();
-        abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup);
-    });
-    // Checkbox de selección: click siempre selecciona independientemente del modo
+
+        // Leer estado ACTUAL del mensaje desde conversations y del DOM —
+        // no confiar en los parámetros capturados al momento de renderizar,
+        // porque el mensaje pudo haberse eliminado, editado, reenviado, etc. después.
+        const isBubbleDeleted = bubble.classList.contains('deleted');
+        let isMeNow = isMe; // isMe no cambia, el remitente es inmutable
+
+        abrirMenuMensaje(e, msgId, isMeNow, isBubbleDeleted, isGroup);
+    };
+
+    bubble._kvsMenuHandler = handler;
+    bubble.addEventListener('click', handler);
+
+    // Checkbox de selección
     const check = row.querySelector('.msg-select-check');
-    if (check) {
-        check.addEventListener('click', (e) => {
+    if (check && !check._kvsCheckHandler) {
+        const checkHandler = (e) => {
             e.stopPropagation();
+            if (bubble.classList.contains('deleted')) return;
             if (!chat.classList.contains('chat-in-select-mode')) {
                 entrarModoSeleccion(msgId);
             } else {
                 _toggleSeleccion(msgId, row);
             }
-        });
+        };
+        check._kvsCheckHandler = checkHandler;
+        check.addEventListener('click', checkHandler);
     }
 }
 
@@ -6429,6 +6461,14 @@ function _buildMsgActionsBtn(msgId, isMe, isDeleted, isGroup) {
 
 function addMessage(msg) {
     const isMe = msg.self || msg.from === username;
+
+    // Saltar mensajes que el usuario ha ocultado localmente
+    if (msg.id && !msg.id.startsWith('local_')) {
+        try {
+            const hidden = JSON.parse(localStorage.getItem('kvs_hidden_msgs') || '[]');
+            if (hidden.includes(msg.id)) return;
+        } catch(_) {}
+    }
 
     // ── Llamada perdida ──
     if (msg.message === '__missed_call__') {
@@ -8938,7 +8978,10 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
     if (!isDeleted) ops.push({ icon: '☑️', label: 'Seleccionar', fn: () => entrarModoSeleccion(msgId) });
     if (!isDeleted) ops.push({ icon: '⭐', label: 'Destacar',    fn: () => destacarMensaje(msgId) });
     if (!isDeleted && isMe) ops.push({ icon: '✏️', label: 'Editar',    fn: () => iniciarEdicion(msgId) });
-    if (isMe)               ops.push({ icon: '🗑',  label: 'Eliminar',  fn: () => eliminarMensaje(msgId), danger: true });
+    // Eliminar para todos: solo si el mensaje NO está ya eliminado y es tuyo
+    if (!isDeleted && isMe) ops.push({ icon: '🗑',  label: 'Eliminar para todos', fn: () => eliminarMensaje(msgId), danger: true });
+    // Ocultar para mí: disponible siempre (mensaje normal o ya eliminado), solo para el propio usuario
+    if (isMe) ops.push({ icon: '👁',  label: isDeleted ? 'Ocultar para mí' : 'Ocultar solo para mí', fn: () => ocultarMensajeParaMi(msgId), danger: true });
 
     ops.forEach((op, i) => {
         if (op.danger && i > 0) {
@@ -9344,13 +9387,40 @@ function eliminarMensaje(msgId) {
     }, 50);
 }
 
+// Ocultar un mensaje solo en el dispositivo local (no afecta a otros usuarios)
+function ocultarMensajeParaMi(msgId) {
+    cerrarMenuMensaje();
+    setTimeout(() => {
+        if (!confirm('¿Ocultar este mensaje solo para ti? Solo desaparecerá en tu pantalla.')) return;
+        // Eliminar del DOM
+        const row = document.querySelector(`[data-msgid="${msgId}"]`);
+        if (row) row.remove();
+        // Eliminar de conversations local para que no reaparezca al recargar historial
+        Object.values(conversations).forEach(arr => {
+            const idx = arr.findIndex(m => m.id === msgId);
+            if (idx >= 0) arr.splice(idx, 1);
+        });
+        // Guardar en localStorage para que siga oculto tras reconectar
+        try {
+            const hidden = JSON.parse(localStorage.getItem('kvs_hidden_msgs') || '[]');
+            if (!hidden.includes(msgId)) {
+                hidden.push(msgId);
+                // Mantener máximo 500 ids para no crecer indefinidamente
+                if (hidden.length > 500) hidden.splice(0, hidden.length - 500);
+                localStorage.setItem('kvs_hidden_msgs', JSON.stringify(hidden));
+            }
+        } catch(_) {}
+        mostrarToast('Mensaje ocultado 👁');
+    }, 50);
+}
+
 function onMensajeEliminado(msgId) {
     // Actualizar conversations
     Object.values(conversations).forEach(arr => {
         const m = arr.find(m => m.id === msgId);
         if (m) { m.deletedAt = new Date(); m.message = ''; m.imageData = null; m.audioData = null; }
     });
-    // Actualizar DOM sin cloneNode (cloneNode pierde los event listeners y rompe el menú)
+    // Actualizar DOM sin cloneNode
     const bubble = document.getElementById(msgId);
     if (!bubble) return;
     bubble.classList.add('deleted');
@@ -9369,14 +9439,33 @@ function onMensajeEliminado(msgId) {
     // Quitar el menú contextual si estaba abierto para este mensaje
     const openMenu = document.getElementById('msgCtxMenu');
     if (openMenu && openMenu.dataset.formsgid === msgId) cerrarMenuMensaje();
-    // Quitar la capacidad de abrir menú en esta burbuja (ya está deleted)
-    bubble.style.cursor = 'default';
     // Quitar el modo selección de este mensaje si estaba seleccionado
     const row = bubble.closest('.msg-row');
     if (row) {
         row.classList.remove('msg-selected');
         _seleccion.delete(msgId);
         _actualizarBarraSeleccion();
+        // Re-adjuntar handler: ahora es deleted=true, pero si es propio
+        // el usuario puede usar "Ocultar para mí"
+        const isMine = row.classList.contains('me');
+        const isGrp  = !!(currentChat && currentChat.startsWith('group_'));
+        // Quitar handler antiguo y adjuntar nuevo que refleje estado deleted
+        if (bubble._kvsMenuHandler) {
+            bubble.removeEventListener('click', bubble._kvsMenuHandler);
+            bubble._kvsMenuHandler = null;
+        }
+        if (isMine) {
+            const handler = (e) => {
+                if (e.target.closest('.msg-ctx-menu')) return;
+                e.stopPropagation();
+                abrirMenuMensaje(e, msgId, true, true, isGrp);
+            };
+            bubble._kvsMenuHandler = handler;
+            bubble.addEventListener('click', handler);
+            bubble.style.cursor = 'pointer';
+        } else {
+            bubble.style.cursor = 'default';
+        }
     }
 }
 
@@ -11022,13 +11111,11 @@ function mostrarLecturaGrupo(msgId) {
       <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
         <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
           Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
-          <strong>privacidad@kivoospace.app</strong>
+          <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2d5d5f445b4c4e44494c496d46445b424e49454c0d404c4e">[email&#160;protected]</a></strong>
         </p>
       </div>
-
     </div>
-  </div>
+    </div>
 </div>
-
 </body>
 </html>
