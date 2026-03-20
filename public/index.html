@@ -3653,17 +3653,17 @@ html.is-mobile .contact-actions { display: flex; }
         </div>
         <div class="login-field">
           <label>Introduce el código</label>
-          <div class="otp-wrap" id="otpWrap" onclick="document.getElementById('otpRealInput').focus()">
+          <div class="otp-wrap" id="otpWrap">
             <div class="otp-digit" id="otpCell0"></div>
             <div class="otp-digit" id="otpCell1"></div>
             <div class="otp-digit" id="otpCell2"></div>
             <div class="otp-digit" id="otpCell3"></div>
             <div class="otp-digit" id="otpCell4"></div>
             <div class="otp-digit" id="otpCell5"></div>
-            <!-- Input real: invisible, recibe todo el teclado (móvil + escritorio) -->
-            <input id="otpRealInput" type="text" inputmode="numeric" autocomplete="one-time-code"
+            <!-- Input real: cubre todo el wrap de forma invisible para recibir el foco del teclado móvil -->
+            <input id="otpRealInput" type="tel" inputmode="numeric" autocomplete="one-time-code"
               maxlength="6" pattern="\d{6}"
-              style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;"
+              style="position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;outline:none;padding:0;margin:0;font-size:16px;cursor:pointer;z-index:2;background:transparent;"
               oninput="onOtpInput(this)" onkeydown="onOtpKeydown(event)">
           </div>
         </div>
@@ -3973,7 +3973,7 @@ html.is-mobile .contact-actions { display: flex; }
           <option value="34" selected>🇪🇸 +34</option>
         </select>
         <input type="tel" id="contactPhoneInput" placeholder="612 34 56 78"
-          maxlength="11" inputmode="numeric"
+          maxlength="12" inputmode="numeric"
           style="font-family:'DM Mono',monospace;letter-spacing:0.5px;">
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
@@ -4371,26 +4371,29 @@ function _otpMarkActive(activeIdx) {
 }
 
 function onOtpInput(el) {
-    // Permitir solo dígitos
+    // Filtrar solo dígitos y limitar a 6
     const digits = el.value.replace(/\D/g, '').slice(0, 6);
-    el.value = digits;
+    // Solo actualizar el valor si cambió (evita bucle en algunos navegadores)
+    if (el.value !== digits) el.value = digits;
     _otpSync(digits);
     // Auto-verificar al completar los 6
     if (digits.length === 6) {
-        setTimeout(verifyOTP, 80); // pequeño delay para que se vea el último dígito
+        setTimeout(verifyOTP, 80);
     }
 }
 
 function onOtpKeydown(e) {
-    // No hace falta gestionar nada especial — el input nativo maneja todo
-    // (Backspace, flechas, etc.) y onOtpInput sincroniza las celdas
+    const el = document.getElementById('otpRealInput');
+    if (!el) return;
+    // En escritorio, Backspace con campo vacío no hace nada extra — el input nativo lo gestiona
+    // En móvil esto no se dispara de forma fiable, por eso usamos beforeinput también
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     const realInput = document.getElementById('otpRealInput');
     if (!realInput) return;
 
-    // Al hacer foco en el input real, marcar la celda activa
+    // Al hacer foco en el input real, marcar la celda activa visualmente
     realInput.addEventListener('focus', () => {
         const digits = realInput.value.replace(/\D/g, '');
         _otpMarkActive(digits.length);
@@ -4401,14 +4404,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Pegado: aceptar código de 6 dígitos
+    // beforeinput: captura el borrado en móvil ANTES de que cambie el valor.
+    // En iOS/Android los teclados virtuales generan este evento incluso cuando
+    // oninput o keydown no se disparan correctamente.
+    realInput.addEventListener('beforeinput', (e) => {
+        if (e.inputType === 'deleteContentBackward' || e.inputType === 'deleteWordBackward') {
+            const cur = realInput.value.replace(/\D/g, '');
+            if (cur.length > 0) {
+                // Prevenir el comportamiento por defecto y hacerlo nosotros
+                // para garantizar que _otpSync se llame siempre
+                e.preventDefault();
+                const newVal = cur.slice(0, -1);
+                realInput.value = newVal;
+                _otpSync(newVal);
+                _otpMarkActive(newVal.length);
+            } else {
+                e.preventDefault(); // nada que borrar
+            }
+        }
+    });
+
+    // Pegado: aceptar código de 6 dígitos (también funciona con autocompletado SMS)
     realInput.addEventListener('paste', (e) => {
         const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
-        if (pasted.length >= 6) {
+        if (pasted.length >= 1) {
             e.preventDefault();
-            realInput.value = pasted.slice(0, 6);
-            _otpSync(realInput.value);
-            setTimeout(verifyOTP, 80);
+            const val = pasted.slice(0, 6);
+            realInput.value = val;
+            _otpSync(val);
+            if (val.length === 6) setTimeout(verifyOTP, 80);
         }
     });
 });
@@ -8241,13 +8265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Foco en el OTP al hacer click en el wrap
-    const otpWrap = document.getElementById('otpWrap');
-    if (otpWrap) {
-        otpWrap.addEventListener('click', () => {
-            document.getElementById('otpRealInput')?.focus();
-        });
-    }
+    // (el input transparente cubre todo el otp-wrap, no necesita listener extra)
 });
 
 // Cerrar modal al hacer click fuera
