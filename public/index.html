@@ -807,6 +807,14 @@ html, body {
     background: rgba(30,27,75,0.45); backdrop-filter: blur(4px);
 }
 #settingsModal.open { display: flex; }
+
+/* Session auth modal */
+#sessionAuthModal { display: none; }
+#sessionAuthModal.visible { display: flex; }
+
+/* RGPD modal */
+#rgpdModal { display: none; }
+#rgpdModal.visible { display: flex; }
 .settings-card {
     background: var(--white); border-radius: 20px; box-shadow: var(--shadow-card);
     border: 1px solid var(--border); width: 100%; max-width: 340px;
@@ -5481,8 +5489,34 @@ function handleMessage(data) {
     // ── Sesión expulsada (mismo número en otro dispositivo) ──
     if (data.type === 'session_kicked') {
         if (socket) { socket.onclose = null; socket.close(); socket = null; }
-        alert('⚠️ Tu sesión fue iniciada en otro dispositivo. Serás desconectado.');
-        logout();
+        mostrarToast('⚠️ Autorizaste el acceso desde otro dispositivo. Cerrando sesión…', true);
+        setTimeout(() => logout(), 2000);
+        return;
+    }
+
+    // ── Solicitud de autorización de nueva sesión ──
+    if (data.type === 'session_auth_request') {
+        mostrarModalAutorizacionSesion(data.reqId, data.username, data.deviceInfo);
+        return;
+    }
+
+    // ── El nuevo dispositivo está esperando aprobación ──
+    if (data.type === 'session_waiting_approval') {
+        mostrarPantallaEsperandoAprobacion(data.message);
+        return;
+    }
+
+    // ── Sesión rechazada por el dispositivo activo ──
+    if (data.type === 'session_rejected') {
+        ocultarPantallaEsperandoAprobacion();
+        mostrarErrorSesionRechazada(data.message);
+        return;
+    }
+
+    // ── Sesión aprobada: completar el login ──
+    if (data.type === 'session_approved') {
+        ocultarPantallaEsperandoAprobacion();
+        completarLoginTrasSesionAprobada();
         return;
     }
 
@@ -9598,8 +9632,169 @@ function _onKeydownMention(e) {
 }
 
 // ============================================================
-// FEATURE: MENSAJES AUTODESTRUCTIBLES
+// AUTORIZACIÓN DE NUEVA SESIÓN (multi-dispositivo)
 // ============================================================
+
+// Variables para el flujo de sesión pendiente
+let _sessionWaitingWs = null; // socket temporal mientras se espera aprobación
+
+// Mostrado en el dispositivo ACTIVO: alguien quiere entrar con tu número
+function mostrarModalAutorizacionSesion(reqId, reqUsername, deviceInfo) {
+    const modal = document.getElementById('sessionAuthModal');
+    if (!modal) return;
+    document.getElementById('sessionAuthUsername').textContent  = reqUsername  || 'Alguien';
+    document.getElementById('sessionAuthDevice').textContent    = deviceInfo   || 'Dispositivo desconocido';
+    modal.dataset.reqId = reqId;
+    modal.classList.add('visible');
+    // Auto-rechazar tras 60 s (igual que el server timeout)
+    if (window._sessionAuthTimeout) clearTimeout(window._sessionAuthTimeout);
+    window._sessionAuthTimeout = setTimeout(() => {
+        cerrarModalAutorizacionSesion();
+    }, 60000);
+}
+
+function cerrarModalAutorizacionSesion() {
+    const modal = document.getElementById('sessionAuthModal');
+    if (modal) modal.classList.remove('visible');
+    if (window._sessionAuthTimeout) { clearTimeout(window._sessionAuthTimeout); window._sessionAuthTimeout = null; }
+}
+
+function responderSolicitudSesion(accepted) {
+    const modal = document.getElementById('sessionAuthModal');
+    if (!modal) return;
+    const reqId = modal.dataset.reqId;
+    cerrarModalAutorizacionSesion();
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ type: 'session_auth_response', reqId, accepted }));
+    if (!accepted) mostrarToast('Acceso denegado al otro dispositivo 🔒');
+}
+
+// Mostrado en el dispositivo NUEVO: esperando que el activo responda
+function mostrarPantallaEsperandoAprobacion(msg) {
+    // Ocultar login modal y mostrar la pantalla de espera
+    const loginModal = document.getElementById('loginModal');
+    const waitScreen = document.getElementById('sessionWaitScreen');
+    if (loginModal) loginModal.style.display = 'none';
+    if (waitScreen) {
+        document.getElementById('sessionWaitMsg').textContent = msg || 'Esperando autorización…';
+        waitScreen.style.display = 'flex';
+    }
+}
+
+function ocultarPantallaEsperandoAprobacion() {
+    const waitScreen = document.getElementById('sessionWaitScreen');
+    if (waitScreen) waitScreen.style.display = 'none';
+}
+
+function mostrarErrorSesionRechazada(msg) {
+    const loginModal = document.getElementById('loginModal');
+    if (loginModal) loginModal.style.display = 'flex';
+    // Volver al paso 1 del login
+    document.querySelectorAll('.login-step').forEach(s => s.classList.remove('active'));
+    const step1 = document.getElementById('step1');
+    if (step1) step1.classList.add('active');
+    document.querySelectorAll('.step-dot').forEach((d, i) => d.classList.toggle('active', i === 0));
+    // Mostrar mensaje de error
+    const errEl = document.getElementById('phoneError');
+    if (errEl) errEl.textContent = msg || 'Acceso denegado por el dispositivo activo.';
+    mostrarToast('⛔ ' + (msg || 'Sesión rechazada'), true);
+    // Limpiar la sesión que se intentó
+    if (socket) { socket.onclose = null; socket.onerror = null; try { socket.close(); } catch(_) {} socket = null; }
+    loginPhone = null; loginUsername = null;
+}
+
+function completarLoginTrasSesionAprobada() {
+    // Ocultar login modal y mostrar la app — el socket ya está conectado y el join fue completado por el servidor
+    ocultarPantallaEsperandoAprobacion();
+    const loginModal = document.getElementById('loginModal');
+    const appContainer = document.getElementById('appContainer');
+    if (loginModal) loginModal.style.display = 'none';
+    if (appContainer) appContainer.style.display = 'flex';
+    // Guardar sesión
+    const sessionData = JSON.stringify({ phone: loginPhone, username: loginUsername });
+    localStorage.setItem('kvs_session', sessionData);
+    // Actualizar UI del sidebar
+    document.getElementById('myName').textContent  = loginUsername;
+    document.getElementById('myPhone').textContent = loginPhone;
+    document.getElementById('myAvatar').src        = myAvatarDataUrl;
+    // Cargar contactos, grupos y configuración
+    cargarContactos();
+    cargarGrupos();
+    cargarConfiguracionUsuario();
+    _suscribirAPush().catch(() => {});
+    mostrarToast('✅ Sesión autorizada');
+}
+
+function cancelarEsperaSession() {
+    ocultarPantallaEsperandoAprobacion();
+    // Cerrar el socket en espera y volver al login
+    if (socket) { socket.onclose = null; socket.onerror = null; try { socket.close(); } catch(_) {} socket = null; }
+    loginPhone = null; loginUsername = null;
+    const loginModal = document.getElementById('loginModal');
+    if (loginModal) loginModal.style.display = 'flex';
+}
+
+// ============================================================
+// RGPD / PRIVACIDAD
+// ============================================================
+function abrirModalRGPD() {
+    const modal = document.getElementById('rgpdModal');
+    if (modal) modal.classList.add('visible');
+}
+
+function cerrarModalRGPD() {
+    const modal = document.getElementById('rgpdModal');
+    if (modal) modal.classList.remove('visible');
+}
+
+async function solicitarExportacionDatos() {
+    if (!loginPhone) return;
+    try {
+        const res = await fetch('/api/gdpr/export?phone=' + encodeURIComponent(loginPhone));
+        if (!res.ok) throw new Error('Error al exportar');
+        const data = await res.json();
+        // Descargar como JSON
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'mis-datos-kivoospace.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        mostrarToast('📥 Datos exportados correctamente');
+    } catch(e) {
+        mostrarToast('⚠️ Error al exportar datos: ' + e.message, true);
+    }
+}
+
+async function solicitarEliminarCuenta() {
+    const confirmado = confirm(
+        '⚠️ ELIMINAR CUENTA\n\n' +
+        'Esta acción eliminará permanentemente:\n' +
+        '• Tu perfil y número de teléfono\n' +
+        '• Todos tus mensajes enviados\n' +
+        '• Tus contactos y grupos\n\n' +
+        '¿Estás seguro? Esta acción no se puede deshacer.'
+    );
+    if (!confirmado) return;
+    const confirmado2 = confirm('Confirmación final: ¿seguro que quieres eliminar tu cuenta de kiVooSpace?');
+    if (!confirmado2) return;
+    try {
+        const res = await fetch('/api/gdpr/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: loginPhone })
+        });
+        if (!res.ok) throw new Error('Error al eliminar la cuenta');
+        mostrarToast('✅ Cuenta eliminada. Hasta pronto.');
+        setTimeout(() => { cerrarModalRGPD(); logout(); }, 2000);
+    } catch(e) {
+        mostrarToast('⚠️ Error al eliminar la cuenta: ' + e.message, true);
+    }
+}
+
+
+
 let _autoDestructSettings = {}; // conversationId → seconds
 
 function abrirMenuAutoDestruct() {
@@ -10074,6 +10269,11 @@ function mostrarLecturaGrupo(msgId) {
         <span>Tono de notificación</span>
       </button>
       <div class="settings-divider"></div>
+      <button class="btn-settings-action" onclick="cerrarAjustes();abrirModalRGPD()">
+        <span class="action-icon">🛡️</span>
+        <span>Privacidad y RGPD</span>
+      </button>
+      <div class="settings-divider"></div>
       <button id="btnInstalarPWA" onclick="instalarPWA()">
         <span style="font-size:18px;">📲</span>
         <span>Instalar app en este dispositivo</span>
@@ -10106,5 +10306,139 @@ function mostrarLecturaGrupo(msgId) {
     <button onclick="cerrarSelectorSonido()" style="margin-top:16px;width:100%;padding:10px;background:var(--bubble-me);color:white;border:none;border-radius:var(--radius-md);font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;">Listo</button>
   </div>
 </div>
+<!-- ── Modal: autorización de nueva sesión (dispositivo activo) ──────────── -->
+<div id="sessionAuthModal" style="display:none;position:fixed;inset:0;z-index:9700;align-items:center;justify-content:center;padding:16px;background:rgba(15,10,40,0.78);backdrop-filter:blur(6px);">
+  <div style="background:var(--white);border-radius:22px;padding:28px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-card);border:1px solid var(--border);animation:loginIn .3s cubic-bezier(.4,0,.2,1);">
+    <div style="text-align:center;margin-bottom:18px;">
+      <div style="font-size:42px;margin-bottom:8px;">🔐</div>
+      <h3 style="font-size:17px;font-weight:700;color:var(--text-dark);margin-bottom:6px;">Nueva sesión detectada</h3>
+      <p style="font-size:13px;color:var(--text-mid);line-height:1.5;">
+        <strong id="sessionAuthUsername"></strong> quiere iniciar sesión con tu número desde:
+      </p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:6px;font-family:'DM Mono',monospace;" id="sessionAuthDevice"></p>
+    </div>
+    <p style="font-size:12px;color:var(--text-mid);text-align:center;margin-bottom:20px;line-height:1.5;">
+      Si <strong>aceptas</strong>, tu sesión actual se cerrará y el otro dispositivo entrará.<br>
+      Si <strong>rechazas</strong>, el otro dispositivo no podrá acceder.
+    </p>
+    <div style="display:flex;gap:10px;">
+      <button onclick="responderSolicitudSesion(false)"
+        style="flex:1;padding:12px;border:1.5px solid var(--border);background:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text-dark);transition:background var(--transition);"
+        onmouseover="this.style.background='var(--bg-body)'" onmouseout="this.style.background='none'">
+        ❌ Rechazar
+      </button>
+      <button onclick="responderSolicitudSesion(true)"
+        style="flex:1;padding:12px;border:none;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;"
+        onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+        ✅ Aceptar
+      </button>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:12px;">Esta solicitud expirará en 60 segundos</p>
+  </div>
+</div>
+
+<!-- ── Pantalla de espera: nuevo dispositivo aguardando aprobación ────────── -->
+<div id="sessionWaitScreen" style="display:none;position:fixed;inset:0;z-index:9600;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse at 20% 50%,rgba(124,58,237,.18) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(236,72,153,.10) 0%,transparent 50%),#f1f0fb;">
+  <div style="background:var(--white,#fff);border-radius:22px;padding:36px 28px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(79,70,229,.18);border:1px solid #e5e7f0;text-align:center;animation:loginIn .35s cubic-bezier(.4,0,.2,1);">
+    <div style="font-size:48px;margin-bottom:12px;">⏳</div>
+    <h3 style="font-size:17px;font-weight:700;color:#1e1b4b;margin-bottom:8px;">Esperando autorización</h3>
+    <p style="font-size:13px;color:#4b5563;line-height:1.6;margin-bottom:20px;" id="sessionWaitMsg">Esperando autorización del dispositivo activo…</p>
+    <div style="display:flex;justify-content:center;gap:6px;margin-bottom:20px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:#4f46e5;animation:waitDot 1.2s infinite .0s both;"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;animation:waitDot 1.2s infinite .2s both;"></div>
+      <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;animation:waitDot 1.2s infinite .4s both;"></div>
+    </div>
+    <p style="font-size:11px;color:#9ca3af;">La solicitud expirará en 60 segundos si no hay respuesta</p>
+    <button onclick="cancelarEsperaSession()"
+      style="margin-top:16px;padding:10px 20px;border:1.5px solid #e5e7f0;background:none;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#4b5563;">
+      Cancelar
+    </button>
+  </div>
+  <style>@keyframes waitDot{0%,80%,100%{transform:scale(0);opacity:.4}40%{transform:scale(1);opacity:1}}</style>
+</div>
+
+<!-- ── Modal RGPD / Privacidad ───────────────────────────────────────────── -->
+<div id="rgpdModal" style="display:none;position:fixed;inset:0;z-index:8500;align-items:center;justify-content:center;padding:16px;background:rgba(30,27,75,.45);backdrop-filter:blur(4px);"
+     onclick="if(event.target===this)cerrarModalRGPD()">
+  <div style="background:var(--white);border-radius:22px;box-shadow:var(--shadow-card);border:1px solid var(--border);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:loginIn .25s cubic-bezier(.4,0,.2,1);">
+    <div style="padding:20px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--white);z-index:1;border-radius:22px 22px 0 0;">
+      <h3 style="font-size:16px;font-weight:700;color:var(--text-dark);">🛡️ Privacidad y tus derechos (RGPD)</h3>
+      <button onclick="cerrarModalRGPD()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted);line-height:1;">×</button>
+    </div>
+    <div style="padding:20px 22px;display:flex;flex-direction:column;gap:16px;">
+
+      <div style="background:var(--purple-pale,#ede9fe);border-radius:12px;padding:14px 16px;">
+        <p style="font-size:13px;color:var(--text-mid);line-height:1.6;">
+          kiVooSpace cumple con el <strong>Reglamento General de Protección de Datos (RGPD / GDPR)</strong>.
+          Aquí puedes ejercer tus derechos como titular de los datos.
+        </p>
+      </div>
+
+      <!-- Derecho de acceso -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:6px;">📋 Derecho de acceso (Art. 15)</div>
+        <p style="font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:10px;">Tienes derecho a saber qué datos personales guardamos sobre ti: perfil, mensajes, contactos y grupos.</p>
+        <button onclick="solicitarExportacionDatos()"
+          style="padding:9px 16px;border:1.5px solid var(--purple-deep);background:none;color:var(--purple-deep);border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background var(--transition);"
+          onmouseover="this.style.background='var(--purple-pale)'" onmouseout="this.style.background='none'">
+          📥 Descargar mis datos
+        </button>
+      </div>
+
+      <!-- Derecho de portabilidad -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:6px;">🔄 Derecho de portabilidad (Art. 20)</div>
+        <p style="font-size:12px;color:var(--text-mid);line-height:1.5;">Al descargar tus datos (botón de arriba) los recibirás en formato JSON, legible por máquina y portable a otros servicios.</p>
+      </div>
+
+      <!-- Derecho de rectificación -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:6px;">✏️ Derecho de rectificación (Art. 16)</div>
+        <p style="font-size:12px;color:var(--text-mid);line-height:1.5;">Puedes actualizar tu nombre de usuario y foto de perfil desde <strong>Ajustes → Cambiar foto de perfil</strong> en cualquier momento.</p>
+      </div>
+
+      <!-- Derecho al olvido -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;border-color:#fca5a5;">
+        <div style="font-size:14px;font-weight:700;color:#ef4444;margin-bottom:6px;">🗑️ Derecho de supresión (Art. 17)</div>
+        <p style="font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:10px;">Tienes derecho a que eliminemos todos tus datos personales. Esta acción es <strong>permanente e irreversible</strong>.</p>
+        <button onclick="solicitarEliminarCuenta()"
+          style="padding:9px 16px;border:1.5px solid #ef4444;background:none;color:#ef4444;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background var(--transition);"
+          onmouseover="this.style.background='rgba(239,68,68,.08)'" onmouseout="this.style.background='none'">
+          ⚠️ Eliminar mi cuenta y todos mis datos
+        </button>
+      </div>
+
+      <!-- Datos que guardamos -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:8px;">📊 Qué datos guardamos</div>
+        <ul style="font-size:12px;color:var(--text-mid);line-height:1.8;padding-left:16px;margin:0;">
+          <li>Número de teléfono (identificador único)</li>
+          <li>Nombre de usuario y foto de perfil</li>
+          <li>Mensajes enviados y recibidos (texto, imágenes, audios)</li>
+          <li>Lista de contactos con nombres personalizados</li>
+          <li>Grupos de chat en los que participas</li>
+          <li>Fecha de último acceso y actividad</li>
+          <li>Suscripciones a notificaciones push (endpoint del dispositivo)</li>
+        </ul>
+      </div>
+
+      <!-- Retención y finalidad -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:6px;">⏱️ Retención y finalidad</div>
+        <p style="font-size:12px;color:var(--text-mid);line-height:1.5;">Tus datos se usan <strong>exclusivamente</strong> para ofrecer el servicio de mensajería. No vendemos ni cedemos datos a terceros. Los mensajes con autodestrucción se eliminan automáticamente en el plazo configurado. Los datos se conservan mientras tengas una cuenta activa.</p>
+      </div>
+
+      <!-- Contacto DPD -->
+      <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
+        <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
+          Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
+          <strong>privacidad@kivoospace.app</strong>
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -263,6 +263,77 @@ app.get('/api/link-preview', async (req, res) => {
     }
 });
 
+/* REST: exportar datos del usuario (RGPD Art. 20 - Portabilidad)
+   GET /api/gdpr/export?phone=+34XXXXXXXXX */
+app.get('/api/gdpr/export', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    try {
+        const user     = await User.findOne({ phone }).lean();
+        if (!user) return res.status(404).json({ error: 'usuario no encontrado' });
+        const contacts = await Contact.find({ ownerPhone: phone }).lean();
+        const groups   = await Group.find({ members: phone }).lean();
+        const messages = await Message.find({ $or: [{ from: user.username }, { to: user.username }] }).lean();
+        // Eliminar datos sensibles internos antes de exportar
+        const cleanUser = { ...user };
+        delete cleanUser.pushSubscriptions;
+        delete cleanUser._id; delete cleanUser.__v;
+        const exportData = {
+            exportDate:  new Date().toISOString(),
+            exportedBy:  'kiVooSpace (RGPD Art. 20)',
+            user:        cleanUser,
+            contacts:    contacts.map(c => { const cl = { ...c }; delete cl._id; delete cl.__v; return cl; }),
+            groups:      groups.map(g => { const cl = { ...g }; delete cl._id; delete cl.__v; return cl; }),
+            messages:    messages.map(m => {
+                const cl = { ...m };
+                delete cl._id; delete cl.__v;
+                delete cl.imageData; // omitir binarios grandes
+                delete cl.audioData;
+                return cl;
+            })
+        };
+        res.json(exportData);
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/* REST: eliminar cuenta del usuario (RGPD Art. 17 - Derecho al olvido)
+   POST /api/gdpr/delete
+   Body: { phone } */
+app.post('/api/gdpr/delete', async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    try {
+        const user = await User.findOne({ phone }).lean();
+        if (!user) return res.status(404).json({ error: 'usuario no encontrado' });
+        const { username } = user;
+        // 1. Borrar usuario
+        await User.deleteOne({ phone });
+        // 2. Borrar contactos (como dueño y como contacto de otros)
+        await Contact.deleteMany({ $or: [{ ownerPhone: phone }, { contactPhone: phone }] });
+        // 3. Eliminar de grupos (si era el único miembro, borrar el grupo; si era admin, asignar otro)
+        const groups = await Group.find({ members: phone });
+        for (const g of groups) {
+            if (g.members.length <= 1) {
+                await Group.deleteOne({ groupId: g.groupId });
+            } else {
+                const newMembers = g.members.filter(m => m !== phone);
+                const newOwner   = g.ownerPhone === phone ? newMembers[0] : g.ownerPhone;
+                await Group.updateOne({ groupId: g.groupId }, { members: newMembers, ownerPhone: newOwner });
+            }
+        }
+        // 4. Borrar mensajes (soft-delete: vaciar contenido para preservar hilos)
+        await Message.updateMany(
+            { $or: [{ from: username }, { to: username }] },
+            { deletedAt: new Date(), message: '[cuenta eliminada]', imageData: null, audioData: null }
+        );
+        res.json({ ok: true, message: 'Cuenta y datos eliminados correctamente.' });
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 server.listen(port, () =>
     console.log(`🚀 Servidor corriendo en http://localhost:${port}`)
 );
@@ -315,6 +386,10 @@ const phoneSessions = new Map();
 
 // Map: pendingContactRequests toPhone → Array<{fromPhone, fromUsername, fromAvatar, id}>
 const pendingContactRequests = new Map();
+
+// Map: reqId → { newWs, phone, username, avatar, deviceInfo, createdAt }
+// Solicitudes de autorización de nueva sesión pendientes de respuesta
+const pendingSessionRequests = new Map();
 
 // ── Heartbeat de aplicación (JS-level) ───────────────────────────────────
 // El cliente envía 'kvs_ping' cada 15s desde JS activo.
@@ -386,18 +461,52 @@ wss.on('connection', (ws) => {
                 ws.username = data.username;
                 ws.phone    = data.phone || null;
 
-                // ── Sesión única por número de teléfono ──────────────────
-                // Si ya hay otra sesión activa con el mismo teléfono, la cerramos.
+                // ── Control de sesión por número de teléfono ─────────────
+                // Si ya hay una sesión activa con el mismo teléfono, pedimos
+                // autorización al dispositivo existente en lugar de expulsarlo.
                 if (ws.phone) {
                     const existingWs = phoneSessions.get(ws.phone);
                     if (existingWs && existingWs !== ws && existingWs.readyState === 1 /* OPEN */) {
+                        // Guardar la conexión entrante como pendiente de autorización
+                        const reqId = crypto.randomBytes(8).toString('hex');
+                        pendingSessionRequests.set(reqId, {
+                            newWs:       ws,
+                            phone:       ws.phone,
+                            username:    ws.username,
+                            avatar:      data.avatar || null,
+                            deviceInfo:  data.deviceInfo || 'Dispositivo desconocido',
+                            createdAt:   Date.now()
+                        });
+                        ws._pendingSessionReqId = reqId;
+                        // Notificar al dispositivo existente para que el usuario decida
                         try {
                             existingWs.send(JSON.stringify({
-                                type: 'session_kicked',
-                                message: 'Tu sesión fue iniciada en otro dispositivo o pestaña.'
+                                type:       'session_auth_request',
+                                reqId,
+                                username:   ws.username,
+                                deviceInfo: data.deviceInfo || 'Dispositivo desconocido'
                             }));
                         } catch(_) {}
-                        existingWs.close(4001, 'session_replaced');
+                        // Notificar al dispositivo nuevo que está esperando
+                        try {
+                            ws.send(JSON.stringify({
+                                type: 'session_waiting_approval',
+                                message: 'Esperando autorización del dispositivo activo…'
+                            }));
+                        } catch(_) {}
+                        // Timeout de 60 s: si no hay respuesta, rechazar
+                        setTimeout(() => {
+                            if (pendingSessionRequests.has(reqId)) {
+                                pendingSessionRequests.delete(reqId);
+                                try {
+                                    ws.send(JSON.stringify({
+                                        type:    'session_rejected',
+                                        message: 'El dispositivo activo no respondió a tiempo. Inténtalo de nuevo.'
+                                    }));
+                                } catch(_) {}
+                            }
+                        }, 60000);
+                        break; // no continuar el join hasta que sea autorizado
                     }
                     phoneSessions.set(ws.phone, ws);
                 }
@@ -488,6 +597,102 @@ wss.on('connection', (ws) => {
                     }
                 }
 
+                break;
+            }
+
+            /* ──────────────────────────────────────
+               RESPUESTA A SOLICITUD DE SESIÓN
+               El dispositivo activo acepta o rechaza
+               que otro dispositivo inicie sesión con
+               el mismo número de teléfono.
+            ────────────────────────────────────── */
+            case 'session_auth_response': {
+                const { reqId, accepted } = data;
+                if (!reqId) break;
+                const pending = pendingSessionRequests.get(reqId);
+                if (!pending) break; // ya expiró o no existe
+                pendingSessionRequests.delete(reqId);
+
+                const { newWs, phone, username: newUsername, avatar: newAvatar } = pending;
+
+                if (!accepted) {
+                    // Rechazar al nuevo dispositivo
+                    try {
+                        newWs.send(JSON.stringify({
+                            type:    'session_rejected',
+                            message: 'El dispositivo activo no autorizó esta sesión.'
+                        }));
+                    } catch(_) {}
+                    break;
+                }
+
+                // Aceptado: cerrar la sesión actual y dejar entrar al nuevo
+                const existingWs = phoneSessions.get(phone);
+                if (existingWs && existingWs.readyState === 1) {
+                    try {
+                        existingWs.send(JSON.stringify({
+                            type:    'session_kicked',
+                            message: 'Autorizaste el acceso desde otro dispositivo. Esta sesión se cerrará.'
+                        }));
+                    } catch(_) {}
+                    existingWs.close(4001, 'session_replaced');
+                }
+
+                // Completar el join del nuevo dispositivo
+                phoneSessions.set(phone, newWs);
+                newWs.phone = phone;
+
+                const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(newUsername)}`;
+                if (newAvatar && /^data:image\//.test(newAvatar)) {
+                    newWs.avatar = newAvatar;
+                } else {
+                    newWs.avatar = defaultAvatar;
+                }
+
+                users.set(newUsername, newWs);
+                if (newWs.phone) userPhones.set(newUsername, newWs.phone);
+
+                try {
+                    await User.findOneAndUpdate(
+                        { phone: newWs.phone },
+                        { phone: newWs.phone, username: newUsername, avatar: newWs.avatar, lastLogin: new Date() },
+                        { upsert: true, new: true }
+                    );
+                } catch(e) {}
+
+                // Notificar al nuevo dispositivo que fue autorizado
+                try {
+                    newWs.send(JSON.stringify({ type: 'session_approved' }));
+                } catch(_) {}
+
+                broadcastUsers();
+                broadcast({ type: 'info', message: `${newUsername} se ha unido al chat` });
+
+                // Entregar mensajes pendientes al nuevo dispositivo
+                try {
+                    const pendingMsgs = await Message.find({ to: newUsername, delivered: false }).sort({ time: 1 });
+                    for (const msg of pendingMsgs) {
+                        newWs.send(JSON.stringify({ type: 'message', ...msg._doc }));
+                        await Message.updateOne({ id: msg.id }, { delivered: true });
+                        const senderWs = users.get(msg.from);
+                        if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                            senderWs.send(JSON.stringify({ type: 'delivered', id: msg.id }));
+                        }
+                    }
+                } catch(e) { console.error('Error entregando mensajes tras session_approved:', e.message); }
+
+                // Entregar solicitudes de contacto pendientes
+                if (newWs.phone) {
+                    const pendingReqs = pendingContactRequests.get(newWs.phone) || [];
+                    for (const req of pendingReqs) {
+                        try {
+                            newWs.send(JSON.stringify({
+                                type: 'contact_request', id: req.id,
+                                fromPhone: req.fromPhone, fromUsername: req.fromUsername, fromAvatar: req.fromAvatar
+                            }));
+                        } catch(_) {}
+                    }
+                }
                 break;
             }
 
@@ -1920,6 +2125,10 @@ wss.on('connection', (ws) => {
             // Limpiar sesión activa solo si este WS es el actual para ese teléfono
             if (ws.phone && phoneSessions.get(ws.phone) === ws) {
                 phoneSessions.delete(ws.phone);
+            }
+            // Limpiar solicitudes de sesión pendientes cuyo nuevo WS es este
+            if (ws._pendingSessionReqId) {
+                pendingSessionRequests.delete(ws._pendingSessionReqId);
             }
             // Actualizar lastSeen al desconectarse
             if (ws.phone) {
