@@ -815,6 +815,22 @@ html, body {
 /* RGPD modal */
 #rgpdModal { display: none; }
 #rgpdModal.visible { display: flex; }
+
+/* Base overlay para modales nuevos (sessionAuth + RGPD)
+   Usa !important para ganar a cualquier style inline residual */
+.kvs-modal-overlay {
+    display: none !important;
+    position: fixed;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+.kvs-modal-overlay.visible {
+    display: flex !important;
+}
 .settings-card {
     background: var(--white); border-radius: 20px; box-shadow: var(--shadow-card);
     border: 1px solid var(--border); width: 100%; max-width: 340px;
@@ -4772,7 +4788,17 @@ function conectarWS() {
             type: 'join',
             username,
             phone: loginPhone,
-            avatar: myAvatarDataUrl
+            avatar: myAvatarDataUrl,
+            deviceInfo: (() => {
+                const ua = navigator.userAgent;
+                if (/iPhone/.test(ua))  return 'iPhone';
+                if (/iPad/.test(ua))    return 'iPad';
+                if (/Android/.test(ua)) return 'Android';
+                if (/Macintosh/.test(ua)) return 'Mac';
+                if (/Windows/.test(ua)) return 'Windows';
+                if (/Linux/.test(ua))   return 'Linux';
+                return 'Dispositivo desconocido';
+            })()
         }));
 
         // Si había un chat abierto y es una RECONEXIÓN (no login fresco), recargar historial
@@ -10307,7 +10333,7 @@ function mostrarLecturaGrupo(msgId) {
   </div>
 </div>
 <!-- ── Modal: autorización de nueva sesión (dispositivo activo) ──────────── -->
-<div id="sessionAuthModal" style="display:none;position:fixed;inset:0;z-index:9700;align-items:center;justify-content:center;padding:16px;background:rgba(15,10,40,0.78);backdrop-filter:blur(6px);">
+<div id="sessionAuthModal" class="kvs-modal-overlay" style="z-index:9700;background:rgba(15,10,40,0.78);">
   <div style="background:var(--white);border-radius:22px;padding:28px 24px;max-width:380px;width:100%;box-shadow:var(--shadow-card);border:1px solid var(--border);animation:loginIn .3s cubic-bezier(.4,0,.2,1);">
     <div style="text-align:center;margin-bottom:18px;">
       <div style="font-size:42px;margin-bottom:8px;">🔐</div>
@@ -10358,7 +10384,7 @@ function mostrarLecturaGrupo(msgId) {
 </div>
 
 <!-- ── Modal RGPD / Privacidad ───────────────────────────────────────────── -->
-<div id="rgpdModal" style="display:none;position:fixed;inset:0;z-index:8500;align-items:center;justify-content:center;padding:16px;background:rgba(30,27,75,.45);backdrop-filter:blur(4px);"
+<div id="rgpdModal" class="kvs-modal-overlay" style="z-index:8500;background:rgba(30,27,75,.45);"
      onclick="if(event.target===this)cerrarModalRGPD()">
   <div style="background:var(--white);border-radius:22px;box-shadow:var(--shadow-card);border:1px solid var(--border);width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:loginIn .25s cubic-bezier(.4,0,.2,1);">
     <div style="padding:20px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--white);z-index:1;border-radius:22px 22px 0 0;">
@@ -10432,13 +10458,4 @@ function mostrarLecturaGrupo(msgId) {
       <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
         <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
           Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
-          <strong>privacidad@kivoospace.app</strong>
-        </p>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-</body>
-</html>
+          <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0474766d7265676d606560446f6d726b

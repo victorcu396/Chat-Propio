@@ -431,6 +431,19 @@ setInterval(() => {
         ws.isAlive = false;
         try { ws.ping(); } catch(_) {}
     });
+    // También enviar ping a conexiones en espera de autorización de sesión
+    // para que no mueran por inactividad TCP antes de que el usuario responda
+    pendingSessionRequests.forEach((req) => {
+        const pendingWs = req.newWs;
+        if (!pendingWs || pendingWs.readyState !== WebSocket.OPEN) return;
+        if (!pendingWs.isAlive) {
+            // Si el WS en espera murió, limpiar la solicitud
+            pendingSessionRequests.delete([...pendingSessionRequests.entries()].find(([, v]) => v.newWs === pendingWs)?.[0]);
+            return;
+        }
+        pendingWs.isAlive = false;
+        try { pendingWs.ping(); } catch(_) {}
+    });
 }, HEARTBEAT_INTERVAL);
 
 wss.on('connection', (ws) => {
@@ -449,6 +462,17 @@ wss.on('connection', (ws) => {
             data = JSON.parse(rawMsg);
         } catch (e) {
             console.error("Mensaje JSON inválido:", e.message);
+            return;
+        }
+
+        // ── Si este WS está esperando autorización de sesión, solo
+        //    procesar kvs_ping (para mantenerlo vivo) e ignorar el resto ──
+        if (ws._waitingSessionApproval) {
+            if (data.type === 'kvs_ping') {
+                ws.lastPing = Date.now();
+                ws.isAlive  = true;
+                try { ws.send(JSON.stringify({ type: 'kvs_pong' })); } catch(_) {}
+            }
             return;
         }
 
@@ -478,6 +502,10 @@ wss.on('connection', (ws) => {
                             createdAt:   Date.now()
                         });
                         ws._pendingSessionReqId = reqId;
+                        // Marcar como "en espera" para que el heartbeat TCP no lo mate
+                        ws._waitingSessionApproval = true;
+                        ws.isAlive = true; // garantizar que no se termina en el próximo ciclo
+
                         // Notificar al dispositivo existente para que el usuario decida
                         try {
                             existingWs.send(JSON.stringify({
@@ -494,10 +522,12 @@ wss.on('connection', (ws) => {
                                 message: 'Esperando autorización del dispositivo activo…'
                             }));
                         } catch(_) {}
-                        // Timeout de 60 s: si no hay respuesta, rechazar
+                        // Timeout de 70 s (margen extra sobre los 60 s del cliente):
+                        // si no hay respuesta, cerrar limpiamente el WS en espera
                         setTimeout(() => {
                             if (pendingSessionRequests.has(reqId)) {
                                 pendingSessionRequests.delete(reqId);
+                                ws._waitingSessionApproval = false;
                                 try {
                                     ws.send(JSON.stringify({
                                         type:    'session_rejected',
@@ -505,7 +535,7 @@ wss.on('connection', (ws) => {
                                     }));
                                 } catch(_) {}
                             }
-                        }, 60000);
+                        }, 70000);
                         break; // no continuar el join hasta que sea autorizado
                     }
                     phoneSessions.set(ws.phone, ws);
@@ -617,6 +647,7 @@ wss.on('connection', (ws) => {
 
                 if (!accepted) {
                     // Rechazar al nuevo dispositivo
+                    newWs._waitingSessionApproval = false;
                     try {
                         newWs.send(JSON.stringify({
                             type:    'session_rejected',
@@ -641,6 +672,8 @@ wss.on('connection', (ws) => {
                 // Completar el join del nuevo dispositivo
                 phoneSessions.set(phone, newWs);
                 newWs.phone = phone;
+                newWs._waitingSessionApproval = false; // ya puede procesar mensajes normales
+                newWs._pendingSessionReqId    = null;
 
                 const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(newUsername)}`;
                 if (newAvatar && /^data:image\//.test(newAvatar)) {
