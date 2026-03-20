@@ -1792,7 +1792,16 @@ wss.on('connection', (ws) => {
                 if (!data.id) break;
                 try {
                     const msg = await Message.findOne({ id: data.id });
-                    if (!msg || msg.from !== ws.username) break;
+                    if (!msg) break;
+                    // Permitir borrar si: eres el remitente, O eres admin del grupo
+                    const isAuthor = msg.from === ws.username;
+                    let isGroupAdmin = false;
+                    if (!isAuthor && msg.conversationId && msg.conversationId.startsWith('group_')) {
+                        const grpId = msg.conversationId.replace('group_', '');
+                        const grp   = await Group.findOne({ groupId: grpId });
+                        if (grp && grp.ownerPhone === ws.phone) isGroupAdmin = true;
+                    }
+                    if (!isAuthor && !isGroupAdmin) break;
                     msg.deletedAt = new Date();
                     msg.message   = '';
                     msg.imageData = null;
@@ -1801,6 +1810,33 @@ wss.on('connection', (ws) => {
                     const payload = JSON.stringify({ type: 'message_deleted', id: data.id });
                     broadcastToConversation(msg.conversationId, payload, msg.from, msg.to);
                 } catch(e) { console.error('deleteMessage error:', e.message); }
+                break;
+            }
+
+            /* Borrado múltiple de mensajes */
+            case 'deleteMessages': {
+                if (!Array.isArray(data.ids) || data.ids.length === 0) break;
+                try {
+                    for (const msgId of data.ids) {
+                        const msg = await Message.findOne({ id: msgId });
+                        if (!msg) continue;
+                        const isAuthor = msg.from === ws.username;
+                        let isGroupAdmin = false;
+                        if (!isAuthor && msg.conversationId && msg.conversationId.startsWith('group_')) {
+                            const grpId = msg.conversationId.replace('group_', '');
+                            const grp   = await Group.findOne({ groupId: grpId });
+                            if (grp && grp.ownerPhone === ws.phone) isGroupAdmin = true;
+                        }
+                        if (!isAuthor && !isGroupAdmin) continue;
+                        msg.deletedAt = new Date();
+                        msg.message   = '';
+                        msg.imageData = null;
+                        msg.audioData = null;
+                        await msg.save();
+                        const payload = JSON.stringify({ type: 'message_deleted', id: msgId });
+                        broadcastToConversation(msg.conversationId, payload, msg.from, msg.to);
+                    }
+                } catch(e) { console.error('deleteMessages error:', e.message); }
                 break;
             }
 
