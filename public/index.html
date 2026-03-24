@@ -1170,6 +1170,16 @@ li.has-unread .unread-badge {
 .btn-header-action:hover { background: var(--purple-pale); color: var(--purple-deep); }
 .btn-header-action.active { color: var(--purple-deep); background: var(--purple-pale); }
 
+/* En móvil: ocultar botones secundarios del header y mostrar solo ⋯ */
+.btn-header-more { display: none; }
+
+@media screen and (max-width: 768px) {
+    .btn-header-secondary { display: none !important; }
+    .btn-header-more      { display: flex !important; font-size: 22px; font-weight: 700; letter-spacing: 1px; padding: 4px 8px; }
+}
+html.is-mobile .btn-header-secondary { display: none !important; }
+html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px; font-weight: 700; letter-spacing: 1px; padding: 4px 8px; }
+
 .call-btns {
     display: flex;
     gap: 8px;
@@ -3735,13 +3745,16 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
     .chat-header {
         padding: 10px 14px;
         min-height: 58px;
-        gap: 10px;
+        gap: 8px;
         /* Safe area top para notch/Dynamic Island */
         padding-top: max(10px, env(safe-area-inset-top, 0px));
     }
 
-    #hamburger { width: 44px; height: 44px; }
-    #chatAvatar { width: 36px; height: 36px; }
+    #hamburger { width: 44px; height: 44px; flex-shrink: 0; }
+    #chatAvatar { width: 36px; height: 36px; flex-shrink: 0; }
+    #chatGroupAvatar { flex-shrink: 0; }
+    .chat-header-info { flex: 1; min-width: 0; overflow: hidden; }
+    .call-btns { flex-shrink: 0; }
 
     /* ── Burbujas ── */
     #chat { padding: 10px 12px 14px; gap: 2px; }
@@ -4080,9 +4093,17 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
         </div>
         <div class="chat-header-actions">
           <button class="btn-header-action" id="btnSearchChat" onclick="toggleSearchBar()" title="Buscar en el chat">🔍</button>
-          <button class="btn-header-action" id="btnAutoDestruct" onclick="abrirMenuAutoDestruct()" title="Mensajes temporales">⏱️</button>
-          <button class="btn-header-action" id="btnArchiveChat" onclick="toggleArchivarChat()" title="Archivar conversación">📁</button>
-          <button class="btn-header-action" id="btnClearChat" onclick="confirmarBorrarChat()" title="Borrar conversación">🗑️</button>
+          <button class="btn-header-action btn-header-secondary" id="btnAutoDestruct" onclick="abrirMenuAutoDestruct()" title="Mensajes temporales">⏱️</button>
+          <button class="btn-header-action btn-header-secondary" id="btnArchiveChat" onclick="toggleArchivarChat()" title="Archivar conversación">📁</button>
+          <button class="btn-header-action btn-header-secondary" id="btnClearChat" onclick="confirmarBorrarChat()" title="Borrar conversación">🗑️</button>
+          <!-- Botón "más opciones" solo visible en móvil -->
+          <button class="btn-header-action btn-header-more" id="btnMoreActions" onclick="toggleMoreActionsMenu(event)" title="Más opciones">⋯</button>
+          <!-- Menú desplegable para los botones secundarios en móvil -->
+          <div id="moreActionsMenu" style="display:none;position:absolute;top:58px;right:8px;z-index:900;background:var(--white);border-radius:var(--radius-md);box-shadow:var(--shadow-card);padding:6px 0;min-width:200px;border:1px solid var(--border);">
+            <button class="ctx-item" onclick="closeMoreActionsMenu();abrirMenuAutoDestruct()">⏱️ Mensajes temporales</button>
+            <button class="ctx-item" onclick="closeMoreActionsMenu();toggleArchivarChat()">📁 Archivar conversación</button>
+            <button class="ctx-item danger" onclick="closeMoreActionsMenu();confirmarBorrarChat()">🗑️ Borrar conversación</button>
+          </div>
         </div>
         <div class="call-btns">
           <button class="btn-call audio" id="btnCallUnified" title="Llamada" onclick="onBtnCall()" disabled>📞</button>
@@ -11902,6 +11923,32 @@ function mostrarLecturaGrupo(msgId) {
         const close = (e) => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', close, true); } };
         document.addEventListener('click', close, true);
     }, 50);
+}
+
+// ============================================================
+// MENÚ "MÁS OPCIONES" EN MÓVIL (botón ⋯ del header)
+// ============================================================
+function toggleMoreActionsMenu(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('moreActionsMenu');
+    if (!menu) return;
+    const isOpen = menu.style.display !== 'none';
+    menu.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+        setTimeout(() => {
+            const close = (ev) => {
+                if (!menu.contains(ev.target)) {
+                    menu.style.display = 'none';
+                    document.removeEventListener('click', close, true);
+                }
+            };
+            document.addEventListener('click', close, true);
+        }, 10);
+    }
+}
+function closeMoreActionsMenu() {
+    const menu = document.getElementById('moreActionsMenu');
+    if (menu) menu.style.display = 'none';
 }
 
 // ============================================================
