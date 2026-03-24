@@ -1768,11 +1768,15 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 
 .sg-content { flex: 1; overflow-y: auto; padding: 10px 12px; }
 
-/* Tab de emojis: el emoji-picker nativo dentro del panel */
+/* Tab de emojis: el emoji-picker nativo dentro del panel, siempre en el DOM */
 #sgEmojiWrap {
     height: 280px;
     overflow: hidden;
-    margin: -10px -12px;
+    margin: 0;
+    display: block;
+}
+#sgEmojiWrap.sg-hidden {
+    display: none;
 }
 #sgEmojiWrap emoji-picker {
     position: static !important;
@@ -4132,11 +4136,12 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
             <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
             <button class="sg-tab"        id="tabFavoritos" onclick="cambiarTabSG('favoritos')">⭐ Favoritos</button>
           </div>
-          <div class="sg-content" id="sgContent"></div>
+          <!-- El emoji-picker vive aquí de forma permanente; se muestra/oculta con CSS -->
+          <div id="sgEmojiWrap">
+            <emoji-picker id="emojiPicker"></emoji-picker>
+          </div>
+          <div class="sg-content" id="sgContent" style="display:none;"></div>
         </div>
-        <!-- emoji-picker nativo (oculto - su instancia se mueve al panel cuando se abre) -->
-        <emoji-picker id="emojiPicker" style="display:none;"></emoji-picker>
-
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
@@ -5114,14 +5119,22 @@ function _ejecutarAperturaChatPendiente() {
     window._pendingOpenChat = null;
     if (!chatToOpen) return;
 
+    // Forzar recarga del historial desde el servidor para que aparezcan TODOS los mensajes,
+    // no solo el que llegó con la notificación push
     if (chatToOpen.startsWith('group_')) {
+        delete conversations[chatToOpen];
         const gid = chatToOpen.replace('group_', '');
         if (typeof seleccionarGrupo === 'function') seleccionarGrupo(gid);
     } else if (chatToOpen.startsWith('phone:')) {
         const ph = chatToOpen.replace('phone:', '');
+        delete conversations['phone:' + ph];
+        if (window._phoneToUsername && window._phoneToUsername[ph]) {
+            delete conversations[window._phoneToUsername[ph]];
+        }
         if (typeof seleccionarContactoOffline === 'function') seleccionarContactoOffline(ph);
     } else {
-        // chatToOpen es un username — intentar abrir como online; si no, buscar por phone
+        // chatToOpen es un username — limpiar caché para forzar recarga completa
+        delete conversations[chatToOpen];
         if (typeof seleccionarUsuario === 'function') {
             seleccionarUsuario(chatToOpen);
         }
@@ -5732,6 +5745,9 @@ function handleMessage(data) {
                     : chatKey;
                 try { socket.send(JSON.stringify({ type: 'markRead', chatKey: markKey })); } catch(_) {}
             }
+            // Actualizar badge inmediatamente tras cargar el historial
+            renderContactsList();
+            renderGroupsList();
         } else {
             // Load more: PREPEND mensajes al inicio, conservando posición de scroll
             if (!conversations[chatKey]) conversations[chatKey] = [];
@@ -6010,8 +6026,23 @@ function handleMessage(data) {
         return;
     }
 
-    if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); return; }
-    if (data.type === 'read')      { updateEstado(data.id, '✔✔ leído'); return; }
+    if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); 
+        // Actualizar en caché
+        for (const arr of Object.values(conversations)) {
+            const m = arr.find(m => m.id === data.id);
+            if (m) { m.delivered = true; break; }
+        }
+        return;
+    }
+    if (data.type === 'read') {
+        updateEstado(data.id, '✔✔ leído');
+        // Actualizar en caché para que futuras aperturas muestren el estado correcto
+        for (const arr of Object.values(conversations)) {
+            const m = arr.find(m => m.id === data.id);
+            if (m) { m.read = true; m.delivered = true; break; }
+        }
+        return;
+    }
     if (data.type === 'info') {
         const infoText = data.message || '';
         const esSistema = /se ha unido al chat|sali[oó] del chat/.test(infoText);
@@ -6523,11 +6554,19 @@ function seleccionarUsuario(user) {
         if (socket && socket.readyState === WebSocket.OPEN) {
             try { socket.send(JSON.stringify({ type: 'markRead', chatKey: user })); } catch(_) {}
         }
+        // Actualizar inmediatamente en el DOM los estados de mensajes propios ya leídos
+        // (evita que el doble tick quede pendiente hasta que el servidor responda)
+        conversations[user].forEach(msg => {
+            if (msg.from === username && msg.read) {
+                updateEstado(msg.id, '✔✔ leído');
+            }
+        });
     } else {
         socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
     }
 
     renderUsers(lastKnownUsers);
+    renderContactsList();
     // Cerrar sidebar en móvil y tablet al seleccionar usuario
     if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
@@ -6612,6 +6651,12 @@ function seleccionarContactoOffline(phone) {
             const mkKey = un || ('phone:' + phone);
             try { socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey })); } catch(_) {}
         }
+        // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
+        conversations[chatKey].forEach(msg => {
+            if (msg.from === username && msg.read) {
+                updateEstado(msg.id, '✔✔ leído');
+            }
+        });
     } else {
         socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
     }
@@ -7767,7 +7812,9 @@ function _actualizarBadgeGlobal() {
             if (c.blocked || c.blockedUs) return;
             const un = getOnlineUsernameByPhone ? getOnlineUsernameByPhone(c.contactPhone) : null;
             const ck = un || ('phone:' + c.contactPhone);
-            total += (unreadCounts[un] || 0) + (unreadCounts[ck] || 0);
+            // Si está online, un === ck → contar solo una vez
+            total += un ? (unreadCounts[un] || 0)
+                        : (unreadCounts[ck] || 0) + (unreadCounts[c.contactPhone] || 0);
         });
     }
     // Sumar no leídos de grupos
@@ -7901,6 +7948,12 @@ function seleccionarGrupo(groupId) {
         if (socket && socket.readyState === WebSocket.OPEN) {
             try { socket.send(JSON.stringify({ type: 'markRead', chatKey })); } catch(_) {}
         }
+        // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
+        conversations[chatKey].forEach(msg => {
+            if (msg.from === username && msg.read) {
+                updateEstado(msg.id, '✔✔ leído');
+            }
+        });
     } else {
         socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
     }
@@ -8676,7 +8729,10 @@ function renderContactsList() {
             ? 'active' : '';
         const chatKey = onlineUsername || ('phone:' + c.contactPhone);
         const preview = lastMessages[onlineUsername] || lastMessages[chatKey] || '';
-        const unread  = (unreadCounts[onlineUsername] || 0) + (unreadCounts[chatKey] || 0);
+        // Si el contacto está online, onlineUsername === chatKey → no sumar dos veces
+        const unread  = onlineUsername
+            ? (unreadCounts[onlineUsername] || 0)
+            : (unreadCounts[chatKey] || 0) + (unreadCounts[c.contactPhone] || 0);
         const badge   = unread ? `<span class="unread-badge">${unread}</span>` : '';
         const clickFn = onlineUsername
             ? `seleccionarUsuario('${onlineUsername}')`
@@ -8713,7 +8769,9 @@ function renderContactsList() {
         if (c.blocked || c.blockedUs) return acc;
         const un = getOnlineUsernameByPhone(c.contactPhone);
         const ck = un || ('phone:' + c.contactPhone);
-        return acc + (unreadCounts[un] || 0) + (unreadCounts[ck] || 0);
+        // Si está online un === ck → contar solo una vez
+        return acc + (un ? (unreadCounts[un] || 0)
+                         : (unreadCounts[ck] || 0) + (unreadCounts[c.contactPhone] || 0));
     }, 0);
     const headerBadge = document.getElementById('contactsHeaderBadge');
     if (headerBadge) {
@@ -10410,28 +10468,21 @@ function cambiarTabSG(tab) {
 }
 
 function renderSGPanel(tab) {
-    const content = document.getElementById('sgContent');
-    if (!content) return;
+    const emojiWrap = document.getElementById('sgEmojiWrap');
+    const content   = document.getElementById('sgContent');
+    if (!emojiWrap || !content) return;
 
     if (tab === 'emojis') {
-        // Mostrar el emoji-picker nativo reubicado dentro del panel
-        content.innerHTML = '<div id="sgEmojiWrap"></div>';
-        const wrap = document.getElementById('sgEmojiWrap');
-        const picker = document.getElementById('emojiPicker');
-        if (picker) {
-            picker.style.display = 'block';
-            // Mover el picker al wrap (no clonamos, movemos el elemento real)
-            wrap.appendChild(picker);
-        }
+        // Mostrar el wrapper del picker, ocultar el área de contenido
+        emojiWrap.classList.remove('sg-hidden');
+        content.style.display = 'none';
+        content.innerHTML = '';
         return;
     }
 
-    // Si salimos de emojis, devolver el picker a su lugar oculto
-    const picker = document.getElementById('emojiPicker');
-    if (picker && picker.parentElement && picker.parentElement.id === 'sgEmojiWrap') {
-        picker.style.display = 'none';
-        document.querySelector('.input-area').appendChild(picker);
-    }
+    // Ocultar el picker, mostrar el área de contenido
+    emojiWrap.classList.add('sg-hidden');
+    content.style.display = '';
 
     if (tab === 'favoritos') {
         const favs = _getFavoritos();
@@ -11738,13 +11789,13 @@ function mostrarLecturaGrupo(msgId) {
       <div style="background:var(--bg-body,#f1f0fb);border-radius:12px;padding:14px 16px;">
         <p style="font-size:12px;color:var(--text-mid);line-height:1.6;">
           Para cualquier consulta sobre privacidad o para ejercer tus derechos de oposición o limitación del tratamiento (Arts. 18-21 RGPD), escríbenos a:<br>
-          <strong>privacidad@kivoospace.app</strong>
+          <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="b2c2c0dbc4d3d1dbd6d3d6f2d9dbc4ddddc1c2d3d1d79cd3c2c2">[email&#160;protected]</a></strong>
         </p>
       </div>
 
-    </div><!-- /.modal body padding -->
-  </div><!-- /.modal card -->
-</div><!-- /#rgpdModal -->
+    </div><!-- /scroll container -->
+  </div><!-- /modal card -->
+</div><!-- /rgpdModal overlay -->
 
 </body>
 </html>
