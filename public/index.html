@@ -5978,11 +5978,18 @@ function handleMessage(data) {
             return;
         }
 
-        let otherUser = data.from === username ? data.to : data.to === username ? data.from : null;
+        // isEcho: true  → el servidor confirma que NOSOTROS enviamos este mensaje
+        // isEcho: false → mensaje recibido DE otro usuario
+        // Para compatibilidad con mensajes del historial (sin isEcho), usar from===username como fallback
+        const isOwnMsg = data.isEcho === true || (data.isEcho === undefined && data.from === username);
+
+        let otherUser = isOwnMsg ? data.to : (data.to === username ? data.from : null);
+        // Fallback: si to no coincide con username pero from coincide, es eco
+        if (!otherUser && data.from === username) { otherUser = data.to; }
         if (!otherUser) return;
 
         // Actualizar caché de avatar del remitente
-        if (data.avatar && data.from !== username) {
+        if (data.avatar && !isOwnMsg) {
             userAvatars[data.from] = data.avatar;
             if (window._phoneToUsername) {
                 const senderPhone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === data.from)?.[0];
@@ -5995,11 +6002,9 @@ function handleMessage(data) {
             }
         }
 
-        // Determinar el chatKey donde mostrar el mensaje
-        // Si el otro usuario es un contacto offline que tenemos abierto como 'phone:XXXXX', usar ese chatKey
+        // Determinar el chatKey
         let chatKey = otherUser;
         if (window._phoneToUsername) {
-            // Buscar si el otherUser tiene phone y si tenemos ese chat abierto como phone:XXXXX
             const phone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === otherUser)?.[0];
             if (phone && currentChat === 'phone:' + phone) {
                 chatKey = 'phone:' + phone;
@@ -6008,36 +6013,36 @@ function handleMessage(data) {
 
         if (!conversations[chatKey]) {
             conversations[chatKey] = [];
-            // Si el array es nuevo y estamos en la ventana de join (primeros 4s tras conectar),
-            // marcarlo como "solo_pending" para que al abrir el chat se fuerce recarga completa.
-            if (window._kvsJoinTimestamp && (Date.now() - window._kvsJoinTimestamp) < 4000) {
+            // __onlyPending solo para mensajes entrantes de otro usuario en ventana de join
+            if (!isOwnMsg &&
+                window._kvsJoinTimestamp && (Date.now() - window._kvsJoinTimestamp) < 4000) {
                 conversations[chatKey].__onlyPending = true;
             }
         }
-        if (!conversations[otherUser]) conversations[otherUser] = conversations[chatKey]; // alias
+        if (!conversations[otherUser]) conversations[otherUser] = conversations[chatKey];
+
+        // Gestión del array: evitar duplicados y sustituir local_ por ID real
         if (!conversations[chatKey].some(m => m.id === data.id)) {
-            // Para el eco del propio mensaje (data.from === username):
-            // Buscar si hay un local_ coincidente para sustituirlo en lugar de duplicar.
-            let skipPush = false;
-            if (data.from === username) {
-                // Buscar local_ coincidente por contenido en el array
+            if (isOwnMsg) {
+                // Eco propio: buscar local_ coincidente y sustituir
                 const localIdx = conversations[chatKey].findIndex(m =>
                     typeof m.id === 'string' && m.id.startsWith('local_') && (
-                        (data.imageData && m.imageData) ||
-                        (data.audioData && m.audioData) ||
+                        (data.imageData  && m.imageData)  ||
+                        (data.audioData  && m.audioData)  ||
                         (!data.imageData && !data.audioData && (m.message || '') === (data.message || ''))
                     )
                 );
                 if (localIdx >= 0) {
-                    // Sustituir el local_ por el eco con ID real (mantiene el array sin duplicados)
                     if (conversations[chatKey][localIdx].editedAt && !data.editedAt) {
                         data.editedAt = conversations[chatKey][localIdx].editedAt;
                     }
                     conversations[chatKey][localIdx] = { ...data, delivered: true };
-                    skipPush = true;
+                } else {
+                    conversations[chatKey].push(data);
                 }
+            } else {
+                conversations[chatKey].push(data);
             }
-            if (!skipPush) conversations[chatKey].push(data);
         }
 
         const preview = data.imageData ? '📷 Imagen'
@@ -6047,7 +6052,7 @@ function handleMessage(data) {
         lastMessages[otherUser] = preview;
 
         // Registrar actividad reciente del contacto para ordenación
-        if (data.from !== username) {
+        if (!isOwnMsg) {
             window._contactLastActivity = window._contactLastActivity || {};
             if (window._phoneToUsername) {
                 const senderPhone = Object.entries(window._phoneToUsername).find(([ph, un]) => un === data.from)?.[0];
@@ -6057,37 +6062,28 @@ function handleMessage(data) {
 
         if (currentChat === chatKey || currentChat === otherUser) {
             // Limpiar contador de no leídos y notificaciones push ya que el chat está activo
-            if (data.from !== username) {
+            if (!isOwnMsg) {
                 unreadCounts[chatKey]   = 0;
                 unreadCounts[otherUser] = 0;
                 if (window._phoneToUsername) {
-                    const phone = Object.entries(window._phoneToUsername).find(([,un]) => un === (data.from))?.[0];
+                    const phone = Object.entries(window._phoneToUsername).find(([,un]) => un === data.from)?.[0];
                     if (phone) {
                         unreadCounts['phone:' + phone] = 0;
                         unreadCounts[phone] = 0;
                     }
                 }
-                // Cerrar notificaciones push si las hubiera (ej: llegaron en background)
                 _cerrarNotificacionesDeChat(chatKey);
             }
-            if (data.from === username) {
-                // Propio mensaje: buscar el bubble local_ que corresponde a ESTE mensaje
-                // Comparar por contenido para evitar asignar el ID al mensaje equivocado
-                // cuando se envían varios mensajes rápido.
+            if (isOwnMsg) {
+                // Eco propio: actualizar el local_ en el DOM con el ID real
                 const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
                 let matchedRow = null;
-                // Intentar match por texto/imagen del mensaje.
-                // IMPORTANTE: para mensajes con reply-preview, el textContent del msg-text
-                // incluye el texto citado. Clonamos el nodo y eliminamos el reply-preview
-                // antes de comparar, para que el match funcione en mensajes respondidos.
                 for (const lr of localRows) {
                     const bubble = lr.querySelector('.bubble');
                     if (!bubble) continue;
                     const textEl = bubble.querySelector('.msg-text');
                     const imgEl  = bubble.querySelector('.img-msg');
                     const rowHasImg = !!imgEl;
-                    // Extraer solo el texto propio: quitar reply-preview, forward-label,
-                    // edited-label, meta, sender-label y cualquier otro decorador
                     let rowText = '';
                     if (textEl) {
                         const cloned = textEl.cloneNode(true);
@@ -6098,7 +6094,7 @@ function handleMessage(data) {
                     if (data.audioData && bubble.querySelector('.audio-msg-wrap')) { matchedRow = lr; break; }
                     if (!data.imageData && !data.audioData && rowText === (data.message || '').trim()) { matchedRow = lr; break; }
                 }
-                // Fallback: usar el último local_ si no encontramos match por contenido
+                // Fallback: último local_ si no hay match por contenido
                 if (!matchedRow && localRows.length > 0) {
                     matchedRow = localRows[localRows.length - 1];
                 }
@@ -6107,27 +6103,23 @@ function handleMessage(data) {
                     matchedRow.dataset.msgid = data.id;
                     const bubble = matchedRow.querySelector('.bubble');
                     if (bubble) bubble.id = data.id;
-                    // Actualizar estado visual (✔ → ✔✔)
                     const estadoEl = bubble ? bubble.querySelector(`#estado_${oldLocalId}`) : null;
                     if (estadoEl) estadoEl.id = `estado_${data.id}`;
-                    // Actualizar el id en TODOS los arrays de conversations (alias incluidos)
-                    // y eliminar el duplicado del eco del servidor si ya fue añadido
+                    // Actualizar el id en todos los arrays de conversations
                     for (const arr of Object.values(conversations)) {
                         if (!Array.isArray(arr)) continue;
                         const localIdx = arr.findIndex(m => m.id === oldLocalId);
                         if (localIdx >= 0) {
-                            // Propagar editedAt si el mensaje fue editado mientras era local_
                             if (arr[localIdx].editedAt && !data.editedAt) {
                                 data.editedAt = arr[localIdx].editedAt;
                             }
                             arr[localIdx].id        = data.id;
                             arr[localIdx].delivered = true;
                             if (data.read) arr[localIdx].read = true;
-                            // Quitar duplicado: si el eco ya fue añadido con el id real, borrarlo
                             const dupIdx = arr.findIndex((m, i) => i !== localIdx && m.id === data.id);
                             if (dupIdx >= 0) arr.splice(dupIdx, 1);
                         } else {
-                            // El local_ ya fue sustituido por skipPush — actualizar estado por ID real
+                            // El local_ ya fue sustituido en el array: actualizar estado por ID real
                             const realIdx = arr.findIndex(m => m.id === data.id);
                             if (realIdx >= 0) {
                                 arr[realIdx].delivered = true;
@@ -6135,15 +6127,12 @@ function handleMessage(data) {
                             }
                         }
                     }
-                    // Aplicar estado correcto: si el read/delivered ya llegó antes del eco,
-                    // el estado en caché (data.read / data.delivered) ya fue actualizado.
-                    // Lo reflejamos ahora en el DOM que acaba de ser renombrado.
+                    // Aplicar estado correcto si read/delivered llegaron antes del eco
                     if (data.read) {
                         if (estadoEl) estadoEl.textContent = '✔✔ leído';
                     } else if (data.delivered) {
                         if (estadoEl) estadoEl.textContent = '✔✔';
                     }
-                    // Reasignar el menú contextual con el ID real
                     _attachBubbleClickMenu(matchedRow, data.id, true, false,
                         currentChat.startsWith('group_'));
 
@@ -6153,14 +6142,14 @@ function handleMessage(data) {
                         if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(JSON.stringify({ type: 'deleteMessage', id: data.id }));
                         }
-                        // Limpiar también del DOM y conversations por si aún están
                         const rowStill = document.querySelector(`[data-msgid="${data.id}"]`);
                         if (rowStill) rowStill.remove();
                         Object.values(conversations).forEach(arr => {
+                            if (!Array.isArray(arr)) return;
                             const idx = arr.findIndex(m => m.id === data.id);
                             if (idx >= 0) arr.splice(idx, 1);
                         });
-                        return; // no procesar más (el mensaje ya fue eliminado)
+                        return;
                     }
 
                     // Si había una edición pendiente para este mensaje local, enviarla ahora
@@ -6172,8 +6161,7 @@ function handleMessage(data) {
                         }
                     }
                 } else {
-                    // No se encontró bubble local_ → solo añadir al DOM si el mensaje
-                    // no estaba ya renderizado (evita duplicado cuando el eco llega tarde)
+                    // No hay local_ en el DOM: solo añadir si no está ya renderizado
                     const yaRenderizado = !!document.querySelector(`[data-msgid="${data.id}"]`);
                     if (!yaRenderizado) addMessage(data);
                 }
@@ -6181,8 +6169,9 @@ function handleMessage(data) {
                 addMessage(data);
             }
         } else {
-            unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
-            if (data.from !== username) {
+            // Chat no activo: solo contar no leídos para mensajes de otros
+            if (!isOwnMsg) {
+                unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
                 playNotifSound();
                 mostrarNotificacion(data.from, preview);
             }
@@ -8392,25 +8381,22 @@ function onGroupMessage(data) {
     const chatKey = 'group_' + data.groupId;
     if (!conversations[chatKey]) conversations[chatKey] = [];
     if (!conversations[chatKey].some(m => m.id === data.id)) {
-        // Igual que en 1:1: si hay un local_ coincidente, sustituirlo en lugar de duplicar
-        let skipPush = false;
-        if (data.from === username) {
-            const localIdx = conversations[chatKey].findIndex(m =>
+        const localIdx = data.from === username
+            ? conversations[chatKey].findIndex(m =>
                 typeof m.id === 'string' && m.id.startsWith('local_') && (
                     (data.imageData && m.imageData) ||
                     (data.audioData && m.audioData) ||
                     (!data.imageData && !data.audioData && (m.message || '') === (data.message || ''))
-                )
-            );
-            if (localIdx >= 0) {
-                if (conversations[chatKey][localIdx].editedAt && !data.editedAt) {
-                    data.editedAt = conversations[chatKey][localIdx].editedAt;
-                }
-                conversations[chatKey][localIdx] = { ...data, delivered: true };
-                skipPush = true;
+                ))
+            : -1;
+        if (localIdx >= 0) {
+            if (conversations[chatKey][localIdx].editedAt && !data.editedAt) {
+                data.editedAt = conversations[chatKey][localIdx].editedAt;
             }
+            conversations[chatKey][localIdx] = { ...data, delivered: true };
+        } else {
+            conversations[chatKey].push(data);
         }
-        if (!skipPush) conversations[chatKey].push(data);
     }
 
     lastMessages[chatKey] = data.imageData ? '📷 Imagen'
@@ -8456,18 +8442,15 @@ function onGroupMessage(data) {
                 if (convArr) {
                     const localIdx = convArr.findIndex(m => m.id === oldLocalId);
                     if (localIdx >= 0) {
-                        // Propagar editedAt si el mensaje fue editado mientras era local_
                         if (convArr[localIdx].editedAt && !data.editedAt) {
                             data.editedAt = convArr[localIdx].editedAt;
                         }
                         convArr[localIdx].id = data.id;
                         convArr[localIdx].delivered = true;
                         if (data.read) convArr[localIdx].read = true;
-                        // Quitar duplicado del eco si ya fue añadido
                         const dupIdx = convArr.findIndex((m, i) => i !== localIdx && m.id === data.id);
                         if (dupIdx >= 0) convArr.splice(dupIdx, 1);
                     } else {
-                        // El local_ ya fue sustituido por skipPush — actualizar estado por ID real
                         const realIdx = convArr.findIndex(m => m.id === data.id);
                         if (realIdx >= 0) {
                             convArr[realIdx].delivered = true;

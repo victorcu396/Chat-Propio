@@ -736,8 +736,8 @@ wss.on('connection', (ws) => {
                     }).sort({ time: 1 });
 
                     for (const msg of pending) {
-                        // Enviar al destinatario (ahora online)
-                        ws.send(JSON.stringify({ type: 'message', ...msg._doc }));
+                        // Enviar al destinatario (ahora online) — isEcho:false = mensaje recibido
+                        ws.send(JSON.stringify({ type: 'message', ...msg._doc, isEcho: false }));
                         // Marcar como entregado
                         await Message.updateOne({ id: msg.id }, { delivered: true });
                         // Notificar al remitente si está online
@@ -857,7 +857,7 @@ wss.on('connection', (ws) => {
                 try {
                     const pendingMsgs = await Message.find({ to: newUsername, delivered: false }).sort({ time: 1 });
                     for (const msg of pendingMsgs) {
-                        newWs.send(JSON.stringify({ type: 'message', ...msg._doc }));
+                        newWs.send(JSON.stringify({ type: 'message', ...msg._doc, isEcho: false }));
                         await Message.updateOne({ id: msg.id }, { delivered: true });
                         const senderWs = users.get(msg.from);
                         if (senderWs && senderWs.readyState === WebSocket.OPEN) {
@@ -2545,21 +2545,24 @@ wss.on('connection', (ws) => {
    HELPERS
 ────────────────────────────────────── */
 function sendMessage(message) {
-    const payload = JSON.stringify({
-        type: 'message',
-        ...message._doc
-    });
+    const base = { type: 'message', ...message._doc };
 
-    // Enviar al remitente siempre (para que aparezca en su chat)
+    // Payload para el REMITENTE — con isEcho:true para que el cliente sepa
+    // que es confirmación de su propio mensaje (nunca debe mostrarlo como nuevo)
+    const echoPayload  = JSON.stringify({ ...base, isEcho: true });
+    // Payload para el DESTINATARIO — isEcho:false (es un mensaje recibido)
+    const inboxPayload = JSON.stringify({ ...base, isEcho: false });
+
+    // Enviar eco al remitente
     const senderWs = users.get(message.from);
     if (senderWs && senderWs.readyState === WebSocket.OPEN) {
-        senderWs.send(payload);
+        senderWs.send(echoPayload);
     }
 
     // Enviar al destinatario si está online
     const targetWs = users.get(message.to);
     if (targetWs && targetWs.readyState === WebSocket.OPEN && targetWs !== senderWs) {
-        targetWs.send(payload);
+        targetWs.send(inboxPayload);
         // Marcar como entregado
         Message.updateOne({ id: message.id }, { delivered: true }).exec();
         if (senderWs && senderWs.readyState === WebSocket.OPEN) {
