@@ -178,6 +178,60 @@ function toggleSidebar() {
     document.getElementById('sidebarOverlay').classList.toggle('visible');
 }
 
+// ── Swipe para abrir/cerrar sidebar en móvil ────────────────────────────────
+(function initSwipeGestures() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isSwiping = false;
+    const EDGE_THRESHOLD = 22;   // px desde el borde izquierdo para activar swipe-open
+    const SWIPE_MIN = 55;        // px mínimos de swipe para considerar gesto
+
+    document.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isSwiping = false;
+        const sidebar = document.getElementById('sidebar');
+        const isMobil = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+        if (!isMobil) return;
+        // Swipe-open: solo desde el borde izquierdo cuando sidebar está oculto
+        if (!sidebar.classList.contains('visible') && touchStartX <= EDGE_THRESHOLD) {
+            isSwiping = true;
+        }
+        // Swipe-close: desde cualquier parte cuando sidebar está abierto
+        if (sidebar.classList.contains('visible')) {
+            isSwiping = true;
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        if (!isSwiping) return;
+        const isMobil = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+        if (!isMobil) return;
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+        if (dy > 60) return; // swipe más vertical que horizontal → ignorar
+        const sidebar = document.getElementById('sidebar');
+        // Swipe derecha (>55px) → abrir sidebar
+        if (dx > SWIPE_MIN && !sidebar.classList.contains('visible') && touchStartX <= EDGE_THRESHOLD) {
+            sidebar.classList.add('visible');
+            document.getElementById('sidebarOverlay').classList.add('visible');
+        }
+        // Swipe izquierda (<-55px) → cerrar sidebar
+        if (dx < -SWIPE_MIN && sidebar.classList.contains('visible')) {
+            sidebar.classList.remove('visible');
+            document.getElementById('sidebarOverlay').classList.remove('visible');
+        }
+        isSwiping = false;
+    }, { passive: true });
+})();
+
+// ── Feedback háptico al enviar mensaje (solo si el dispositivo lo soporta) ──
+function _vibrarEnvio() {
+    try {
+        if (navigator.vibrate) navigator.vibrate(30);
+    } catch(_) {}
+}
+
 
 </script>
 
@@ -1768,21 +1822,36 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
     touch-action: manipulation;
 }
 
-/* Mobile adjustments */
-@media (max-width: 768px) {
+/* En móvil: el panel de emojis se muestra como bottom-sheet */
+@media screen and (max-width: 768px) {
+    #stickerGiftPanel {
+        position: fixed;
+        bottom: 0;
+        left: 0; right: 0;
+        top: auto;
+        border-radius: 20px 20px 0 0;
+        max-height: 52vh;
+        z-index: 650;
+        box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    #sgEmojiWrap { height: 260px; }
+    #sgEmojiWrap emoji-picker { height: 260px !important; }
+
+    /* Thread panel ocupa pantalla completa en móvil */
     #threadPanel { width: 100%; right: -100%; z-index: 8200; }
     #threadPanel.open { right: 0; pointer-events: auto; }
     .thread-input-area { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-    /* En móvil el menú aparece en posición fija para no quedar cortado */
-    .msg-ctx-menu,
-    .msg-row.me .bubble-wrap .msg-ctx-menu,
-    .msg-row:not(.me) .bubble-wrap .msg-ctx-menu {
-        position: fixed;
-        bottom: 80px;
-        left: 10px; right: 10px;
-        top: auto; width: auto;
-        max-width: none;
-    }
+}
+
+html.is-mobile #stickerGiftPanel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0; top: auto;
+    border-radius: 20px 20px 0 0;
+    max-height: 52vh;
+    z-index: 650;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 
@@ -3799,11 +3868,40 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 /* ── Swipe-to-reply: transición suave al soltar ───────────────── */
 .bubble-wrap { transition: transform .2s cubic-bezier(.4,0,.2,1); }
 
-/* ── Área táctil mínima para botones de acción en móvil ──────── */
+/* ============================================================
+   MOBILE — Reducir animaciones para mejor rendimiento
+   En táctil: sin animaciones de hover/translate en listas,
+   sin float del logo, burbujas con animación más corta
+============================================================ */
 @media (hover: none) and (pointer: coarse) {
-    .btn-header-action { min-width: 40px; min-height: 40px; padding: 8px; }
-    .icon-btn          { min-width: 40px; min-height: 40px; }
-    .ctx-item          { padding: 12px 14px; font-size: 15px; }
+    /* Sin translateX en items de lista (no se hace hover en táctil) */
+    #users li:hover,
+    #contactsList li:hover,
+    #groupsList li:hover { transform: none; }
+
+    /* Sin flotación del logo welcome (ahorra batería) */
+    .welcome-logo { animation: none; }
+
+    /* Burbujas con animación más rápida en móvil */
+    .msg-row.me    > .bubble-wrap > .bubble { animation-duration: .14s; }
+    .msg-row:not(.me) > .bubble-wrap > .bubble { animation-duration: .14s; }
+
+    /* Área de toque mínima 44px para todos los botones */
+    .btn-header-action,
+    .icon-btn,
+    #btnEnviar,
+    .btn-add-contact,
+    .ctx-item,
+    .btn-settings-action { min-height: 44px; }
+
+    /* Sin tooltip CSS en táctil (interfiere con el toque) */
+    .btn-header-action::after { display: none !important; }
+
+    /* El translateX del sidebar en hover se mantiene para desktop,
+       pero en táctil el sidebar se abre por swipe, no hover */
+    #users li, #contactsList li, #groupsList li {
+        transition: background var(--transition);
+    }
 }
 
 @keyframes fadeUp {
@@ -3821,9 +3919,12 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
     to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 
-.bubble { animation: fadeUp .18s ease; }
-.msg-row.me    .bubble { animation: bubbleMeIn .2s cubic-bezier(.34,1.56,.64,1); }
-.msg-row:not(.me) .bubble { animation: bubbleOtherIn .2s cubic-bezier(.34,1.56,.64,1); }
+/* Animaciones de burbuja (DEBEN estar después del reset para no ser sobreescritas) */
+.msg-row.me    > .bubble-wrap > .bubble { animation: bubbleMeIn .2s cubic-bezier(.34,1.56,.64,1) both; }
+.msg-row:not(.me) > .bubble-wrap > .bubble { animation: bubbleOtherIn .2s cubic-bezier(.34,1.56,.64,1) both; }
+/* Burbujas borradas/eliminadas: sin animación */
+.bubble.deleted { animation: fadeUp .15s ease both; }
+
 
 /* ============================================================
    TABLET  (769px – 1024px)
@@ -3887,8 +3988,8 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         left: -100%;
         top: 0;
         bottom: 0;
-        width: 82vw;
-        max-width: 320px;
+        width: 85vw;
+        max-width: 330px;
         height: 100%;
         height: 100dvh;
         z-index: 300;
@@ -3897,8 +3998,8 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         overflow-x: hidden;
         transition: left .28s cubic-bezier(.4,0,.2,1);
         box-shadow: 4px 0 32px rgba(0,0,0,0.22);
-        /* Espacio para el safe-area del iPhone (notch/isla) */
         padding-top: env(safe-area-inset-top, 0px);
+        -webkit-overflow-scrolling: touch;
     }
 
     .sidebar.visible { left: 0; }
@@ -3924,44 +4025,52 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 
     /* ── Header ── */
     .chat-header {
-        padding: 10px 14px;
-        min-height: 58px;
+        padding: 10px 12px;
+        min-height: 60px;
         gap: 8px;
-        /* Safe area top para notch/Dynamic Island */
         padding-top: max(10px, env(safe-area-inset-top, 0px));
     }
 
-    #hamburger { width: 44px; height: 44px; flex-shrink: 0; }
-    #chatAvatar { width: 36px; height: 36px; flex-shrink: 0; }
+    #hamburger { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; }
+    #chatAvatar { width: 38px; height: 38px; flex-shrink: 0; }
     #chatGroupAvatar { flex-shrink: 0; }
     .chat-header-info { flex: 1; min-width: 0; overflow: hidden; }
     .call-btns { flex-shrink: 0; }
 
-    /* ── Burbujas ── */
-    #chat { padding: 10px 12px 14px; gap: 2px; }
-    .bubble      { font-size: 14.5px; }
-    .bubble-wrap { max-width: 85%; }
+    /* Nombre del chat más legible en móvil */
+    #chatName { font-size: 15px; }
+    #chatStatus { font-size: 11.5px; }
 
-    /* ── Input area + safe area inferior (home indicator iOS) ── */
+    /* ── Burbujas ── */
+    #chat { padding: 10px 10px 12px; gap: 2px; }
+    .bubble      { font-size: 15px; line-height: 1.45; }
+    .bubble-wrap { max-width: 82%; }
+
+    /* Las burbujas en móvil tienen más padding vertical para mejor lectura */
+    .bubble { padding: 9px 13px 6px; }
+
+    /* ── Input area ── */
     .input-area {
         padding: 8px 10px;
         padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
         gap: 6px;
     }
-    .input-area .icon-btn { width: 42px; height: 42px; }
-    #btnEnviar { width: 44px; height: 44px; }
+    /* Botones más grandes en móvil para dedos */
+    .input-area .icon-btn { width: 44px; height: 44px; font-size: 19px; border-radius: 12px; }
+    #btnEnviar { width: 46px; height: 46px; }
+    #mensaje { font-size: 16px; padding: 10px 14px; }
 
-    /* ── Imágenes en burbuja más pequeñas ── */
+    /* ── Imágenes en burbuja ── */
     .bubble img.img-msg {
-        max-width: min(240px, 80vw);
-        max-height: 220px;
+        max-width: min(260px, 78vw);
+        max-height: 230px;
     }
 
     /* ── Audio más compacto ── */
-    .audio-msg-wrap { min-width: 160px; max-width: 240px; }
+    .audio-msg-wrap { min-width: 155px; max-width: 240px; }
 
     /* ── Typing indicator ── */
-    #typing { bottom: calc(var(--input-area-h-mob) + 6px); left: 12px; }
+    #typing { bottom: calc(var(--input-area-h-mob) + 6px); left: 10px; font-size: 12px; }
 
     /* ── Emoji picker ocupa menos ── */
     emoji-picker { height: 280px; max-height: 45vh; }
@@ -3975,24 +4084,63 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         transform: none;
     }
 
-    /* ── Modal cards: margen lateral ── */
+    /* ── Modal cards: pantalla completa en móvil pequeño ── */
     .add-contact-card,
     .rename-contact-card,
     .avatar-modal-card { margin: 0 4px; }
 
     /* ── Perfil compacto en sidebar ── */
-    .my-profile { padding: 6px 8px; gap: 8px; }
+    .my-profile { padding: 8px 10px; gap: 8px; }
     .my-profile-avatar-wrap,
-    .my-profile-avatar-wrap img { width: 34px; height: 34px; }
+    .my-profile-avatar-wrap img { width: 36px; height: 36px; }
 
     /* ── Botones acción contactos: siempre visibles en táctil ── */
     .contact-actions { display: flex; }
+
+    /* ── Items de contactos más grandes para el dedo ── */
+    #contactsList li { padding: 10px 10px; }
+    #users li { padding: 10px 10px; }
+    #groupsList li { padding: 11px 14px; }
 
     /* ── Login ── */
     .otp-digit { width: 44px; height: 52px; font-size: 20px; }
     .otp-wrap  { gap: 5px; }
     .login-card { padding: 28px 20px 24px; max-width: calc(100vw - 28px); }
     .login-card .logo-wrap img { width: 110px; }
+
+    /* ── Menú contextual: siempre en bottom sheet en móvil ── */
+    .msg-ctx-menu,
+    .msg-row.me .bubble-wrap .msg-ctx-menu,
+    .msg-row:not(.me) .bubble-wrap .msg-ctx-menu {
+        position: fixed;
+        bottom: max(80px, calc(80px + env(safe-area-inset-bottom)));
+        left: 10px; right: 10px;
+        top: auto;
+        width: auto;
+        max-width: none;
+        border-radius: 18px;
+        padding: 8px;
+    }
+    .ctx-item { padding: 13px 14px; font-size: 15px; border-radius: 12px; }
+
+    /* ── Scroll al fondo: más grande en móvil ── */
+    #btnScrollBottom {
+        bottom: max(76px, calc(70px + env(safe-area-inset-bottom))) !important;
+        width: 46px !important;
+        height: 46px !important;
+    }
+
+    /* ── Barra de selección múltiple ── */
+    #selectionBar { padding: 0 10px; gap: 6px; height: 56px; }
+    .sel-bar-count { font-size: 13px; }
+    .btn-sel-action { padding: 9px 12px; font-size: 13px; }
+
+    /* ── Sidebar header search inputs más cómodos ── */
+    #contactSearch, #groupSearch {
+        padding: 8px 12px;
+        font-size: 14px;
+        border-radius: 10px;
+    }
 }
 
 
@@ -4001,22 +4149,25 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 ============================================================ */
 @media screen and (max-width: 380px) {
     .otp-digit  { width: 38px; height: 48px; font-size: 18px; }
-    .otp-wrap   { gap: 5px; }
+    .otp-wrap   { gap: 4px; }
     .login-card { padding: 24px 14px 20px; }
     .login-card .logo-wrap img { width: 96px; }
     .login-card h2 { font-size: 18px; }
 
-    .chat-header { padding: 8px 10px; min-height: 56px; }
+    .chat-header { padding: 8px 8px; min-height: 56px; }
     #chatAvatar  { width: 34px; height: 34px; }
     #hamburger   { width: 38px; height: 38px; }
 
-    .bubble      { font-size: 14px; }
+    .bubble      { font-size: 14.5px; padding: 8px 11px 5px; }
     .bubble-wrap { max-width: 88%; }
 
-    .input-area  { gap: 4px; }
-    .input-area .icon-btn { width: 36px; height: 36px; font-size: 16px; }
-    #btnEnviar  { width: 40px; height: 40px; }
+    .input-area  { gap: 4px; padding: 6px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+    .input-area .icon-btn { width: 40px; height: 40px; font-size: 17px; }
+    #btnEnviar  { width: 42px; height: 42px; }
     #mensaje    { font-size: 16px; padding: 8px 12px; }
+
+    /* En iPhone SE el menú contextual ocupa más espacio */
+    .msg-ctx-menu { bottom: max(70px, calc(64px + env(safe-area-inset-bottom))); }
 }
 
 /* ============================================================
@@ -4048,32 +4199,38 @@ html.is-mobile .window {
 html.is-mobile .sidebar {
     position: fixed;
     left: -100%; top: 0; bottom: 0;
-    width: 82vw; max-width: 320px;
+    width: 85vw; max-width: 330px;
     height: 100%; height: 100dvh;
     z-index: 300;
     transition: left .28s cubic-bezier(.4,0,.2,1);
     box-shadow: 4px 0 32px rgba(0,0,0,0.22);
     background: var(--bg-sidebar);
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding-top: env(safe-area-inset-top, 0px);
 }
 html.is-mobile .sidebar.visible { left: 0; }
 
 html.is-mobile #hamburger       { display: flex !important; width: 44px; height: 44px; }
-html.is-mobile .bubble          { font-size: 14.5px; }
-html.is-mobile .bubble-wrap     { max-width: 85%; }
+html.is-mobile .bubble          { font-size: 15px; }
+html.is-mobile .bubble-wrap     { max-width: 82%; }
 html.is-mobile .contact-actions { display: flex; }
+html.is-mobile #contactsList li { padding: 10px 10px; }
+html.is-mobile #users li        { padding: 10px 10px; }
 
 html.is-mobile .chat-header {
-    padding: 10px 14px;
+    padding: 10px 12px;
     padding-top: max(10px, env(safe-area-inset-top, 0px));
-    min-height: 58px;
+    min-height: 60px;
 }
 
 html.is-mobile .input-area {
     padding: 8px 10px;
     padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
 }
+
+html.is-mobile .input-area .icon-btn { width: 44px; height: 44px; }
+html.is-mobile #btnEnviar            { width: 46px; height: 46px; }
 
 /* Dark mode */
 html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
@@ -4178,18 +4335,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* ============================================================
    TRANSICIÓN SUAVE DE TEMA (LIGHT ↔ DARK)
+   Solo se aplica a elementos que realmente cambian de color,
+   sin afectar animaciones ni rendimiento del scroll en móvil
 ============================================================ */
 html {
     transition: background-color .3s, color .3s;
 }
-*, *::before, *::after {
-    transition-property: background-color, border-color, box-shadow;
-    transition-duration: .2s;
-    transition-timing-function: cubic-bezier(.4,0,.2,1);
-}
 /* Excluir transiciones en burbujas para no ralentizar el scroll */
 .bubble, .msg-row, #chat li { transition: none !important; }
-.bubble { animation: inherit; }
+/* Las animaciones de burbuja se asignan en tiempo de inserción */
 </style>
 </head>
 <body>
@@ -7362,6 +7516,8 @@ function enviar() {
     // Animación visual del botón enviar
     btnEnviar.style.transform = 'scale(0.85)';
     setTimeout(() => { btnEnviar.style.transform = ''; }, 150);
+    // Feedback háptico en móvil
+    _vibrarEnvio();
 }
 
 // ============================================================
