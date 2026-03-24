@@ -1367,6 +1367,7 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
     align-items: flex-start;
     min-width: 0;
     position: relative;
+    overflow: visible;
 }
 
 .msg-row.me .bubble-wrap { align-items: flex-end; }
@@ -1478,7 +1479,10 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
    Trigger: click izquierdo sobre la burbuja
 ═══════════════════════════════════════════ */
 .msg-row { position: relative; }
-.bubble-wrap { position: relative; }
+.bubble-wrap { 
+    position: relative; 
+    overflow: visible;
+}
 
 /* La burbuja es clickable — cursor pointer para indicarlo */
 .bubble { cursor: pointer; }
@@ -1495,7 +1499,7 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
 
 /* Menú contextual flotante — ancla al bubble-wrap */
 .msg-ctx-menu {
-    position: fixed;
+    position: absolute;
     z-index: 99999;
     background: var(--white);
     border: 1px solid var(--border);
@@ -10477,10 +10481,9 @@ let _openMenuRow = null;
 
 /* ─── Menú contextual ──────────────────────────────────────── */
 const QUICK_EMOJIS = ['👍','❤️','😂','😮','😢','🔥'];
-
 function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
-    e.preventDefault();
     e.stopPropagation();
+    e.preventDefault(); // Añadido para evitar comportamientos por defecto del navegador
 
     // Si el menú ya está abierto para este mensaje, cerrarlo (toggle)
     const existingMenu = document.getElementById('msgCtxMenu');
@@ -10492,13 +10495,9 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
 
     const row = document.querySelector(`[data-msgid="${msgId}"]`);
     if (!row) return;
-    const bubbleWrap = row.querySelector('.bubble-wrap');
-    if (!bubbleWrap) return;
     const bubble = row.querySelector('.bubble');
 
-    // ── Determinar isMe e isDeleted directamente del DOM en el momento de abrir ──
-    // Esto es la fuente de verdad definitiva, sin depender de closures ni parámetros
-    // que pudieran haberse quedado obsoletos.
+    // ── Determinar isMe e isDeleted directamente del DOM ──
     const isMeFinal      = row.classList.contains('me');
     const isDeletedFinal = bubble ? bubble.classList.contains('deleted') : isDeleted;
 
@@ -10510,6 +10509,10 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
     menu.className = 'msg-ctx-menu visible';
     menu.id = 'msgCtxMenu';
     menu.dataset.formsgid = msgId;
+    
+    // --- CAMBIO CLAVE: Posicionamiento fijo para que se vea POR ENCIMA ---
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '100000';
 
     // Barra de reacciones rápidas (solo si no eliminado)
     if (!isDeletedFinal) {
@@ -10526,16 +10529,16 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
         menu.appendChild(reactBar);
     }
 
-    // Opciones del menú
+    // Opciones del menú (Mantenemos toda tu lógica original)
     const ops = [];
-    if (!isDeletedFinal) ops.push({ icon: '↩', label: 'Responder',   fn: () => iniciarRespuesta(msgId) });
-    if (!isDeletedFinal) ops.push({ icon: '🧵', label: 'Ver hilo',    fn: () => abrirHilo(msgId) });
+    if (!isDeletedFinal) ops.push({ icon: '↩', label: 'Responder',    fn: () => iniciarRespuesta(msgId) });
+    if (!isDeletedFinal) ops.push({ icon: '🧵', label: 'Ver hilo',     fn: () => abrirHilo(msgId) });
     if (!isDeletedFinal) ops.push({ icon: '↗', label: 'Reenviar',    fn: () => abrirModalReenviar(msgId) });
     if (!isDeletedFinal) ops.push({ icon: '☑️', label: 'Seleccionar', fn: () => entrarModoSeleccion(msgId) });
     if (!isDeletedFinal) ops.push({ icon: '⭐', label: 'Destacar',    fn: () => destacarMensaje(msgId) });
-    if (!isDeletedFinal && isMeFinal) ops.push({ icon: '✏️', label: 'Editar',              fn: () => iniciarEdicion(msgId) });
+    if (!isDeletedFinal && isMeFinal) ops.push({ icon: '✏️', label: 'Editar',               fn: () => iniciarEdicion(msgId) });
     if (!isDeletedFinal && isMeFinal) ops.push({ icon: '🗑',  label: 'Eliminar para todos', fn: () => eliminarMensaje(msgId), danger: true });
-    if (isMeFinal)                    ops.push({ icon: '👁',  label: isDeletedFinal ? 'Ocultar para mí' : 'Ocultar solo para mí', fn: () => ocultarMensajeParaMi(msgId), danger: true });
+    if (isMeFinal)                     ops.push({ icon: '👁',  label: isDeletedFinal ? 'Ocultar para mí' : 'Ocultar solo para mí', fn: () => ocultarMensajeParaMi(msgId), danger: true });
 
     ops.forEach((op, i) => {
         if (op.danger && i > 0) {
@@ -10550,27 +10553,37 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
         menu.appendChild(btn);
     });
 
-    bubbleWrap.appendChild(menu);
+    // --- CAMBIO CLAVE: Añadir al BODY para evitar recortes (Z-index real) ---
+    document.body.appendChild(menu);
 
-    // Cerrar al pulsar fuera.
-    // Usamos un timestamp para evitar que el mismo evento de click que abrió el menú
-    // lo cierre de inmediato en móvil (donde el evento sube por el DOM con pequeño delay).
+    // --- CAMBIO CLAVE: Calcular posición basada en el click ---
+    let posX = e.clientX;
+    let posY = e.clientY;
+    
+    // Ajuste simple para que no se salga de la pantalla por la derecha o abajo
+    const menuRect = menu.getBoundingClientRect();
+    if (posX + 200 > window.innerWidth) posX -= 200;
+    if (posY + 300 > window.innerHeight) posY -= 300;
+
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
+
+    // Cerrar al pulsar fuera (Mantenemos tu lógica de 300ms)
     const openedAt = Date.now();
     const _closeHandler = (ev) => {
-        if (Date.now() - openedAt < 300) return; // ignorar clicks dentro de los primeros 300ms
+        if (Date.now() - openedAt < 300) return; 
         const menu = document.getElementById('msgCtxMenu');
-        if (menu && menu.contains(ev.target)) return; // click dentro del menú — no cerrar
+        if (menu && menu.contains(ev.target)) return; 
         document.removeEventListener('click', _closeHandler, true);
         document.removeEventListener('touchend', _closeHandler, true);
         cerrarMenuMensaje();
     };
-    // Usar capture:true para interceptar antes que otros handlers
+
     setTimeout(() => {
         document.addEventListener('click', _closeHandler, true);
         document.addEventListener('touchend', _closeHandler, true);
     }, 50);
 
-    // Guardar referencia para poder quitarlo en cerrarMenuMensaje
     menu._closeHandler = _closeHandler;
 }
 
