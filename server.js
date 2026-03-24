@@ -1754,12 +1754,104 @@ wss.on('connection', (ws) => {
 
             /* ──────────────────────────────────────
                MARK READ: el cliente abrió un chat concreto.
-               Reseteamos el contador de no leídos push para ese par.
+               1. Resetea el contador de no leídos push.
+               2. Marca como leídos en BD todos los mensajes
+                  no leídos de esa conversación dirigidos a
+                  este usuario.
+               3. Notifica a los remitentes (flechitas azules).
                Mensaje: { type: 'markRead', chatKey: 'username' | 'group_XXX' }
             ────────────────────────────────────── */
             case 'markRead': {
-                if (ws.phone && data.chatKey) {
+                if (!data.chatKey) break;
+
+                // 1. Resetear contador push
+                if (ws.phone) {
                     resetearPendingUnread(ws.phone, data.chatKey);
+                }
+
+                // 2. Marcar mensajes como leídos en BD y notificar remitentes
+                try {
+                    let conversationId;
+                    if (data.chatKey.startsWith('group_')) {
+                        conversationId = data.chatKey; // 'group_XXXX'
+                    } else {
+                        // chatKey es username del otro usuario
+                        const usersSortedMR = [ws.username, data.chatKey].sort();
+                        conversationId = usersSortedMR.join('_');
+                    }
+
+                    // Buscar todos los mensajes no leídos dirigidos a este usuario en esta conversación
+                    let unreadMsgs;
+                    if (data.chatKey.startsWith('group_')) {
+                        // En grupos, 'to' es el groupId; filtrar solo los que NO son del propio usuario
+                        unreadMsgs = await Message.find({
+                            conversationId,
+                            from: { $ne: ws.username },
+                            read: false
+                        }).lean();
+                    } else {
+                        // 1:1: solo los mensajes dirigidos a este usuario
+                        unreadMsgs = await Message.find({
+                            conversationId,
+                            to:   ws.username,
+                            read: false
+                        }).lean();
+                    }
+
+                    if (unreadMsgs.length > 0) {
+                        // Marcar todos como leídos en BD de una sola operación
+                        if (data.chatKey.startsWith('group_')) {
+                            await Message.updateMany(
+                                { conversationId, from: { $ne: ws.username }, read: false },
+                                { read: true }
+                            );
+                        } else {
+                            await Message.updateMany(
+                                { conversationId, to: ws.username, read: false },
+                                { read: true }
+                            );
+                        }
+
+                        if (data.chatKey.startsWith('group_')) {
+                            // Grupo: notificar a todos los miembros que este usuario leyó
+                            const groupId = data.chatKey.replace('group_', '');
+                            const grp = await Group.findOne({ groupId }).lean();
+                            if (grp) {
+                                // Emitir group_read por cada mensaje (el cliente lo deduplica)
+                                for (const msg of unreadMsgs) {
+                                    const payload = JSON.stringify({
+                                        type:    'group_read',
+                                        id:      msg.id,
+                                        by:      ws.username,
+                                        groupId
+                                    });
+                                    grp.members.forEach(memberPhone => {
+                                        const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                                        if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                                            try { memberWs.send(payload); } catch(_) {}
+                                        }
+                                    });
+                                }
+                            }
+                        } else {
+                            // 1:1: notificar al remitente de cada mensaje (puede haber varios)
+                            // Agrupar por remitente para evitar duplicados de WS lookup
+                            const senders = [...new Set(unreadMsgs.map(m => m.from))];
+                            for (const sender of senders) {
+                                const senderWs = users.get(sender);
+                                if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                                    // Enviar un 'read' por cada mensaje de ese remitente
+                                    for (const msg of unreadMsgs.filter(m => m.from === sender)) {
+                                        try {
+                                            senderWs.send(JSON.stringify({ type: 'read', id: msg.id }));
+                                        } catch(_) {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch(e) {
+                    console.error('markRead error:', e.message);
                 }
                 break;
             }

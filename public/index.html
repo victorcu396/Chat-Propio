@@ -5713,14 +5713,25 @@ function handleMessage(data) {
             }
             chat.innerHTML = '';
             let lastDay = '';
+            window._kvsLoadingHistory = true;
             data.messages.forEach(msg => {
                 if (_hiddenMsgs.has(msg.id)) return;
                 const day = obtenerDia(msg.time);
                 if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
                 addMessage(msg);
             });
+            window._kvsLoadingHistory = false;
             // Mostrar indicador de "más mensajes" al top si hay paginación
             _actualizarIndicadorPaginacion();
+            // Informar al servidor que hemos leído esta conversación
+            // (marca en BD + notifica a los remitentes + resetea contador push)
+            if (socket && socket.readyState === WebSocket.OPEN && chatKey) {
+                const markKey = chatKey.startsWith('phone:')
+                    ? (window._phoneToUsername && window._phoneToUsername[chatKey.replace('phone:', '')])
+                        || chatKey
+                    : chatKey;
+                try { socket.send(JSON.stringify({ type: 'markRead', chatKey: markKey })); } catch(_) {}
+            }
         } else {
             // Load more: PREPEND mensajes al inicio, conservando posición de scroll
             if (!conversations[chatKey]) conversations[chatKey] = [];
@@ -5743,6 +5754,7 @@ function handleMessage(data) {
             realChat.insertBefore = (n, ref) => tempList.insertBefore(n, ref);
 
             let lastDay = '';
+            window._kvsLoadingHistory = true;
             data.messages.forEach(msg => {
                 if (_hiddenMsgs.has(msg.id)) return;
                 const day = obtenerDia(msg.time);
@@ -5755,6 +5767,7 @@ function handleMessage(data) {
                 }
                 addMessage(msg);
             });
+            window._kvsLoadingHistory = false;
 
             // Restaurar métodos originales
             realChat.appendChild  = origAppendChild;
@@ -5830,6 +5843,20 @@ function handleMessage(data) {
         }
 
         if (currentChat === chatKey || currentChat === otherUser) {
+            // Limpiar contador de no leídos y notificaciones push ya que el chat está activo
+            if (data.from !== username) {
+                unreadCounts[chatKey]   = 0;
+                unreadCounts[otherUser] = 0;
+                if (window._phoneToUsername) {
+                    const phone = Object.entries(window._phoneToUsername).find(([,un]) => un === (data.from))?.[0];
+                    if (phone) {
+                        unreadCounts['phone:' + phone] = 0;
+                        unreadCounts[phone] = 0;
+                    }
+                }
+                // Cerrar notificaciones push si las hubiera (ej: llegaron en background)
+                _cerrarNotificacionesDeChat(chatKey);
+            }
             if (data.from === username) {
                 // Propio mensaje: buscar el bubble local_ que corresponde a ESTE mensaje
                 // Comparar por contenido para evitar asignar el ID al mensaje equivocado
@@ -6485,11 +6512,17 @@ function seleccionarUsuario(user) {
 
     if (conversations[user]) {
         let lastDay = '';
+        window._kvsLoadingHistory = true;
         conversations[user].forEach(msg => {
             const day = obtenerDia(msg.time);
             if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
             addMessage(msg);
         });
+        window._kvsLoadingHistory = false;
+        // Marcar como leídos en BD y cerrar notificaciones
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            try { socket.send(JSON.stringify({ type: 'markRead', chatKey: user })); } catch(_) {}
+        }
     } else {
         socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
     }
@@ -6566,11 +6599,19 @@ function seleccionarContactoOffline(phone) {
     // Cargar historial por phone
     if (conversations[chatKey]) {
         let lastDay = '';
+        window._kvsLoadingHistory = true;
         conversations[chatKey].forEach(msg => {
             const day = obtenerDia(msg.time);
             if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
             addMessage(msg);
         });
+        window._kvsLoadingHistory = false;
+        // Marcar como leídos en BD y cerrar notificaciones
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            const un = window._phoneToUsername && window._phoneToUsername[phone];
+            const mkKey = un || ('phone:' + phone);
+            try { socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey })); } catch(_) {}
+        }
     } else {
         socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
     }
@@ -6979,7 +7020,8 @@ function addMessage(msg) {
         chat.appendChild(row);
         _attachBubbleClickMenu(row, msg.id, isMe, false, isGroup);
         if (autoScroll) scrollChat();
-        if (!isMe && socket) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+        // Solo enviar read individual si es un mensaje nuevo en tiempo real (no historial)
+        if (!isMe && socket && !window._kvsLoadingHistory) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
         return;
     }
 
@@ -7025,7 +7067,8 @@ function addMessage(msg) {
         if (bubble) _adjuntarLinkPreview(bubble, msg.message);
     }
     if (autoScroll) scrollChat();
-    if (!isMe && socket && !isDeleted) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+    // Solo enviar read individual si es un mensaje nuevo en tiempo real (no historial)
+    if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
 }
 
 function escapeHTML(str) {
@@ -7847,11 +7890,17 @@ function seleccionarGrupo(groupId) {
 
     if (conversations[chatKey]) {
         let lastDay = '';
+        window._kvsLoadingHistory = true;
         conversations[chatKey].forEach(msg => {
             const day = obtenerDia(msg.time);
             if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
             addGroupMessage(msg);
         });
+        window._kvsLoadingHistory = false;
+        // Marcar como leídos en BD y cerrar notificaciones
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            try { socket.send(JSON.stringify({ type: 'markRead', chatKey })); } catch(_) {}
+        }
     } else {
         socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
     }
@@ -7965,6 +8014,11 @@ function onGroupMessage(data) {
         : data.message;
 
     if (currentChat === chatKey) {
+        // Chat activo: limpiar contador de no leídos y notificaciones push si las hubiera
+        if (data.from !== username) {
+            unreadCounts[chatKey] = 0;
+            _cerrarNotificacionesDeChat(chatKey);
+        }
         if (data.from === username) {
             // Match por contenido igual que en 1:1
             const localRows = [...chat.querySelectorAll('.msg-row.me[data-msgid^="local_"]')];
@@ -8086,13 +8140,19 @@ function onGroupHistory(data) {
         conversations[chatKey] = data.messages;
         chat.innerHTML = '';
         let lastDay = '';
+        window._kvsLoadingHistory = true;
         data.messages.forEach(msg => {
             if (_hiddenMsgs.has(msg.id)) return;
             const day = obtenerDia(msg.time);
             if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
             addGroupMessage(msg);
         });
+        window._kvsLoadingHistory = false;
         _actualizarIndicadorPaginacion();
+        // Informar al servidor que hemos leído este grupo
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            try { socket.send(JSON.stringify({ type: 'markRead', chatKey })); } catch(_) {}
+        }
     } else {
         if (!conversations[chatKey]) conversations[chatKey] = [];
         conversations[chatKey].unshift(...data.messages);
@@ -8109,6 +8169,7 @@ function onGroupHistory(data) {
         chat.insertBefore = (n, ref) => tempList.insertBefore(n, ref);
 
         let lastDay = '';
+        window._kvsLoadingHistory = true;
         data.messages.forEach(msg => {
             if (_hiddenMsgs.has(msg.id)) return;
             const day = obtenerDia(msg.time);
@@ -8121,6 +8182,7 @@ function onGroupHistory(data) {
             }
             addGroupMessage(msg);
         });
+        window._kvsLoadingHistory = false;
 
         chat.appendChild  = origAppendChild;
         chat.insertBefore = origInsertBefore;
@@ -11680,9 +11742,9 @@ function mostrarLecturaGrupo(msgId) {
         </p>
       </div>
 
-    </div>
-  </div>
-</div>
+    </div><!-- /.modal body padding -->
+  </div><!-- /.modal card -->
+</div><!-- /#rgpdModal -->
 
 </body>
 </html>
