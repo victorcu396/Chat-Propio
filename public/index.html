@@ -1514,7 +1514,8 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
 }
 
 .msg-ctx-menu.visible { display: flex; }
-
+.msg-row.me .bubble-wrap .msg-ctx-menu  { right: 0; top: calc(100% + 4px); }
+.msg-row:not(.me) .bubble-wrap .msg-ctx-menu { left: 0; top: calc(100% + 4px); }
 
 
 .ctx-item {
@@ -10489,7 +10490,7 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
         cerrarMenuMensaje();
         if (wasThisMsg) return; // toggle off
     }
-    document.body.appendChild(menu);
+
     const row = document.querySelector(`[data-msgid="${msgId}"]`);
     if (!row) return;
     const bubbleWrap = row.querySelector('.bubble-wrap');
@@ -10550,6 +10551,7 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
         menu.appendChild(btn);
     });
 
+    bubbleWrap.appendChild(menu);
 
     // Cerrar al pulsar fuera.
     // Usamos un timestamp para evitar que el mismo evento de click que abrió el menú
