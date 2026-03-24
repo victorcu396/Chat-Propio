@@ -1176,7 +1176,7 @@ wss.on('connection', (ws) => {
             }
 
             /* ──────────────────────────────────────
-               ACTUALIZAR AVATAR DE GRUPO (solo admin)
+               ACTUALIZAR AVATAR DE GRUPO (cualquier miembro)
             ────────────────────────────────────── */
             case 'updateGroupAvatar': {
                 if (!data.groupId || !data.avatar) break;
@@ -1184,7 +1184,7 @@ wss.on('connection', (ws) => {
                 if (!/^data:image\//.test(data.avatar)) break;
                 try {
                     const grp = await Group.findOne({ groupId: data.groupId });
-                    if (!grp || grp.ownerPhone !== ws.phone) break;
+                    if (!grp || !grp.members.includes(ws.phone)) break;
                     grp.avatar = data.avatar;
                     await grp.save();
                     // Notificar a todos los miembros
@@ -1700,13 +1700,15 @@ wss.on('connection', (ws) => {
                 try {
                     const grp = await Group.findOne({ groupId: data.groupId });
                     if (!grp) { ws.send(JSON.stringify({ type: 'groupError', message: 'Grupo no encontrado.' })); break; }
-                    if (grp.ownerPhone !== ws.phone) { ws.send(JSON.stringify({ type: 'groupError', message: 'Solo el administrador puede editar el grupo.' })); break; }
+                    // Cualquier miembro puede editar nombre y foto
+                    if (!grp.members.includes(ws.phone)) { ws.send(JSON.stringify({ type: 'groupError', message: 'No eres miembro de este grupo.' })); break; }
 
                     const oldMembers = [...grp.members];
 
                     if (data.name && data.name.trim()) grp.name = data.name.trim();
 
-                    if (Array.isArray(data.memberPhones)) {
+                    // Solo el admin puede añadir o quitar miembros
+                    if (Array.isArray(data.memberPhones) && grp.ownerPhone === ws.phone) {
                         grp.members = [...new Set([ws.phone, ...data.memberPhones])];
                     }
 

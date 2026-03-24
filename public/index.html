@@ -4412,7 +4412,7 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
       <div class="edit-group-members-list" id="editGroupCurrentMembers"></div>
     </div>
 
-    <div>
+    <div id="editGroupAddSection">
       <div class="edit-group-section-title">Añadir más contactos</div>
       <div class="edit-group-members-list group-members-list" id="editGroupAddMembers"></div>
     </div>
@@ -7991,9 +7991,7 @@ function renderGroupsList() {
 
         const ownerBadge = isOwner ? `<span class="group-badge-owner">Admin</span>` : '';
         const viewBtn    = `<button class="btn-group-action" onclick="event.stopPropagation();abrirModalVerMiembros('${g.groupId}')" title="Ver miembros">👁️</button>`;
-        const editBtn    = isOwner
-            ? `<button class="btn-group-action" onclick="event.stopPropagation();abrirModalEditarGrupo('${g.groupId}')" title="Editar grupo">✏️</button>`
-            : '';
+        const editBtn    = `<button class="btn-group-action" onclick="event.stopPropagation();abrirModalEditarGrupo('${g.groupId}')" title="Editar grupo">✏️</button>`;
         const leaveBtn   = !isOwner
             ? `<button class="btn-group-action danger" onclick="event.stopPropagation();salirDeGrupo('${g.groupId}','${escapedName}')" title="Salir del grupo">🚪</button>`
             : '';
@@ -8612,6 +8610,7 @@ function abrirModalEditarGrupo(groupId) {
     const g = myGroups.get(groupId);
     if (!g) return;
     _editingGroupId = groupId;
+    const isAdmin = g.ownerPhone === loginPhone;
 
     document.getElementById('editGroupNameInput').value = g.name;
     document.getElementById('editGroupError').textContent = '';
@@ -8653,7 +8652,8 @@ function abrirModalEditarGrupo(groupId) {
             : isContact ? `<span class="member-is-contact">Contacto</span>`
             : `<span class="member-not-contact">Sin agregar</span>`;
 
-        const removeBtn = !isMe
+        // Solo el admin puede quitar miembros
+        const removeBtn = (isAdmin && !isMe)
             ? `<button class="btn-group-action danger" title="Quitar del grupo"
                 onclick="quitarMiembroDelGrupo(this,'${phone.replace(/'/g,"\\'")}')"
                 style="margin-left:4px;">✕</button>`
@@ -8670,24 +8670,29 @@ function abrirModalEditarGrupo(groupId) {
         </div>`;
     }).join('');
 
-    // Contactos para añadir (los que aún no están en el grupo)
-    const addEl = document.getElementById('editGroupAddMembers');
-    const memberSet = new Set(g.members);
-    const toAdd = [...myContacts.values()].filter(c => !memberSet.has(c.contactPhone));
-    if (toAdd.length === 0) {
-        addEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted);padding:4px 0;">Todos tus contactos ya están en el grupo.</span>';
-    } else {
-        addEl.innerHTML = toAdd.map(c => {
-            const seedName = c.username || c.customName;
-            const avatarUrl = c.avatar || userAvatars['__phone__' + c.contactPhone]
-                || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`;
-            return `<label class="group-member-item">
-                <input type="checkbox" value="${c.contactPhone.replace(/'/g,"\\'")}">
-                <img class="group-member-avatar" src="${avatarUrl}" alt="${escapeHTML(c.customName)}"
-                    onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
-                <span class="group-member-name">${escapeHTML(c.customName)}</span>
-            </label>`;
-        }).join('');
+    // Solo el admin puede añadir más contactos al grupo
+    const addSection = document.getElementById('editGroupAddSection');
+    if (addSection) addSection.style.display = isAdmin ? '' : 'none';
+
+    if (isAdmin) {
+        const addEl = document.getElementById('editGroupAddMembers');
+        const memberSet = new Set(g.members);
+        const toAdd = [...myContacts.values()].filter(c => !memberSet.has(c.contactPhone));
+        if (toAdd.length === 0) {
+            addEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted);padding:4px 0;">Todos tus contactos ya están en el grupo.</span>';
+        } else {
+            addEl.innerHTML = toAdd.map(c => {
+                const seedName = c.username || c.customName;
+                const avatarUrl = c.avatar || userAvatars['__phone__' + c.contactPhone]
+                    || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}`;
+                return `<label class="group-member-item">
+                    <input type="checkbox" value="${c.contactPhone.replace(/'/g,"\\'")}">
+                    <img class="group-member-avatar" src="${avatarUrl}" alt="${escapeHTML(c.customName)}"
+                        onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(seedName)}'">
+                    <span class="group-member-name">${escapeHTML(c.customName)}</span>
+                </label>`;
+            }).join('');
+        }
     }
 
     document.getElementById('editGroupModal').classList.add('visible');
@@ -9266,17 +9271,17 @@ function actualizarHeaderGrupo(g) {
     } else {
         el.innerHTML = (g.name || '?').charAt(0).toUpperCase();
     }
-    // Solo el admin puede cambiar la foto → tooltip diferente
-    el.title = (g.ownerPhone === loginPhone) ? 'Cambiar foto del grupo' : 'Foto del grupo';
+    // Todos los miembros pueden cambiar la foto del grupo
+    el.title = 'Cambiar foto del grupo';
     el.classList.add('visible');
 }
 
-// Click en el avatar del grupo en el header
+// Click en el avatar del grupo en el header — cualquier miembro puede cambiar la foto
 function onClickGroupAvatar() {
     if (!currentChat || !currentChat.startsWith('group_')) return;
     const groupId = currentChat.replace('group_', '');
     const g = myGroups.get(groupId);
-    if (!g || g.ownerPhone !== loginPhone) return; // solo admin
+    if (!g) return;
     document.getElementById('groupAvatarFileInput').value = '';
     document.getElementById('groupAvatarFileInput').click();
 }
