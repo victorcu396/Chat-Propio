@@ -415,6 +415,47 @@ app.post('/api/gdpr/delete', async (req, res) => {
     }
 });
 
+/* ── Rate limiting OTP: máximo 5 intentos por número cada 10 minutos ─────────
+   Mapa en memoria: phone → { count, firstAt }
+   Se limpia automáticamente al superar la ventana de tiempo.
+────────────────────────────────────────────────────────────────────────────── */
+const _otpRateMap = new Map();
+const OTP_MAX    = 5;
+const OTP_WINDOW = 10 * 60 * 1000; // 10 minutos
+
+function _otpRateCheck(phone) {
+    const now = Date.now();
+    const entry = _otpRateMap.get(phone);
+    if (!entry || (now - entry.firstAt) > OTP_WINDOW) {
+        _otpRateMap.set(phone, { count: 1, firstAt: now });
+        return true; // permitido
+    }
+    if (entry.count >= OTP_MAX) return false; // bloqueado
+    entry.count++;
+    return true;
+}
+
+// Limpiar entradas caducadas cada 15 minutos
+setInterval(() => {
+    const now = Date.now();
+    _otpRateMap.forEach((v, k) => {
+        if (now - v.firstAt > OTP_WINDOW) _otpRateMap.delete(k);
+    });
+}, 15 * 60 * 1000);
+
+/* REST: verificar rate-limit de OTP
+   POST /api/otp/check   Body: { phone }
+   Devuelve { allowed: true/false } */
+app.post('/api/otp/check', (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'phone requerido' });
+    const allowed = _otpRateCheck(phone);
+    if (!allowed) {
+        return res.status(429).json({ allowed: false, error: 'Demasiados intentos. Espera unos minutos.' });
+    }
+    res.json({ allowed: true });
+});
+
 /* REST: subir imagen a Cloudinary (si está configurado) o devolver base64 tal cual
    POST /api/upload-image
    Body: { imageData: 'data:image/...' }
@@ -1714,7 +1755,7 @@ wss.on('connection', (ws) => {
 
                     await grp.save();
 
-                    const updatedPayload = { type: 'groupUpdated', groupId: grp.groupId, name: grp.name, ownerPhone: grp.ownerPhone, members: grp.members };
+                    const updatedPayload = { type: 'groupUpdated', groupId: grp.groupId, name: grp.name, ownerPhone: grp.ownerPhone, members: grp.members, avatar: grp.avatar || null };
                     const allAffected = [...new Set([...oldMembers, ...grp.members])];
 
                     allAffected.forEach(memberPhone => {
@@ -2064,28 +2105,51 @@ wss.on('connection', (ws) => {
                 break;
             }
 
-            /* Borrado múltiple de mensajes */
+            /* Borrado múltiple de mensajes — batch optimizado */
             case 'deleteMessages': {
                 if (!Array.isArray(data.ids) || data.ids.length === 0) break;
+                // Limitar a 100 mensajes por petición para evitar abuso
+                const ids = data.ids.slice(0, 100);
                 try {
-                    for (const msgId of data.ids) {
-                        const msg = await Message.findOne({ id: msgId });
-                        if (!msg) continue;
+                    // Una sola consulta para obtener todos los mensajes
+                    const msgs = await Message.find({ id: { $in: ids } });
+                    const toDelete = [];
+
+                    // Caché de grupos ya consultados para no repetir queries
+                    const groupAdminCache = {};
+
+                    for (const msg of msgs) {
+                        if (msg.deletedAt) continue;
                         const isAuthor = msg.from === ws.username;
                         let isGroupAdmin = false;
                         if (!isAuthor && msg.conversationId && msg.conversationId.startsWith('group_')) {
                             const grpId = msg.conversationId.replace('group_', '');
-                            const grp   = await Group.findOne({ groupId: grpId });
-                            if (grp && grp.ownerPhone === ws.phone) isGroupAdmin = true;
+                            if (groupAdminCache[grpId] === undefined) {
+                                const grp = await Group.findOne({ groupId: grpId }).lean();
+                                groupAdminCache[grpId] = grp ? grp.ownerPhone === ws.phone : false;
+                            }
+                            isGroupAdmin = groupAdminCache[grpId];
                         }
                         if (!isAuthor && !isGroupAdmin) continue;
-                        msg.deletedAt = new Date();
-                        msg.message   = '';
-                        msg.imageData = null;
-                        msg.audioData = null;
-                        await msg.save();
-                        const payload = JSON.stringify({ type: 'message_deleted', id: msgId });
-                        broadcastToConversation(msg.conversationId, payload, msg.from, msg.to);
+                        toDelete.push(msg);
+                    }
+
+                    if (toDelete.length > 0) {
+                        const deleteIds = toDelete.map(m => m.id);
+                        // Una sola operación de escritura en BD
+                        await Message.updateMany(
+                            { id: { $in: deleteIds } },
+                            { deletedAt: new Date(), message: '', imageData: null, audioData: null }
+                        );
+                        // Notificar a todos los participantes afectados
+                        const payload = JSON.stringify({ type: 'messages_deleted', ids: deleteIds });
+                        const convIds = [...new Set(toDelete.map(m => m.conversationId))];
+                        convIds.forEach(convId => {
+                            const msgsInConv = toDelete.filter(m => m.conversationId === convId);
+                            const from = msgsInConv[0]?.from;
+                            const to   = msgsInConv[0]?.to;
+                            broadcastToConversation(convId, payload, from, to);
+                        });
                     }
                 } catch(e) { console.error('deleteMessages error:', e.message); }
                 break;

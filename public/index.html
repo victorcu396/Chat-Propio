@@ -1210,7 +1210,6 @@ li.has-unread .unread-badge {
     flex-direction: column;
     gap: 4px;
     background:
-        url('https://www.transparenttextures.com/patterns/cubes.png'),
         var(--bg-chat);
     overscroll-behavior-y: contain;
 }
@@ -1439,7 +1438,7 @@ li.has-unread .unread-badge {
 .sel-bar-count {
     font-size: 14px; font-weight: 600; color: var(--text-dark); flex: 1;
 }
-.sel-bar-actions { display: flex; gap: 8px; }
+.sel-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-sel-action {
     display: flex; align-items: center; gap: 6px;
     padding: 8px 14px;
@@ -1447,6 +1446,7 @@ li.has-unread .unread-badge {
     font-size: 13px; font-weight: 600;
     cursor: pointer; font-family: inherit;
     transition: opacity var(--transition);
+    white-space: nowrap;
 }
 .btn-sel-action:hover { opacity: 0.82; }
 .btn-sel-copy   { background: var(--purple-pale); color: var(--purple-deep); }
@@ -1454,6 +1454,14 @@ li.has-unread .unread-badge {
 .btn-sel-del    { background: rgba(239,68,68,0.10); color: #ef4444; }
 .btn-sel-cancel { background: var(--bg-body); color: var(--text-mid); }
 html.dark #selectionBar { background: var(--white); border-top-color: var(--border); }
+
+/* En móvil la barra de selección compacta a solo iconos para no desbordarse */
+@media screen and (max-width: 480px) {
+    #selectionBar { padding: 0 10px; gap: 6px; }
+    .sel-bar-count { font-size: 12px; }
+    .btn-sel-action { padding: 8px 10px; font-size: 12px; gap: 4px; }
+    .btn-sel-action span:last-child { display: none; }
+}
 
 /* Emoji picker rápido (reacciones) */
 .react-quick-bar {
@@ -3594,6 +3602,31 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 }
 
 
+/* ── Banner offline ───────────────────────────────────────────── */
+#offlineBanner {
+    animation: fadeUp .25s ease;
+}
+#offlineBanner.visible { display: flex !important; }
+@keyframes dotsAnim {
+    0%   { opacity: 1; } 33%  { opacity: .4; }
+    66%  { opacity: 1; } 100% { opacity: .4; }
+}
+#offlineBannerDots { animation: dotsAnim 1.2s infinite; }
+
+/* ── Botón scroll al fondo ────────────────────────────────────── */
+#btnScrollBottom.visible { display: flex !important; }
+#btnScrollBottom:hover { opacity: 0.88; }
+
+/* ── Swipe-to-reply: transición suave al soltar ───────────────── */
+.bubble-wrap { transition: transform .2s cubic-bezier(.4,0,.2,1); }
+
+/* ── Área táctil mínima para botones de acción en móvil ──────── */
+@media (hover: none) and (pointer: coarse) {
+    .btn-header-action { min-width: 40px; min-height: 40px; padding: 8px; }
+    .icon-btn          { min-width: 40px; min-height: 40px; }
+    .ctx-item          { padding: 12px 14px; font-size: 15px; }
+}
+
 @keyframes fadeUp {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -4007,7 +4040,7 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
       <div style="padding:4px 8px 2px;">
         <input id="contactSearch" type="search" placeholder="🔍 Buscar contacto…"
           style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
-          oninput="renderContactsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
+          oninput="renderContactsList()" onsearch="renderContactsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
       </div>
       <ul id="contactsList"></ul>
 
@@ -4015,6 +4048,11 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
       <div class="groups-label">
         <span>Grupos</span>
         <button class="btn-add-contact" onclick="abrirModalCrearGrupo()" title="Crear grupo">＋</button>
+      </div>
+      <div style="padding:0 8px 4px;">
+        <input id="groupSearch" type="search" placeholder="🔍 Buscar grupo…"
+          style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
+          oninput="renderGroupsList()" onsearch="renderGroupsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
       </div>
       <ul id="groupsList"></ul>
 
@@ -4053,7 +4091,7 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
 
       <!-- Barra de búsqueda en chat -->
       <!-- Barra de búsqueda en chat (con navegación ▲▼) -->
-      <div id="chatSearchBar" style="display:none;padding:8px 14px;background:var(--white);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px;align-items:center;flex-direction:row;">
+      <div id="chatSearchBar" style="display:none;padding:8px 14px;background:var(--white);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px;align-items:center;flex-direction:row;flex-wrap:nowrap;">
         <div style="flex:1;position:relative;">
           <input id="chatSearchInput" type="search" placeholder="Buscar en la conversación…"
             style="width:100%;padding:7px 36px 7px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
@@ -4075,7 +4113,7 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
       </div>
 
       <!-- Menú autodestrucción -->
-      <div id="autoDestructMenu" style="display:none;position:absolute;top:60px;right:120px;z-index:800;background:var(--white);border-radius:var(--radius-md);box-shadow:var(--shadow-card);padding:8px 0;min-width:190px;border:1px solid var(--border);">
+      <div id="autoDestructMenu" style="display:none;position:absolute;top:60px;right:8px;z-index:800;background:var(--white);border-radius:var(--radius-md);box-shadow:var(--shadow-card);padding:8px 0;min-width:190px;border:1px solid var(--border);max-width:calc(100vw - 16px);">
         <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;">Mensajes temporales</div>
         <button class="ctx-item" onclick="setAutoDestruct(0)">🚫 Desactivado</button>
         <button class="ctx-item" onclick="setAutoDestruct(60)">1 minuto</button>
@@ -4131,10 +4169,28 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
         </div>
       </div>
 
+      <!-- Banner offline: aparece cuando se pierde la conexión -->
+      <div id="offlineBanner" style="display:none;background:#ef4444;color:white;text-align:center;font-size:12px;font-weight:600;padding:6px 12px;flex-shrink:0;gap:8px;align-items:center;justify-content:center;">
+        <span>⚡</span> Sin conexión — reconectando…
+        <span id="offlineBannerDots" style="letter-spacing:2px;">...</span>
+      </div>
+
       <!-- Mensajes -->
       <!-- Indicador de paginación: aparece al top cuando hay mensajes anteriores -->
       <div id="historyLoadingIndicator" style="display:none;justify-content:center;align-items:center;padding:10px 0;font-size:12px;color:var(--text-muted);font-style:italic;flex-shrink:0;"></div>
       <ul id="chat"></ul>
+
+      <!-- Botón scroll al final -->
+      <button id="btnScrollBottom" onclick="scrollChat()" title="Ir al último mensaje"
+        style="display:none;position:absolute;bottom:80px;right:16px;z-index:200;
+               width:40px;height:40px;border-radius:50%;border:none;
+               background:var(--purple-deep);color:white;font-size:18px;
+               box-shadow:0 4px 16px rgba(79,70,229,0.35);cursor:pointer;
+               align-items:center;justify-content:center;transition:opacity var(--transition);
+               flex-direction:column;gap:0;">
+        ↓
+        <span id="btnScrollBottomBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:white;font-size:9px;font-weight:700;padding:1px 4px;border-radius:10px;min-width:16px;text-align:center;"></span>
+      </button>
 
       <!-- Typing -->
       <div id="typing">
@@ -4625,7 +4681,7 @@ function goToStep(n) {
     });
 }
 
-function sendOTP() {
+async function sendOTP() {
     const raw = document.getElementById('phoneInput').value.replace(/\D/g, '');
     if (raw.length < 9) {
         document.getElementById('phoneError').textContent = 'Introduce un número válido de 9 dígitos.';
@@ -4633,6 +4689,22 @@ function sendOTP() {
     }
     document.getElementById('phoneError').textContent = '';
     loginPhone = '+34' + raw;
+
+    // Verificar rate limiting en el servidor antes de generar el OTP
+    try {
+        const rl = await fetch('/api/otp/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: loginPhone })
+        });
+        if (rl.status === 429) {
+            const err = await rl.json();
+            document.getElementById('phoneError').textContent = err.error || 'Demasiados intentos. Espera unos minutos.';
+            return;
+        }
+    } catch(_) {
+        // Si falla la verificación (sin red), continuamos igualmente en modo dev
+    }
 
     // Generar OTP simulado (en producción se enviaría por SMS)
     otpGenerado = Math.floor(100000 + Math.random() * 900000).toString();
@@ -5338,6 +5410,7 @@ function conectarWS() {
 
         conectado = true;
         reconnectInterval = 500; // reset
+        _mostrarBannerOffline(false); // ocultar banner offline al reconectar
 
         // Capturar si es sesión nueva ANTES de modificar el flag
         const _fueNuevaSesion = _esSesionNueva;
@@ -5425,6 +5498,7 @@ function conectarWS() {
         console.log('❌ Desconectado');
         conectado = false;
         _pararHeartbeat();
+        _mostrarBannerOffline(true);
         // Solo programar reconexión automática si la app está visible.
         // Si está en background, el visibilitychange lo hará al volver.
         if (document.visibilityState !== 'hidden') {
@@ -6126,6 +6200,13 @@ function handleMessage(data) {
     }
     if (data.type === 'message_deleted') {
         onMensajeEliminado(data.id);
+        return;
+    }
+    // Borrado en batch (deleteMessages optimizado)
+    if (data.type === 'messages_deleted') {
+        if (Array.isArray(data.ids)) {
+            data.ids.forEach(id => onMensajeEliminado(id));
+        }
         return;
     }
     if (data.type === 'message_reaction') {
@@ -7025,7 +7106,7 @@ function addMessage(msg) {
             : `📵 Llamada perdida de <b>${escapeHTML(msg.from)}</b> · ${horaActual(msg.time)}`;
         li.style.cssText = 'color:#ef4444;background:rgba(239,68,68,0.08);border-radius:8px;padding:6px 12px;';
         chat.appendChild(li);
-        if (autoScroll) scrollChat();
+        if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
         return;
     }
 
@@ -7132,7 +7213,7 @@ function addMessage(msg) {
         });
         chat.appendChild(row);
         _attachBubbleClickMenu(row, msg.id, isMe, false, isGroup);
-        if (autoScroll) scrollChat();
+        if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
         // Solo enviar read individual si es un mensaje nuevo en tiempo real (no historial)
         if (!isMe && socket && !window._kvsLoadingHistory) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
         return;
@@ -7179,7 +7260,7 @@ function addMessage(msg) {
         const bubble = row.querySelector('.bubble');
         if (bubble) _adjuntarLinkPreview(bubble, msg.message);
     }
-    if (autoScroll) scrollChat();
+    if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
     // Solo enviar read individual si es un mensaje nuevo en tiempo real (no historial)
     if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
 }
@@ -7913,7 +7994,8 @@ async function cargarGrupos() {
                 groupId:    g.groupId,
                 name:       g.name,
                 ownerPhone: g.ownerPhone,
-                members:    g.members
+                members:    g.members,
+                avatar:     g.avatar || null
             });
         });
         renderGroupsList();
@@ -7970,12 +8052,23 @@ function renderGroupsList() {
     const ul = document.getElementById('groupsList');
     if (!ul) return;
 
+    const searchVal = (document.getElementById('groupSearch')?.value || '').toLowerCase().trim();
+
     if (myGroups.size === 0) {
         ul.innerHTML = '<li class="contacts-empty" style="list-style:none;cursor:default;">Sin grupos</li>';
         return;
     }
 
-    const items = [...myGroups.values()].map(g => {
+    const filtered = [...myGroups.values()].filter(g =>
+        !searchVal || g.name.toLowerCase().includes(searchVal)
+    );
+
+    if (filtered.length === 0) {
+        ul.innerHTML = '<li class="contacts-empty" style="list-style:none;cursor:default;">Sin resultados</li>';
+        return;
+    }
+
+    const items = filtered.map(g => {
         const chatKey = 'group_' + g.groupId;
         const isActive = currentChat === chatKey ? 'active' : '';
         const unread = unreadCounts[chatKey] || 0;
@@ -8178,7 +8271,7 @@ function addGroupMessage(msg) {
             }
         }
     }
-    if (autoScroll) scrollChat();
+    if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
 }
 
 function onGroupMessage(data) {
@@ -8380,7 +8473,8 @@ function onGroupCreated(data) {
         groupId:    data.groupId,
         name:       data.name,
         ownerPhone: data.ownerPhone,
-        members:    data.members
+        members:    data.members,
+        avatar:     data.avatar || null
     });
     renderGroupsList();
     cerrarModalCrearGrupo();
@@ -8784,14 +8878,18 @@ function onGroupUpdated(data) {
         existing.name       = data.name;
         existing.ownerPhone = data.ownerPhone;
         existing.members    = data.members;
+        // Preservar avatar si el servidor no lo devuelve en este evento
+        if (data.avatar !== undefined) existing.avatar = data.avatar;
         myGroups.set(data.groupId, existing);
     } else {
-        myGroups.set(data.groupId, { groupId: data.groupId, name: data.name, ownerPhone: data.ownerPhone, members: data.members });
+        myGroups.set(data.groupId, { groupId: data.groupId, name: data.name, ownerPhone: data.ownerPhone, members: data.members, avatar: data.avatar || null });
     }
     const chatKey = 'group_' + data.groupId;
     if (currentChat === chatKey) {
         document.getElementById('chatName').textContent = '👥 ' + data.name;
         document.getElementById('chatStatus').textContent = `${data.members.length} miembros`;
+        // Actualizar header con el avatar preservado
+        actualizarHeaderGrupo(myGroups.get(data.groupId));
     }
     renderGroupsList();
     cerrarModalEditarGrupo();
@@ -11805,6 +11903,137 @@ function mostrarLecturaGrupo(msgId) {
         document.addEventListener('click', close, true);
     }, 50);
 }
+
+// ============================================================
+// BANNER OFFLINE
+// ============================================================
+function _mostrarBannerOffline(visible) {
+    const banner = document.getElementById('offlineBanner');
+    if (!banner) return;
+    banner.style.display = visible ? 'flex' : 'none';
+}
+
+// ============================================================
+// SCROLL-TO-BOTTOM BUTTON
+// ============================================================
+(function _initScrollBtn() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const chatEl = document.getElementById('chat');
+        const btn    = document.getElementById('btnScrollBottom');
+        const badge  = document.getElementById('btnScrollBottomBadge');
+        if (!chatEl || !btn) return;
+
+        let _newMsgsWhileAway = 0;
+
+        chatEl.addEventListener('scroll', () => {
+            const distFromBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight;
+            const show = distFromBottom > 120;
+            btn.style.display = show ? 'flex' : 'none';
+            if (!show) {
+                _newMsgsWhileAway = 0;
+                if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+            }
+        });
+
+        // Exponer para que addMessage/addGroupMessage incremente el contador
+        window._scrollBtnNewMsg = function() {
+            const distFromBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight;
+            if (distFromBottom > 120) {
+                _newMsgsWhileAway++;
+                if (badge) {
+                    badge.textContent = _newMsgsWhileAway > 99 ? '99+' : _newMsgsWhileAway;
+                    badge.style.display = 'block';
+                }
+                btn.style.display = 'flex';
+            }
+        };
+    });
+})();
+
+// ============================================================
+// LONGPRESS EN MÓVIL → menú contextual (500ms)
+// ============================================================
+(function _initLongpress() {
+    document.addEventListener('DOMContentLoaded', () => {
+        let _lpTimer = null;
+        const THRESHOLD = 500;
+
+        document.addEventListener('touchstart', (e) => {
+            const bubble = e.target.closest('.bubble:not(.deleted)');
+            if (!bubble) return;
+            _lpTimer = setTimeout(() => {
+                if (navigator.vibrate) navigator.vibrate(30);
+                bubble.click();
+                _lpTimer = null;
+            }, THRESHOLD);
+        }, { passive: true });
+
+        document.addEventListener('touchend',  () => { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } }, { passive: true });
+        document.addEventListener('touchmove', () => { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } }, { passive: true });
+    });
+})();
+
+// ============================================================
+// SWIPE-TO-REPLY EN MÓVIL
+// ============================================================
+(function _initSwipeReply() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const chatEl = document.getElementById('chat');
+        if (!chatEl) return;
+
+        let _swStart = null, _swRow = null, _swBubbleWrap = null, _swTriggered = false;
+        const SWIPE_THRESHOLD = 60;
+
+        chatEl.addEventListener('touchstart', (e) => {
+            const row = e.target.closest('.msg-row');
+            if (!row || row.closest('#threadMessages')) return;
+            if (row.querySelector('.bubble.deleted')) return;
+            _swRow = row;
+            _swBubbleWrap = row.querySelector('.bubble-wrap');
+            _swStart = e.touches[0].clientX;
+            _swTriggered = false;
+        }, { passive: true });
+
+        chatEl.addEventListener('touchmove', (e) => {
+            if (!_swRow || _swStart === null) return;
+            const dx   = e.touches[0].clientX - _swStart;
+            const isMe = _swRow.classList.contains('me');
+            const validDir = isMe ? dx < -20 : dx > 20;
+            if (!validDir) return;
+            const clamp = isMe ? Math.max(dx, -SWIPE_THRESHOLD * 1.2) : Math.min(dx, SWIPE_THRESHOLD * 1.2);
+            if (_swBubbleWrap) {
+                _swBubbleWrap.style.transition = 'none';
+                _swBubbleWrap.style.transform  = `translateX(${clamp}px)`;
+            }
+            if (Math.abs(dx) >= SWIPE_THRESHOLD && !_swTriggered) {
+                _swTriggered = true;
+                if (navigator.vibrate) navigator.vibrate(18);
+            }
+        }, { passive: true });
+
+        chatEl.addEventListener('touchend', () => {
+            if (_swBubbleWrap) {
+                _swBubbleWrap.style.transition = 'transform .2s cubic-bezier(.4,0,.2,1)';
+                _swBubbleWrap.style.transform  = '';
+            }
+            if (_swTriggered && _swRow) {
+                const bubble = _swRow.querySelector('.bubble');
+                if (bubble && bubble.id) {
+                    const msgId   = bubble.id;
+                    const textEl  = _swRow.querySelector('.msg-text');
+                    const msgText = textEl ? textEl.textContent.trim() : '';
+                    const fromEl  = _swRow.querySelector('[style*="color:var(--purple-deep)"]');
+                    const fromName = fromEl ? fromEl.textContent.trim()
+                        : (_swRow.classList.contains('me') ? (username || '') : '');
+                    if (typeof iniciarRespuesta === 'function') {
+                        iniciarRespuesta(msgId, fromName, msgText);
+                    }
+                }
+            }
+            _swStart = null; _swRow = null; _swBubbleWrap = null; _swTriggered = false;
+        }, { passive: true });
+    });
+})();
 
 
 </script>
