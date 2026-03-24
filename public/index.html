@@ -6015,7 +6015,30 @@ function handleMessage(data) {
             }
         }
         if (!conversations[otherUser]) conversations[otherUser] = conversations[chatKey]; // alias
-        if (!conversations[chatKey].some(m => m.id === data.id)) conversations[chatKey].push(data);
+        if (!conversations[chatKey].some(m => m.id === data.id)) {
+            // Para el eco del propio mensaje (data.from === username):
+            // Buscar si hay un local_ coincidente para sustituirlo en lugar de duplicar.
+            let skipPush = false;
+            if (data.from === username) {
+                // Buscar local_ coincidente por contenido en el array
+                const localIdx = conversations[chatKey].findIndex(m =>
+                    typeof m.id === 'string' && m.id.startsWith('local_') && (
+                        (data.imageData && m.imageData) ||
+                        (data.audioData && m.audioData) ||
+                        (!data.imageData && !data.audioData && (m.message || '') === (data.message || ''))
+                    )
+                );
+                if (localIdx >= 0) {
+                    // Sustituir el local_ por el eco con ID real (mantiene el array sin duplicados)
+                    if (conversations[chatKey][localIdx].editedAt && !data.editedAt) {
+                        data.editedAt = conversations[chatKey][localIdx].editedAt;
+                    }
+                    conversations[chatKey][localIdx] = { ...data, delivered: true };
+                    skipPush = true;
+                }
+            }
+            if (!skipPush) conversations[chatKey].push(data);
+        }
 
         const preview = data.imageData ? '📷 Imagen'
             : data.audioData ? '🎙️ Audio'
@@ -6099,9 +6122,17 @@ function handleMessage(data) {
                             }
                             arr[localIdx].id        = data.id;
                             arr[localIdx].delivered = true;
+                            if (data.read) arr[localIdx].read = true;
                             // Quitar duplicado: si el eco ya fue añadido con el id real, borrarlo
                             const dupIdx = arr.findIndex((m, i) => i !== localIdx && m.id === data.id);
                             if (dupIdx >= 0) arr.splice(dupIdx, 1);
+                        } else {
+                            // El local_ ya fue sustituido por skipPush — actualizar estado por ID real
+                            const realIdx = arr.findIndex(m => m.id === data.id);
+                            if (realIdx >= 0) {
+                                arr[realIdx].delivered = true;
+                                if (data.read) arr[realIdx].read = true;
+                            }
                         }
                     }
                     // Aplicar estado correcto: si el read/delivered ya llegó antes del eco,
@@ -8361,7 +8392,25 @@ function onGroupMessage(data) {
     const chatKey = 'group_' + data.groupId;
     if (!conversations[chatKey]) conversations[chatKey] = [];
     if (!conversations[chatKey].some(m => m.id === data.id)) {
-        conversations[chatKey].push(data);
+        // Igual que en 1:1: si hay un local_ coincidente, sustituirlo en lugar de duplicar
+        let skipPush = false;
+        if (data.from === username) {
+            const localIdx = conversations[chatKey].findIndex(m =>
+                typeof m.id === 'string' && m.id.startsWith('local_') && (
+                    (data.imageData && m.imageData) ||
+                    (data.audioData && m.audioData) ||
+                    (!data.imageData && !data.audioData && (m.message || '') === (data.message || ''))
+                )
+            );
+            if (localIdx >= 0) {
+                if (conversations[chatKey][localIdx].editedAt && !data.editedAt) {
+                    data.editedAt = conversations[chatKey][localIdx].editedAt;
+                }
+                conversations[chatKey][localIdx] = { ...data, delivered: true };
+                skipPush = true;
+            }
+        }
+        if (!skipPush) conversations[chatKey].push(data);
     }
 
     lastMessages[chatKey] = data.imageData ? '📷 Imagen'
@@ -8413,9 +8462,17 @@ function onGroupMessage(data) {
                         }
                         convArr[localIdx].id = data.id;
                         convArr[localIdx].delivered = true;
+                        if (data.read) convArr[localIdx].read = true;
                         // Quitar duplicado del eco si ya fue añadido
                         const dupIdx = convArr.findIndex((m, i) => i !== localIdx && m.id === data.id);
                         if (dupIdx >= 0) convArr.splice(dupIdx, 1);
+                    } else {
+                        // El local_ ya fue sustituido por skipPush — actualizar estado por ID real
+                        const realIdx = convArr.findIndex(m => m.id === data.id);
+                        if (realIdx >= 0) {
+                            convArr[realIdx].delivered = true;
+                            if (data.read) convArr[realIdx].read = true;
+                        }
                     }
                 }
                 // Aplicar el estado correcto si read/delivered llegaron antes del eco
