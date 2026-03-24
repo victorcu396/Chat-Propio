@@ -5432,6 +5432,7 @@ function conectarWS() {
         conectado = true;
         reconnectInterval = 500; // reset
         _mostrarBannerOffline(false); // ocultar banner offline al reconectar
+        window._kvsJoinTimestamp = Date.now(); // marcar el momento del join
 
         // Capturar si es sesión nueva ANTES de modificar el flag
         const _fueNuevaSesion = _esSesionNueva;
@@ -5883,7 +5884,10 @@ function handleMessage(data) {
 
         if (!isLoadMore) {
             // Primera carga: reemplazar todo el historial
+            // (incluye el caso donde el array existía con __onlyPending = true)
             conversations[chatKey] = data.messages;
+            // Limpiar el flag __onlyPending ya que ahora tenemos el historial completo
+            delete conversations[chatKey].__onlyPending;
             if (data.withUsername && currentChat.startsWith('phone:')) {
                 conversations[data.withUsername] = data.messages;
             }
@@ -6002,7 +6006,14 @@ function handleMessage(data) {
             }
         }
 
-        if (!conversations[chatKey]) conversations[chatKey] = [];
+        if (!conversations[chatKey]) {
+            conversations[chatKey] = [];
+            // Si el array es nuevo y estamos en la ventana de join (primeros 4s tras conectar),
+            // marcarlo como "solo_pending" para que al abrir el chat se fuerce recarga completa.
+            if (window._kvsJoinTimestamp && (Date.now() - window._kvsJoinTimestamp) < 4000) {
+                conversations[chatKey].__onlyPending = true;
+            }
+        }
         if (!conversations[otherUser]) conversations[otherUser] = conversations[chatKey]; // alias
         if (!conversations[chatKey].some(m => m.id === data.id)) conversations[chatKey].push(data);
 
@@ -6079,6 +6090,7 @@ function handleMessage(data) {
                     // Actualizar el id en TODOS los arrays de conversations (alias incluidos)
                     // y eliminar el duplicado del eco del servidor si ya fue añadido
                     for (const arr of Object.values(conversations)) {
+                        if (!Array.isArray(arr)) continue;
                         const localIdx = arr.findIndex(m => m.id === oldLocalId);
                         if (localIdx >= 0) {
                             // Propagar editedAt si el mensaje fue editado mientras era local_
@@ -6091,6 +6103,14 @@ function handleMessage(data) {
                             const dupIdx = arr.findIndex((m, i) => i !== localIdx && m.id === data.id);
                             if (dupIdx >= 0) arr.splice(dupIdx, 1);
                         }
+                    }
+                    // Aplicar estado correcto: si el read/delivered ya llegó antes del eco,
+                    // el estado en caché (data.read / data.delivered) ya fue actualizado.
+                    // Lo reflejamos ahora en el DOM que acaba de ser renombrado.
+                    if (data.read) {
+                        if (estadoEl) estadoEl.textContent = '✔✔ leído';
+                    } else if (data.delivered) {
+                        if (estadoEl) estadoEl.textContent = '✔✔';
                     }
                     // Reasignar el menú contextual con el ID real
                     _attachBubbleClickMenu(matchedRow, data.id, true, false,
@@ -6121,7 +6141,10 @@ function handleMessage(data) {
                         }
                     }
                 } else {
-                    addMessage(data);
+                    // No se encontró bubble local_ → solo añadir al DOM si el mensaje
+                    // no estaba ya renderizado (evita duplicado cuando el eco llega tarde)
+                    const yaRenderizado = !!document.querySelector(`[data-msgid="${data.id}"]`);
+                    if (!yaRenderizado) addMessage(data);
                 }
             } else {
                 addMessage(data);
@@ -6189,20 +6212,23 @@ function handleMessage(data) {
         return;
     }
 
-    if (data.type === 'delivered') { updateEstado(data.id, '✔✔'); 
-        // Actualizar en caché
+    if (data.type === 'delivered') {
+        updateEstado(data.id, '✔✔');
+        // Actualizar en caché — buscar también en mensajes aún con id local_
         for (const arr of Object.values(conversations)) {
+            if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === data.id);
-            if (m) { m.delivered = true; break; }
+            if (m) { m.delivered = true; }
         }
         return;
     }
     if (data.type === 'read') {
         updateEstado(data.id, '✔✔ leído');
-        // Actualizar en caché para que futuras aperturas muestren el estado correcto
+        // Actualizar en caché — ya lo hace updateEstado pero dejamos esto para seguridad
         for (const arr of Object.values(conversations)) {
+            if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === data.id);
-            if (m) { m.read = true; m.delivered = true; break; }
+            if (m) { m.read = true; m.delivered = true; }
         }
         return;
     }
@@ -6712,25 +6738,34 @@ function seleccionarUsuario(user) {
     btnU.title = isOnline ? 'Llamada de voz' : 'Llamar (dejará notificación de llamada perdida)';
 
     if (conversations[user]) {
-        let lastDay = '';
-        window._kvsLoadingHistory = true;
-        conversations[user].forEach(msg => {
-            const day = obtenerDia(msg.time);
-            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-            addMessage(msg);
-        });
-        window._kvsLoadingHistory = false;
-        // Marcar como leídos en BD y cerrar notificaciones
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            try { socket.send(JSON.stringify({ type: 'markRead', chatKey: user })); } catch(_) {}
-        }
-        // Actualizar inmediatamente en el DOM los estados de mensajes propios ya leídos
-        // (evita que el doble tick quede pendiente hasta que el servidor responda)
-        conversations[user].forEach(msg => {
-            if (msg.from === username && msg.read) {
-                updateEstado(msg.id, '✔✔ leído');
+        // Si la caché solo contiene mensajes entregados "en caliente" al hacer join
+        // (sin historial completo), forzamos recarga desde el servidor.
+        // Detectamos este caso: todos los mensajes del array son recientes (< 5s)
+        // o el array fue marcado como "solo_pending".
+        const needsReload = conversations[user].__onlyPending === true;
+        if (needsReload) {
+            delete conversations[user];
+            socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
+        } else {
+            let lastDay = '';
+            window._kvsLoadingHistory = true;
+            conversations[user].forEach(msg => {
+                const day = obtenerDia(msg.time);
+                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+                addMessage(msg);
+            });
+            window._kvsLoadingHistory = false;
+            // Marcar como leídos en BD y cerrar notificaciones
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try { socket.send(JSON.stringify({ type: 'markRead', chatKey: user })); } catch(_) {}
             }
-        });
+            // Actualizar inmediatamente en el DOM los estados de mensajes propios ya leídos
+            conversations[user].forEach(msg => {
+                if (msg.from === username && msg.read) {
+                    updateEstado(msg.id, '✔✔ leído');
+                }
+            });
+        }
     } else {
         socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
     }
@@ -6807,26 +6842,32 @@ function seleccionarContactoOffline(phone) {
 
     // Cargar historial por phone
     if (conversations[chatKey]) {
-        let lastDay = '';
-        window._kvsLoadingHistory = true;
-        conversations[chatKey].forEach(msg => {
-            const day = obtenerDia(msg.time);
-            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-            addMessage(msg);
-        });
-        window._kvsLoadingHistory = false;
-        // Marcar como leídos en BD y cerrar notificaciones
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            const un = window._phoneToUsername && window._phoneToUsername[phone];
-            const mkKey = un || ('phone:' + phone);
-            try { socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey })); } catch(_) {}
-        }
-        // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
-        conversations[chatKey].forEach(msg => {
-            if (msg.from === username && msg.read) {
-                updateEstado(msg.id, '✔✔ leído');
+        const needsReload = conversations[chatKey].__onlyPending === true;
+        if (needsReload) {
+            delete conversations[chatKey];
+            socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
+        } else {
+            let lastDay = '';
+            window._kvsLoadingHistory = true;
+            conversations[chatKey].forEach(msg => {
+                const day = obtenerDia(msg.time);
+                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+                addMessage(msg);
+            });
+            window._kvsLoadingHistory = false;
+            // Marcar como leídos en BD y cerrar notificaciones
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                const un = window._phoneToUsername && window._phoneToUsername[phone];
+                const mkKey = un || ('phone:' + phone);
+                try { socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey })); } catch(_) {}
             }
-        });
+            // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
+            conversations[chatKey].forEach(msg => {
+                if (msg.from === username && msg.read) {
+                    updateEstado(msg.id, '✔✔ leído');
+                }
+            });
+        }
     } else {
         socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
     }
@@ -7344,6 +7385,21 @@ function mostrarLlamadaPerdida(data) {
 function updateEstado(id, estado) {
     const el = document.getElementById(`estado_${id}`);
     if (el) el.textContent = estado;
+    // Aunque el elemento no esté en el DOM (p.ej. aún es local_ o el chat no está visible),
+    // actualizar la caché para que la próxima vez que se renderice muestre el estado correcto.
+    if (estado === '✔✔ leído') {
+        for (const arr of Object.values(conversations)) {
+            if (!Array.isArray(arr)) continue;
+            const m = arr.find(m => m.id === id);
+            if (m) { m.read = true; m.delivered = true; }
+        }
+    } else if (estado === '✔✔') {
+        for (const arr of Object.values(conversations)) {
+            if (!Array.isArray(arr)) continue;
+            const m = arr.find(m => m.id === id);
+            if (m) { m.delivered = true; }
+        }
+    }
 }
 
 
@@ -8176,24 +8232,30 @@ function seleccionarGrupo(groupId) {
     btnU.title = 'Llamada grupal';
 
     if (conversations[chatKey]) {
-        let lastDay = '';
-        window._kvsLoadingHistory = true;
-        conversations[chatKey].forEach(msg => {
-            const day = obtenerDia(msg.time);
-            if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-            addGroupMessage(msg);
-        });
-        window._kvsLoadingHistory = false;
-        // Marcar como leídos en BD y cerrar notificaciones
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            try { socket.send(JSON.stringify({ type: 'markRead', chatKey })); } catch(_) {}
-        }
-        // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
-        conversations[chatKey].forEach(msg => {
-            if (msg.from === username && msg.read) {
-                updateEstado(msg.id, '✔✔ leído');
+        const needsReload = conversations[chatKey].__onlyPending === true;
+        if (needsReload) {
+            delete conversations[chatKey];
+            socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
+        } else {
+            let lastDay = '';
+            window._kvsLoadingHistory = true;
+            conversations[chatKey].forEach(msg => {
+                const day = obtenerDia(msg.time);
+                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
+                addGroupMessage(msg);
+            });
+            window._kvsLoadingHistory = false;
+            // Marcar como leídos en BD y cerrar notificaciones
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try { socket.send(JSON.stringify({ type: 'markRead', chatKey })); } catch(_) {}
             }
-        });
+            // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
+            conversations[chatKey].forEach(msg => {
+                if (msg.from === username && msg.read) {
+                    updateEstado(msg.id, '✔✔ leído');
+                }
+            });
+        }
     } else {
         socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
     }
@@ -8356,6 +8418,12 @@ function onGroupMessage(data) {
                         if (dupIdx >= 0) convArr.splice(dupIdx, 1);
                     }
                 }
+                // Aplicar el estado correcto si read/delivered llegaron antes del eco
+                if (data.read) {
+                    if (estadoEl) estadoEl.textContent = '✔✔ leído';
+                } else if (data.delivered) {
+                    if (estadoEl) estadoEl.textContent = '✔✔';
+                }
                 _attachBubbleClickMenu(matchedRow, data.id, true, false, true);
 
                 // Si había una eliminación pendiente para este mensaje local, enviarla ahora
@@ -8383,7 +8451,9 @@ function onGroupMessage(data) {
                     }
                 }
             } else {
-                addGroupMessage(data);
+                // No encontró local_ → solo añadir si no está ya en el DOM
+                const yaRenderizado = !!document.querySelector(`[data-msgid="${data.id}"]`);
+                if (!yaRenderizado) addGroupMessage(data);
             }
         } else {
             addGroupMessage(data);
@@ -8431,6 +8501,7 @@ function onGroupHistory(data) {
 
     if (!isLoadMore) {
         conversations[chatKey] = data.messages;
+        delete conversations[chatKey].__onlyPending; // historial real recibido
         chat.innerHTML = '';
         let lastDay = '';
         window._kvsLoadingHistory = true;
