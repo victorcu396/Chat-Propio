@@ -1567,9 +1567,10 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 #threadPanel {
     position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
     background: var(--white); border-left: 1px solid var(--border);
-    z-index: 8000; display: flex; flex-direction: column;
+    z-index: 8100; display: flex; flex-direction: column;
     transition: right .28s cubic-bezier(.4,0,.2,1);
     box-shadow: -4px 0 24px rgba(0,0,0,0.10);
+    pointer-events: auto;
 }
 #threadPanel.open { right: 0; }
 
@@ -1607,6 +1608,8 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 .thread-input-area {
     padding: 10px 12px; border-top: 1px solid var(--border);
     display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
+    position: relative; z-index: 1;
+    pointer-events: auto;
 }
 .thread-input {
     flex: 1; min-height: 38px; max-height: 90px;
@@ -1616,6 +1619,12 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
     color: var(--text-dark); background: var(--white);
     transition: border-color var(--transition);
     overflow-y: auto;
+    touch-action: manipulation;
+    -webkit-user-select: text;
+    user-select: text;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1;
 }
 .thread-input:focus { border-color: var(--purple-deep); }
 .thread-send-btn {
@@ -1660,7 +1669,9 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
-    #threadPanel { width: 100%; right: -100%; }
+    #threadPanel { width: 100%; right: -100%; z-index: 8200; }
+    #threadPanel.open { right: 0; pointer-events: auto; }
+    .thread-input-area { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
     /* En móvil el menú aparece en posición fija para no quedar cortado */
     .msg-ctx-menu,
     .msg-row.me .bubble-wrap .msg-ctx-menu,
@@ -7584,6 +7595,11 @@ function enviarAudio() {
 
 function doEnviarAudio() {
     if (!pendingAudio || !currentChat || !socket) return;
+    if (socket.readyState !== WebSocket.OPEN) {
+        mostrarToast('Sin conexión. Inténtalo de nuevo.', true);
+        pendingAudio = null;
+        return;
+    }
 
     // Validar tamaño (~5MB máx)
     const approxBytes = pendingAudio.dataUrl.length * 0.75;
@@ -7594,6 +7610,7 @@ function doEnviarAudio() {
     }
 
     if (currentChat.startsWith('group_')) {
+        // ── Mensaje de grupo ──
         const groupId = currentChat.replace('group_', '');
         socket.send(JSON.stringify({
             type: 'groupMessage',
@@ -7601,13 +7618,67 @@ function doEnviarAudio() {
             message: '',
             audioData: pendingAudio.dataUrl
         }));
+        // Preview local en el chat de grupo
+        const grpKey = 'group_' + groupId;
+        const localGrpAudio = {
+            id: 'local_' + Date.now(),
+            from: username,
+            to: groupId,
+            groupId,
+            message: '',
+            audioData: pendingAudio.dataUrl,
+            time: new Date(),
+            avatar: myAvatarDataUrl
+        };
+        if (!conversations[grpKey]) conversations[grpKey] = [];
+        conversations[grpKey].push(localGrpAudio);
+        addGroupMessage(localGrpAudio);
+    } else if (currentChat.startsWith('phone:')) {
+        // ── Contacto offline: enviar por teléfono ──
+        const toPhone = currentChat.replace('phone:', '');
+        socket.send(JSON.stringify({
+            type: 'message',
+            toPhone,
+            message: '',
+            audioData: pendingAudio.dataUrl
+        }));
+        // Preview local
+        const localOffAudio = {
+            id: 'local_' + Date.now(),
+            from: username,
+            to: null,
+            toPhone,
+            message: '',
+            audioData: pendingAudio.dataUrl,
+            time: new Date(),
+            self: true,
+            avatar: myAvatarDataUrl
+        };
+        if (!conversations[currentChat]) conversations[currentChat] = [];
+        conversations[currentChat].push(localOffAudio);
+        addMessage(localOffAudio);
     } else {
+        // ── Chat 1:1 con usuario online ──
         socket.send(JSON.stringify({
             type: 'message',
             to: currentChat,
             message: '',
             audioData: pendingAudio.dataUrl
         }));
+        // Preview local
+        const localAudio = {
+            id: 'local_' + Date.now(),
+            from: username,
+            to: currentChat,
+            message: '',
+            audioData: pendingAudio.dataUrl,
+            time: new Date(),
+            self: true,
+            avatar: myAvatarDataUrl
+        };
+        if (!conversations[currentChat]) conversations[currentChat] = [];
+        conversations[currentChat].push(localAudio);
+        addMessage(localAudio);
     }
 
     pendingAudio = null;
@@ -8366,6 +8437,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (egm) egm.addEventListener('click', (e) => { if (e.target === egm) cerrarModalEditarGrupo(); });
     const egn = document.getElementById('editGroupNameInput');
     if (egn) egn.addEventListener('keydown', (e) => { if (e.key === 'Enter') guardarEditarGrupo(); });
+
+    // Thread input: Enter envía (Shift+Enter = salto de línea)
+    const threadInputEl = document.getElementById('threadInput');
+    if (threadInputEl) {
+        threadInputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                enviarEnHilo();
+            }
+        });
+        // En móvil asegurar que el focus funciona al tocar el área
+        threadInputEl.addEventListener('touchstart', () => {
+            threadInputEl.focus();
+        }, { passive: true });
+    }
 });
 
 // ============================================================
@@ -10346,15 +10432,20 @@ function cerrarHilo() {
 }
 
 function enviarEnHilo() {
-    const text = document.getElementById('threadInput').value.trim();
-    if (!text || !_threadId || !socket) return;
+    const threadInputEl = document.getElementById('threadInput');
+    if (!threadInputEl) return;
+    const text = threadInputEl.value.trim();
+    if (!text || !_threadId) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        mostrarToast('Sin conexión. Inténtalo de nuevo.', true);
+        return;
+    }
     socket.send(JSON.stringify({ type: 'threadMessage', threadId: _threadId, message: text }));
-    document.getElementById('threadInput').value = '';
+    threadInputEl.value = '';
+    threadInputEl.style.height = 'auto';
 }
 
-document.getElementById('threadInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarEnHilo(); }
-});
+// El listener del threadInput se registra en DOMContentLoaded (ver más abajo)
 
 function _renderThreadMsg(msg) {
     const avatarSrc = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.from)}`;

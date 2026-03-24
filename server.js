@@ -1512,12 +1512,11 @@ wss.on('connection', (ws) => {
                     : (gmMessage.message || '').slice(0, 80);
 
                 grpMsg.members.forEach(memberPhone => {
-                    if (memberPhone === ws.phone) return; // no notificar al remitente
                     const memberWs = [...users.values()].find(u => u.phone === memberPhone);
                     if (memberWs && memberWs.readyState === WebSocket.OPEN) {
                         memberWs.send(gmPayload);
-                        // Si está en background, también push con conteo
-                        if (memberWs.isAway) {
+                        // Si está en background (y no es el remitente), también push con conteo
+                        if (memberWs.isAway && memberPhone !== ws.phone) {
                             enviarPushConConteo(memberPhone, 'group_' + data.groupId, {
                                 title: `👥 ${grpMsg.name}`,
                                 body:  `${ws.username}: ${grpPreviewText || '…'}`,
@@ -1528,8 +1527,8 @@ wss.on('connection', (ws) => {
                                 data:  { groupId: data.groupId, chatKey: 'group_' + data.groupId }
                             });
                         }
-                    } else {
-                        // Offline: enviar push con conteo
+                    } else if (memberPhone !== ws.phone) {
+                        // Offline (y no es el remitente): enviar push con conteo
                         enviarPushConConteo(memberPhone, 'group_' + data.groupId, {
                             title: `👥 ${grpMsg.name}`,
                             body:  `${ws.username}: ${grpPreviewText || '…'}`,
