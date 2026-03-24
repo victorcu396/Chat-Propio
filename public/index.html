@@ -3284,6 +3284,50 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 /* Input oculto para foto de grupo */
 #groupAvatarFileInput { display: none; }
 
+/* ── Sección de avatar dentro del modal Editar Grupo ──────── */
+.edit-group-avatar-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.edit-group-avatar-wrap {
+    position: relative;
+    width: 86px;
+    height: 86px;
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.edit-group-avatar-circle {
+    width: 86px !important;
+    height: 86px !important;
+    font-size: 32px !important;
+    border: 3px solid var(--border);
+    transition: opacity var(--transition);
+}
+.edit-group-avatar-wrap:hover .edit-group-avatar-circle { opacity: 0.75; }
+.edit-group-avatar-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(79,70,229,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    opacity: 0;
+    transition: opacity var(--transition);
+    pointer-events: none;
+}
+.edit-group-avatar-wrap:hover .edit-group-avatar-overlay { opacity: 1; }
+.edit-group-avatar-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 /* Overlay llamada grupal — mini panel flotante */
 #groupCallOverlay {
     display: none; position: fixed;
@@ -4343,6 +4387,19 @@ html.dark #sidebarOverlay { background: rgba(0,0,0,0.6); }
 <div id="editGroupModal">
   <div class="edit-group-card">
     <h3>✏️ Editar grupo</h3>
+
+    <!-- Foto del grupo -->
+    <div class="edit-group-avatar-section">
+      <div class="edit-group-avatar-wrap" id="editGroupAvatarWrap" onclick="dispararCambioFotoGrupo()" title="Cambiar foto del grupo">
+        <div class="group-avatar-circle edit-group-avatar-circle" id="editGroupAvatarPreview">?</div>
+        <div class="edit-group-avatar-overlay">
+          <span>📷</span>
+        </div>
+      </div>
+      <p class="edit-group-avatar-hint">Toca para cambiar la foto del grupo</p>
+    </div>
+    <!-- Input oculto para foto del grupo desde el modal editar -->
+    <input type="file" id="editGroupAvatarFileInput" accept="image/*" style="display:none" onchange="onEditGroupAvatarFileSelected(event)">
 
     <div class="add-contact-field">
       <label>Nombre del grupo</label>
@@ -8560,6 +8617,19 @@ function abrirModalEditarGrupo(groupId) {
     document.getElementById('editGroupError').textContent = '';
     document.getElementById('btnGuardarEditarGrupo').disabled = false;
 
+    // Mostrar avatar actual del grupo en el modal
+    const previewEl = document.getElementById('editGroupAvatarPreview');
+    if (previewEl) {
+        if (g.avatar) {
+            previewEl.innerHTML = `<img src="${g.avatar}" alt="${escapeHTML(g.name || '')}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`;
+        } else {
+            previewEl.innerHTML = (g.name || '?').charAt(0).toUpperCase();
+        }
+    }
+    // Reset input file foto del grupo
+    const fi = document.getElementById('editGroupAvatarFileInput');
+    if (fi) fi.value = '';
+
     // Miembros actuales
     const currentEl = document.getElementById('editGroupCurrentMembers');
     currentEl.innerHTML = g.members.map(phone => {
@@ -8627,6 +8697,56 @@ function abrirModalEditarGrupo(groupId) {
 function cerrarModalEditarGrupo() {
     document.getElementById('editGroupModal').classList.remove('visible');
     _editingGroupId = null;
+}
+
+// Disparar selector de archivo para la foto del grupo desde el modal editar
+function dispararCambioFotoGrupo() {
+    const fi = document.getElementById('editGroupAvatarFileInput');
+    if (!fi) return;
+    fi.value = '';
+    fi.click();
+}
+
+// Cuando se selecciona una foto desde el modal editar grupo
+function onEditGroupAvatarFileSelected(event) {
+    const file = event.target.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > 5 * 1024 * 1024) { alert('La imagen es demasiado grande. Máximo 5MB.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const SIZE = 256;
+            canvas.width = SIZE; canvas.height = SIZE;
+            const ctx = canvas.getContext('2d');
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, SIZE, SIZE);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+            // Actualizar el preview en el modal
+            const previewEl = document.getElementById('editGroupAvatarPreview');
+            if (previewEl) {
+                previewEl.innerHTML = `<img src="${dataUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`;
+            }
+
+            // Si hay un grupo activo en edición, actualizar localmente y en servidor
+            if (_editingGroupId) {
+                const g = myGroups.get(_editingGroupId);
+                if (g) { g.avatar = dataUrl; myGroups.set(_editingGroupId, g); }
+                actualizarHeaderGrupo(myGroups.get(_editingGroupId));
+                renderGroupsList();
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'updateGroupAvatar', groupId: _editingGroupId, avatar: dataUrl }));
+                }
+            }
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
 
 function quitarMiembroDelGrupo(btn, phone) {
