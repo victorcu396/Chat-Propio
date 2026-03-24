@@ -1495,18 +1495,21 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
 
 /* Menú contextual flotante — ancla al bubble-wrap */
 .msg-ctx-menu {
-    position: fixed; 
-    z-index: 999999; 
+    position: absolute;
+    z-index: 9000;
     background: var(--white);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
     padding: 6px;
     display: none;
     flex-direction: column;
-    min-width: 190px;
-    animation: ctxMenuIn .15s cubic-bezier(.34,1.2,.64,1);
+    min-width: 180px;
+    animation: loginIn .15s ease;
 }
+.msg-ctx-menu.visible { display: flex; }
+.msg-row.me .bubble-wrap .msg-ctx-menu  { right: 0; top: calc(100% + 4px); }
+.msg-row:not(.me) .bubble-wrap .msg-ctx-menu { left: 0; top: calc(100% + 4px); }
 
 @keyframes ctxMenuIn {
     from { opacity: 0; transform: scale(0.92) translateY(-4px); }
