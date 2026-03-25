@@ -1842,12 +1842,14 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 @media screen and (max-width: 768px) {
     #stickerGiftPanel {
         position: fixed;
-        bottom: 0;
-        left: 0; right: 0;
-        top: auto;
+        bottom: 0 !important;
+        left: 0 !important; right: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
         border-radius: 20px 20px 0 0;
         max-height: 52vh;
-        z-index: 650;
+        z-index: 9000;
         box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
@@ -1861,11 +1863,12 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 }
 
 html.is-mobile #stickerGiftPanel {
-    position: fixed;
-    bottom: 0; left: 0; right: 0; top: auto;
+    position: fixed !important;
+    bottom: 0 !important; left: 0 !important; right: 0 !important; top: auto !important;
+    width: 100% !important; max-width: 100% !important;
     border-radius: 20px 20px 0 0;
     max-height: 52vh;
-    z-index: 650;
+    z-index: 9000;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -1923,9 +1926,7 @@ html.is-mobile #stickerGiftPanel {
     gap: 8px;
     padding: 10px 14px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: var(--white);
     border-top: 1px solid var(--border);
     position: relative;
     flex-shrink: 0;
@@ -1935,16 +1936,16 @@ html.is-mobile #stickerGiftPanel {
    PANEL EMOJIS / FAVORITOS
 ═══════════════════════════════════════════ */
 #stickerGiftPanel {
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 0; right: 0;
+    position: fixed;
     background: var(--white);
     border: 1px solid var(--border);
-    border-radius: 16px 16px 16px 16px;
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-    z-index: 600;
+    border-radius: 16px;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.18);
+    z-index: 9000;
     display: none;
     flex-direction: column;
+    width: 360px;
+    max-width: calc(100vw - 16px);
     max-height: 360px;
     overflow: hidden;
     animation: loginIn .18s ease;
@@ -2158,11 +2159,6 @@ html.is-mobile #stickerGiftPanel {
 
 /* ---- Emoji Picker ---- */
 emoji-picker {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 14px;
-    z-index: 999;
-    display: none;
     --border-radius: 14px;
     --shadow: 0 8px 32px rgba(79,70,229,0.18);
     box-shadow: 0 8px 32px rgba(79,70,229,0.18);
@@ -2171,6 +2167,7 @@ emoji-picker {
     height: 340px;
     max-height: 50vh;
     max-width: calc(100vw - 28px);
+    display: none;
 }
 
 emoji-picker.visible { display: block; }
@@ -10499,34 +10496,35 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
         menu.appendChild(btn);
     });
 
-    // Añadir al BODY para evitar recortes por overflow/stacking context
+    // Añadir al BODY invisible para poder medir dimensiones reales
+    menu.style.visibility = 'hidden';
     document.body.appendChild(menu);
 
-    // Calcular posición usando las dimensiones reales del menú ya renderizado
+    // Medir y posicionar correctamente antes de mostrar
     requestAnimationFrame(() => {
         const menuRect = menu.getBoundingClientRect();
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const margin = 8; // margen mínimo respecto al borde de la ventana
+        const margin = 8;
 
-        // Intentar abrir a la derecha/abajo del click; ajustar si se sale
         let posX = e.clientX;
         let posY = e.clientY;
 
-        // Evitar desbordamiento horizontal
+        // No salirse por la derecha
         if (posX + menuRect.width + margin > vw) {
             posX = vw - menuRect.width - margin;
         }
         if (posX < margin) posX = margin;
 
-        // Evitar desbordamiento vertical (preferir abrir hacia abajo; si no cabe, hacia arriba)
+        // Preferir abrir hacia abajo; si no cabe, abrir hacia arriba
         if (posY + menuRect.height + margin > vh) {
             posY = e.clientY - menuRect.height;
         }
         if (posY < margin) posY = margin;
 
-        menu.style.left = posX + 'px';
-        menu.style.top  = posY + 'px';
+        menu.style.left       = posX + 'px';
+        menu.style.top        = posY + 'px';
+        menu.style.visibility = 'visible';
     });
 
     // Cerrar al pulsar fuera (Mantenemos tu lógica de 300ms)
@@ -11388,6 +11386,38 @@ function toggleStickerGiftPanel(e) {
     if (_sgOpen) {
         renderSGPanel(_sgTab);
         panel.classList.add('visible');
+        // Posicionar el panel dinámicamente (solo en desktop — en móvil CSS lo pone como bottom-sheet)
+        const isMob = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+        if (!isMob) {
+            const btn = document.getElementById('btnStickerGift');
+            if (btn) {
+                const btnRect = btn.getBoundingClientRect();
+                const panelW  = 360;
+                const margin  = 8;
+                // Posición horizontal: alinear con el botón, sin salirse por la derecha
+                let left = btnRect.left;
+                if (left + panelW + margin > window.innerWidth) {
+                    left = window.innerWidth - panelW - margin;
+                }
+                if (left < margin) left = margin;
+                // Posición vertical: encima del botón
+                const panelH = Math.min(360, window.innerHeight * 0.55);
+                let top = btnRect.top - panelH - 8;
+                if (top < margin) top = btnRect.bottom + 8;
+                panel.style.left   = left + 'px';
+                panel.style.top    = top  + 'px';
+                panel.style.bottom = 'auto';
+                panel.style.right  = 'auto';
+                panel.style.width  = panelW + 'px';
+            }
+        } else {
+            // Mobile: bottom-sheet — el CSS lo posiciona, solo limpiar inline styles
+            panel.style.left   = '';
+            panel.style.top    = '';
+            panel.style.bottom = '';
+            panel.style.right  = '';
+            panel.style.width  = '';
+        }
     } else {
         panel.classList.remove('visible');
     }
