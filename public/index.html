@@ -1765,8 +1765,9 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 .thread-input-area {
     padding: 10px 12px; border-top: 1px solid var(--border);
     display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
-    position: relative; z-index: 1;
+    position: relative; z-index: 2;
     pointer-events: auto;
+    background: var(--white);
 }
 .thread-input {
     flex: 1; min-height: 38px; max-height: 90px;
@@ -1781,7 +1782,11 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
     user-select: text;
     pointer-events: auto;
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    cursor: text;
+    /* Nunca deshabilitar el input */
+    -webkit-appearance: none;
+    appearance: none;
 }
 .thread-input:focus { border-color: var(--purple-deep); }
 .thread-send-btn {
@@ -2471,7 +2476,7 @@ emoji-picker.visible { display: block; }
 #mentionList {
     display: none;
     position: absolute;
-    bottom: calc(100% + 2px);
+    bottom: 100%;
     left: 0; right: 0;
     background: var(--white);
     border: 1px solid var(--border);
@@ -2481,9 +2486,14 @@ emoji-picker.visible { display: block; }
     max-height: 240px;
     overflow-y: auto;
     overflow-x: hidden;
-    z-index: 700;
+    z-index: 800;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch; /* smooth scroll en iOS */
+    /* Nunca participar en el flex layout del padre */
+    flex: none;
+    width: 100%;
+    margin: 0;
+    padding: 0;
 }
 #mentionList.visible { display: block; }
 /* Título de la sección */
@@ -4685,6 +4695,7 @@ html {
 
       <!-- Input -->
       <div class="input-area">
+        <div id="mentionList"></div>
         <!-- Panel unificado: Emojis / Favoritos -->
         <!-- Está DENTRO de .input-area para que position:absolute funcione correctamente -->
         <div id="stickerGiftPanel">
@@ -4701,7 +4712,6 @@ html {
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts" aria-label="Abrir emojis">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen" aria-label="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
-        <div id="mentionList"></div>
         <textarea id="mensaje" placeholder="Escribe un mensaje..." rows="1" disabled lang="es"></textarea>
         <button class="icon-btn" id="btnMic" onclick="toggleGrabacion()" title="Grabar audio" style="display:none">🎙️</button>
         <button id="btnEnviar" disabled title="Enviar">
@@ -4976,6 +4986,7 @@ html {
   <ul id="threadMessages" style="list-style:none;margin:0;padding:10px 12px;"></ul>
   <div class="thread-input-area">
     <textarea class="thread-input" id="threadInput" placeholder="Responder en el hilo…" rows="1"
+      tabindex="0"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"></textarea>
     <button class="thread-send-btn" onclick="enviarEnHilo()" title="Enviar">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -9198,20 +9209,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const egn = document.getElementById('editGroupNameInput');
     if (egn) egn.addEventListener('keydown', (e) => { if (e.key === 'Enter') guardarEditarGrupo(); });
 
-    // Thread input: Enter envía (Shift+Enter = salto de línea)
-    const threadInputEl = document.getElementById('threadInput');
-    if (threadInputEl) {
-        threadInputEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                enviarEnHilo();
-            }
-        });
-        // En móvil asegurar que el focus funciona al tocar el área
-        threadInputEl.addEventListener('touchstart', () => {
-            threadInputEl.focus();
-        }, { passive: true });
-    }
+    // Thread input: adjuntar listener unificado (Enter envía, Shift+Enter = salto de línea)
+    _attachThreadInputListener();
 });
 
 // ============================================================
@@ -11267,28 +11266,83 @@ document.getElementById('forwardModal').addEventListener('click', (e) => {
 
 /* ─── HILO (THREAD) ─────────────────────────────────────────── */
 let _threadId   = null;
+let _threadInputListenerAttached = false;
+
+function _attachThreadInputListener() {
+    const threadInputEl = document.getElementById('threadInput');
+    if (!threadInputEl || _threadInputListenerAttached) return;
+    _threadInputListenerAttached = true;
+
+    threadInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            enviarEnHilo();
+        }
+    });
+
+    threadInputEl.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 90) + 'px';
+    });
+
+    threadInputEl.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+        threadInputEl.focus();
+    }, { passive: true });
+
+    threadInputEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
 
 function abrirHilo(msgId) {
     _threadId = msgId;
-    // Mostrar el mensaje raíz
+
+    // Mostrar el mensaje raíz en el panel
     const bubble = document.getElementById(msgId);
     const row    = bubble ? bubble.closest('.msg-row') : null;
     const from   = row ? (row.querySelector('.msg-avatar')?.alt || '') : '';
-    const text   = bubble ? (bubble.querySelector('.msg-text')?.textContent || '').trim() : '';
+    const textEl = bubble ? bubble.querySelector('.msg-text') : null;
+    const text   = textEl ? (textEl.textContent || textEl.innerText || '').trim() : '';
+
     document.getElementById('threadRootFrom').textContent = from;
     document.getElementById('threadRootText').textContent = text.slice(0, 200);
 
     // Limpiar mensajes anteriores del hilo
     document.getElementById('threadMessages').innerHTML = '';
-    document.getElementById('threadPanel').classList.add('open');
+
+    // Abrir el panel
+    const panel = document.getElementById('threadPanel');
+    panel.classList.add('open');
+
+    // Adjuntar listener (solo una vez)
+    _attachThreadInputListener();
+
+    // Dar foco al input con pequeño delay para que la transición CSS termine
+    setTimeout(() => {
+        const threadInputEl = document.getElementById('threadInput');
+        if (threadInputEl) {
+            threadInputEl.removeAttribute('disabled');
+            threadInputEl.focus();
+        }
+    }, 320);
 
     // Pedir historial del hilo
-    socket.send(JSON.stringify({ type: 'loadThread', threadId: msgId }));
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'loadThread', threadId: msgId }));
+    }
 }
 
 function cerrarHilo() {
     _threadId = null;
     document.getElementById('threadPanel').classList.remove('open');
+    // Limpiar el input al cerrar
+    const threadInputEl = document.getElementById('threadInput');
+    if (threadInputEl) {
+        threadInputEl.value = '';
+        threadInputEl.style.height = 'auto';
+        threadInputEl.blur();
+    }
 }
 
 function enviarEnHilo() {
@@ -11303,6 +11357,8 @@ function enviarEnHilo() {
     socket.send(JSON.stringify({ type: 'threadMessage', threadId: _threadId, message: text }));
     threadInputEl.value = '';
     threadInputEl.style.height = 'auto';
+    // Mantener el foco para escribir más mensajes
+    threadInputEl.focus();
 }
 
 // El listener del threadInput se registra en DOMContentLoaded (ver más abajo)

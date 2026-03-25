@@ -2470,21 +2470,23 @@ wss.on('connection', (ws) => {
                     const root = await Message.findOne({ id: data.threadId });
                     if (!root || root.deletedAt) break;
 
+                    const isGroup = root.conversationId && root.conversationId.startsWith('group_');
+                    let tGrp = null;
+
                     // Verificar que el usuario tiene acceso a esta conversación
-                    if (root.conversationId && root.conversationId.startsWith('group_')) {
+                    if (isGroup) {
                         const tGrpId = root.conversationId.replace('group_', '');
-                        const tGrp = await Group.findOne({ groupId: tGrpId }).lean();
+                        tGrp = await Group.findOne({ groupId: tGrpId }).lean();
                         if (!tGrp || !tGrp.members.includes(ws.phone)) break;
                     } else {
-                        // 1:1: verificar que el usuario es participante de la conversación.
-                        // No usamos split('_') porque los usernames pueden contener '_'.
-                        // En su lugar, reconstruimos los posibles conversationIds y comparamos.
-                        const convId = root.conversationId || '';
+                        // 1:1: verificar que el usuario es participante.
                         // El convId es [usernameA, usernameB].sort().join('_')
-                        // Si from y to son conocidos, verificamos directamente:
-                        const isParticipant = convId === [ws.username, root.from].sort().join('_') ||
-                            convId === [ws.username, root.to].sort().join('_')  ||
-                            root.from === ws.username || root.to === ws.username;
+                        const convId = root.conversationId || '';
+                        const isParticipant =
+                            convId === [ws.username, root.from].sort().join('_') ||
+                            convId === [ws.username, root.to].sort().join('_')   ||
+                            root.from === ws.username ||
+                            root.to   === ws.username;
                         if (!isParticipant) break;
                     }
 
@@ -2505,8 +2507,25 @@ wss.on('connection', (ws) => {
                     root.threadCount = (root.threadCount || 0) + 1;
                     await root.save();
 
-                    const payload = JSON.stringify({ type: 'thread_message', msg: threadMsg._doc, threadId: data.threadId, threadCount: root.threadCount });
-                    broadcastToConversation(root.conversationId, payload, root.from, root.to);
+                    const payload = JSON.stringify({
+                        type:        'thread_message',
+                        msg:         threadMsg._doc,
+                        threadId:    data.threadId,
+                        threadCount: root.threadCount
+                    });
+
+                    if (isGroup && tGrp) {
+                        // Grupo: enviar a todos los miembros online
+                        tGrp.members.forEach(memberPhone => {
+                            const memberWs = [...users.values()].find(u => u.phone === memberPhone);
+                            if (memberWs && memberWs.readyState === WebSocket.OPEN) {
+                                try { memberWs.send(payload); } catch(_) {}
+                            }
+                        });
+                    } else {
+                        // 1:1: enviar a ambos participantes
+                        broadcastToConversation(root.conversationId, payload, root.from, root.to);
+                    }
                 } catch(e) { console.error('threadMessage error:', e.message); }
                 break;
             }
