@@ -383,7 +383,11 @@ html, body {
     grid-template-rows: 1fr;
     background: var(--white);
     border-radius: 22px;
-    overflow: hidden;
+    /* overflow:hidden eliminado — creaba stacking context que impedía que
+       position:fixed de paneles flotantes (emojis, menciones) quedase por encima.
+       El clip visual se mantiene con clip-path. */
+    overflow: visible;
+    clip-path: inset(0 round 22px);
     box-shadow: 0 20px 60px rgba(79,70,229,0.20), 0 4px 20px rgba(0,0,0,0.08);
     border: 1px solid rgba(79,70,229,0.12);
     position: relative;
@@ -1182,7 +1186,9 @@ li.has-unread .unread-badge {
     flex-direction: column;
     background: var(--bg-chat);
     position: relative;
-    overflow: hidden;
+    /* overflow:hidden eliminado — creaba stacking context.
+       El clipping visual lo gestiona el .window con clip-path. */
+    overflow: visible;
     min-width: 0;
 }
 
@@ -1849,7 +1855,7 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
         top: auto;
         border-radius: 20px 20px 0 0;
         max-height: 52vh;
-        z-index: 650;
+        z-index: 99998;
         box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
@@ -1867,7 +1873,7 @@ html.is-mobile #stickerGiftPanel {
     bottom: 0; left: 0; right: 0; top: auto;
     border-radius: 20px 20px 0 0;
     max-height: 52vh;
-    z-index: 650;
+    z-index: 99998;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -1926,25 +1932,34 @@ html.is-mobile #stickerGiftPanel {
     padding: 10px 14px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
     background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--border);
     position: relative;
     flex-shrink: 0;
+}
+/* backdrop-filter en pseudo-elemento para NO crear stacking context en el padre,
+   lo que permitiría que elementos position:fixed hijos (emoji panel, mentionList)
+   se posicionen correctamente por encima de los mensajes */
+.input-area::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: none;
+    z-index: 0;
 }
 
 /* ═══════════════════════════════════════════
    PANEL EMOJIS / FAVORITOS
 ═══════════════════════════════════════════ */
 #stickerGiftPanel {
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 0; right: 0;
+    position: fixed;
+    /* left / right / bottom se calculan por JS según el botón de emojis */
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: 16px 16px 16px 16px;
     box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-    z-index: 600;
+    z-index: 99998;
     display: none;
     flex-direction: column;
     max-height: 360px;
@@ -3954,6 +3969,7 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         max-height: none;
         grid-template-columns: var(--sidebar-w-tablet) 1fr;
         border-radius: 14px;
+        clip-path: inset(0 round 14px);
     }
 
     .sidebar-header { padding: 16px 14px 12px; }
@@ -3989,6 +4005,7 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         height: 100dvh;
         max-height: none;
         border-radius: 0;
+        clip-path: none;
         grid-template-columns: 1fr;
         box-shadow: none;
         border: none;
@@ -4204,7 +4221,7 @@ html.is-mobile .app    { padding: 0; }
 html.is-mobile .window {
     width: 100%; max-height: none;
     height: 100vh; height: 100dvh;
-    border-radius: 0; grid-template-columns: 1fr;
+    border-radius: 0; clip-path: none; grid-template-columns: 1fr;
     box-shadow: none; border: none;
 }
 
@@ -4700,19 +4717,6 @@ html {
 
       <!-- Input -->
       <div class="input-area">
-        <!-- Panel unificado: Emojis / Favoritos -->
-        <!-- Está DENTRO de .input-area para que position:absolute funcione correctamente -->
-        <div id="stickerGiftPanel">
-          <div class="sg-tabs">
-            <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
-            <button class="sg-tab"        id="tabFavoritos" onclick="cambiarTabSG('favoritos')">⭐ Favoritos</button>
-          </div>
-          <!-- El emoji-picker vive aquí de forma permanente; se muestra/oculta con CSS -->
-          <div id="sgEmojiWrap">
-            <emoji-picker id="emojiPicker"></emoji-picker>
-          </div>
-          <div class="sg-content" id="sgContent" style="display:none;"></div>
-        </div>
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts" aria-label="Abrir emojis">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen" aria-label="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
@@ -7144,18 +7148,20 @@ function _limpiarEstadoChat() {
     _historyHasMore  = false;
     _historyLoading  = false;
     _historyOldestId = null;
-    // Cancelar edición o respuesta activa sin pedir confirmación
-    if (_editState || _replyState) {
-        _editState  = null;
-        _replyState = null;
-        input.value = '';
-        input.style.height = 'auto';
-        btnEnviar.onclick = enviar;
-        btnEnviar.disabled = true;
-        document.getElementById('replyBar').classList.remove('visible');
-        document.getElementById('replyBarName').textContent = '';
-        document.getElementById('replyBarText').textContent = '';
-    }
+    // Limpiar siempre el input al cambiar de chat (edición, respuesta o texto normal)
+    _editState  = null;
+    _replyState = null;
+    input.value = '';
+    input.style.height = 'auto';
+    btnEnviar.onclick = enviar;
+    btnEnviar.disabled = true;
+    document.getElementById('replyBar').classList.remove('visible');
+    document.getElementById('replyBarName').textContent = '';
+    document.getElementById('replyBarText').textContent = '';
+    // Cerrar lista de menciones si estaba abierta
+    _cerrarMentionList();
+    // Cancelar imagen pendiente si la había
+    if (pendingImage) cancelarImagen();
     // Cerrar panel de emojis/favoritos
     cerrarSGPanel();
     // Cerrar panel de hilo si está abierto
@@ -11379,12 +11385,35 @@ function toggleFavorito(emoji, e) {
     if (_sgTab === 'favoritos') renderSGPanel('favoritos');
 }
 
+function _posicionarSGPanel() {
+    // En móvil el panel ya usa bottom:0 left:0 right:0 (fijo en la hoja de estilos is-mobile)
+    if (document.documentElement.classList.contains('is-mobile') ||
+        window.innerWidth <= 768) return;
+
+    const panel = document.getElementById('stickerGiftPanel');
+    const btn   = document.getElementById('btnStickerGift');
+    if (!panel || !btn) return;
+
+    const inputArea = btn.closest('.input-area') || btn.parentElement;
+    const ref = inputArea || btn;
+    const rect = ref.getBoundingClientRect();
+
+    // Alinear el panel con el borde izquierdo y derecho del input-area,
+    // su borde inferior pegado al borde superior del input-area
+    panel.style.left   = rect.left + 'px';
+    panel.style.right  = (window.innerWidth - rect.right) + 'px';
+    panel.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    panel.style.top    = '';
+    panel.style.width  = '';
+}
+
 function toggleStickerGiftPanel(e) {
     if (e) e.stopPropagation();
     const panel = document.getElementById('stickerGiftPanel');
     _sgOpen = !_sgOpen;
     if (_sgOpen) {
         renderSGPanel(_sgTab);
+        _posicionarSGPanel();
         panel.classList.add('visible');
     } else {
         panel.classList.remove('visible');
@@ -12933,6 +12962,18 @@ function _mostrarBannerOffline(visible) {
     </div><!-- /scroll container -->
   </div><!-- /modal card -->
 </div><!-- /rgpdModal overlay -->
+
+<!-- Panel emojis/favoritos: fuera de cualquier overflow:hidden, posicionado por JS -->
+<div id="stickerGiftPanel">
+  <div class="sg-tabs">
+    <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
+    <button class="sg-tab"        id="tabFavoritos" onclick="cambiarTabSG('favoritos')">⭐ Favoritos</button>
+  </div>
+  <div id="sgEmojiWrap">
+    <emoji-picker id="emojiPicker"></emoji-picker>
+  </div>
+  <div class="sg-content" id="sgContent" style="display:none;"></div>
+</div>
 
 <!-- Lista de sugerencias de mención: fuera de cualquier overflow:hidden -->
 <div id="mentionList"></div>
