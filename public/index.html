@@ -7248,38 +7248,10 @@ function seleccionarUsuario(user) {
     btnU.dataset.mode = '1to1';
     btnU.title = isOnline ? 'Llamada de voz' : 'Llamar (dejará notificación de llamada perdida)';
 
-    if (conversations[user]) {
-        // Si la caché solo contiene mensajes entregados "en caliente" al hacer join
-        // (sin historial completo), forzamos recarga desde el servidor.
-        // Detectamos este caso: todos los mensajes del array son recientes (< 5s)
-        // o el array fue marcado como "solo_pending".
-        const needsReload = conversations[user].__onlyPending === true;
-        if (needsReload) {
-            delete conversations[user];
-            socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
-        } else {
-            let lastDay = '';
-            window._kvsLoadingHistory = true;
-            conversations[user].forEach(msg => {
-                const day = obtenerDia(msg.time);
-                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-                addMessage(msg);
-            });
-            window._kvsLoadingHistory = false;
-            // Marcar como leídos en BD y cerrar notificaciones
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                try { socket.send(JSON.stringify({ type: 'markRead', chatKey: user })); } catch(_) {}
-            }
-            // Actualizar inmediatamente en el DOM los estados de mensajes propios ya leídos
-            conversations[user].forEach(msg => {
-                if (msg.from === username && msg.read) {
-                    updateEstado(msg.id, '✔✔ leído');
-                }
-            });
-        }
-    } else {
-        socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
-    }
+    // Siempre pedir historial fresco al abrir un chat 1:1 para tener
+    // los estados read/delivered actualizados desde la BD.
+    delete conversations[user];
+    socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
 
     renderUsers(lastKnownUsers);
     renderContactsList();
@@ -7351,37 +7323,10 @@ function seleccionarContactoOffline(phone) {
     renderContactsList();
     renderGroupsList();
 
-    // Cargar historial por phone
-    if (conversations[chatKey]) {
-        const needsReload = conversations[chatKey].__onlyPending === true;
-        if (needsReload) {
-            delete conversations[chatKey];
-            socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
-        } else {
-            let lastDay = '';
-            window._kvsLoadingHistory = true;
-            conversations[chatKey].forEach(msg => {
-                const day = obtenerDia(msg.time);
-                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-                addMessage(msg);
-            });
-            window._kvsLoadingHistory = false;
-            // Marcar como leídos en BD y cerrar notificaciones
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                const un = window._phoneToUsername && window._phoneToUsername[phone];
-                const mkKey = un || ('phone:' + phone);
-                try { socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey })); } catch(_) {}
-            }
-            // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
-            conversations[chatKey].forEach(msg => {
-                if (msg.from === username && msg.read) {
-                    updateEstado(msg.id, '✔✔ leído');
-                }
-            });
-        }
-    } else {
-        socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
-    }
+    // Siempre pedir historial fresco al abrir un chat por phone para tener
+    // los estados read/delivered actualizados desde la BD.
+    delete conversations[chatKey];
+    socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
 
     if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
@@ -8752,34 +8697,10 @@ function seleccionarGrupo(groupId) {
     btnU.dataset.mode = 'group';
     btnU.title = 'Llamada grupal';
 
-    if (conversations[chatKey]) {
-        const needsReload = conversations[chatKey].__onlyPending === true;
-        if (needsReload) {
-            delete conversations[chatKey];
-            socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
-        } else {
-            let lastDay = '';
-            window._kvsLoadingHistory = true;
-            conversations[chatKey].forEach(msg => {
-                const day = obtenerDia(msg.time);
-                if (day !== lastDay) { addDaySeparator(day); lastDay = day; }
-                addGroupMessage(msg);
-            });
-            window._kvsLoadingHistory = false;
-            // Marcar como leídos en BD y cerrar notificaciones
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                try { socket.send(JSON.stringify({ type: 'markRead', chatKey })); } catch(_) {}
-            }
-            // Actualizar inmediatamente estados de mensajes propios ya leídos en el DOM
-            conversations[chatKey].forEach(msg => {
-                if (msg.from === username && msg.read) {
-                    updateEstado(msg.id, '✔✔ leído');
-                }
-            });
-        }
-    } else {
-        socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
-    }
+    // Siempre pedir historial fresco al abrir un grupo para tener
+    // los estados read/delivered actualizados desde la BD.
+    delete conversations[chatKey];
+    socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
 
     renderGroupsList();
     renderContactsList();
