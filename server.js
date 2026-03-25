@@ -90,7 +90,7 @@ webpush.setVapidDetails(
 // Aumentar límite para base64 de imágenes (hasta ~5 MB por imagen)
 const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 app.use(express.static('public'));
 
 /* ── Health check: Render lo usa para saber que el servidor está vivo ── */
@@ -540,6 +540,16 @@ const pendingSessionRequests = new Map();
 // Se incrementa al enviar push y se resetea cuando el destinatario se conecta o lee el chat.
 const pendingUnread = new Map();
 
+// ── Teléfono del administrador ────────────────────────────────────────────────
+// El admin puede ver a TODOS los usuarios conectados aunque no los tenga en contactos.
+// El resto de usuarios solo ven en "conectados" a quienes tienen en su lista de contactos.
+const ADMIN_PHONE = '693001834';
+// isAdmin: compara con endsWith para cubrir formatos con/sin prefijo (+34693001834 o 693001834)
+function isAdmin(phone) {
+    if (!phone) return false;
+    return phone === ADMIN_PHONE || phone.endsWith(ADMIN_PHONE);
+}
+
 // ── Heartbeat de aplicación (JS-level) ───────────────────────────────────
 // El cliente envía 'kvs_ping' cada 15s desde JS activo.
 // Si no recibimos un ping en 25s → marcamos isAway.
@@ -563,7 +573,7 @@ setInterval(() => {
         const shouldBeAway = elapsed > APP_PING_AWAY;
         if (ws.isAway !== shouldBeAway) {
             ws.isAway = shouldBeAway;
-            broadcastUsers();
+            broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
         }
     });
 }, 10000); // comprobar cada 10s
@@ -694,39 +704,52 @@ wss.on('connection', (ws) => {
                 // Al conectarse, resetear todos sus contadores de no leídos en push
                 if (ws.phone) resetearPendingUnread(ws.phone);
 
-                // Usar avatar personalizado si lo manda el cliente, si no dicebear
+                // Restaurar avatar: primero intenta el que manda el cliente (base64),
+                // luego el guardado en BD, y por último el dicebear por defecto.
                 const defaultAvatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(ws.username)}`;
                 if (data.avatar && /^data:image\//.test(data.avatar)) {
                     ws.avatar = data.avatar;
                 } else {
-                    ws.avatar = defaultAvatar;
+                    // Intentar recuperar avatar de BD (puede ser URL Cloudinary)
+                    if (ws.phone) {
+                        try {
+                            const savedUser = await User.findOne({ phone: ws.phone }).lean();
+                            ws.avatar = (savedUser && savedUser.avatar) ? savedUser.avatar : defaultAvatar;
+                        } catch(_) {
+                            ws.avatar = defaultAvatar;
+                        }
+                    } else {
+                        ws.avatar = defaultAvatar;
+                    }
                 }
 
                 users.set(ws.username, ws);
                 if (ws.phone) userPhones.set(ws.username, ws.phone);
 
-                // Upsert usuario en MongoDB
-                try {
-                    await User.findOneAndUpdate(
-                        { phone: ws.phone },
-                        {
-                            phone: ws.phone,
-                            username: ws.username,
-                            avatar: ws.avatar,
-                            lastLogin: new Date()
-                        },
-                        { upsert: true, new: true }
-                    );
-                } catch(e) {
-                    // Si no hay phone (sesión legacy), ignorar
+                // Upsert usuario en MongoDB (solo si hay phone válido)
+                if (ws.phone) {
+                    try {
+                        await User.findOneAndUpdate(
+                            { phone: ws.phone },
+                            {
+                                phone: ws.phone,
+                                username: ws.username,
+                                avatar: ws.avatar,
+                                lastLogin: new Date()
+                            },
+                            { upsert: true, new: true }
+                        );
+                    } catch(e) {
+                        console.error('join upsert error:', e.message);
+                    }
                 }
 
-                broadcastUsers();
+                broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
 
-                broadcast({
+                broadcastInfoFiltered({
                     type: 'info',
                     message: `${ws.username} se ha unido al chat`
-                });
+                }, ws.phone).catch(e => console.error("[broadcastInfoFiltered]", e.message));
 
                 // ── Entregar mensajes pendientes (enviados mientras estaba offline) ──
                 try {
@@ -749,17 +772,6 @@ wss.on('connection', (ws) => {
                 } catch(e) {
                     console.error('Error entregando mensajes pendientes:', e.message);
                 }
-
-                // ── Entregar missed calls pendientes ──
-                try {
-                    const missedCalls = await Message.find({
-                        to:        ws.username,
-                        delivered: false,
-                        message:   '__missed_call__'
-                    }).sort({ time: 1 });
-
-                    // (ya cubierto por el loop anterior; aquí no hay trabajo extra)
-                } catch(_) {}
 
                 // ── Entregar solicitudes de contacto pendientes ──
                 if (ws.phone) {
@@ -831,7 +843,17 @@ wss.on('connection', (ws) => {
                 if (newAvatar && /^data:image\//.test(newAvatar)) {
                     newWs.avatar = newAvatar;
                 } else {
-                    newWs.avatar = defaultAvatar;
+                    // Intentar recuperar avatar de BD (puede ser URL Cloudinary)
+                    if (phone) {
+                        try {
+                            const savedUser2 = await User.findOne({ phone }).lean();
+                            newWs.avatar = (savedUser2 && savedUser2.avatar) ? savedUser2.avatar : defaultAvatar;
+                        } catch(_) {
+                            newWs.avatar = defaultAvatar;
+                        }
+                    } else {
+                        newWs.avatar = defaultAvatar;
+                    }
                 }
 
                 users.set(newUsername, newWs);
@@ -850,8 +872,8 @@ wss.on('connection', (ws) => {
                     newWs.send(JSON.stringify({ type: 'session_approved' }));
                 } catch(_) {}
 
-                broadcastUsers();
-                broadcast({ type: 'info', message: `${newUsername} se ha unido al chat` });
+                broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
+                broadcastInfoFiltered({ type: 'info', message: `${newUsername} se ha unido al chat` }, phone).catch(e => console.error("[broadcastInfoFiltered]", e.message));
 
                 // Entregar mensajes pendientes al nuevo dispositivo
                 try {
@@ -896,16 +918,20 @@ wss.on('connection', (ws) => {
                     if (recipientUser) recipientUsername = recipientUser.username;
                 }
                 // Si solo viene username, buscar teléfono en BD (para stored conversationId)
+                // Cachear el resultado para reutilizarlo en la comprobación de bloqueo
+                let _cachedRecipientDoc = null;
                 if (recipientUsername && !recipientPhone) {
-                    const recipientUser = await User.findOne({ username: recipientUsername }).lean();
-                    if (recipientUser) recipientPhone = recipientUser.phone;
+                    _cachedRecipientDoc = await User.findOne({ username: recipientUsername }).lean();
+                    if (_cachedRecipientDoc) recipientPhone = _cachedRecipientDoc.phone;
                 }
 
                 if (!recipientUsername) break; // destinatario desconocido
 
                 // ── Comprobar bloqueo: si el destinatario ha bloqueado al remitente, descartar ──
                 if (recipientPhone) {
-                    const recipientUserDoc = await User.findOne({ phone: recipientPhone }).lean();
+                    // Reutilizar doc cacheado si ya lo tenemos; si no, buscarlo por phone
+                    const recipientUserDoc = _cachedRecipientDoc
+                        || await User.findOne({ phone: recipientPhone }).lean();
                     if (recipientUserDoc && recipientUserDoc.blockedPhones && ws.phone &&
                         recipientUserDoc.blockedPhones.includes(ws.phone)) {
                         // Silencioso: el remitente no sabe que está bloqueado
@@ -947,8 +973,10 @@ wss.on('connection', (ws) => {
                 if (ws.phone) {
                     try {
                         const senderUser = await User.findOne({ phone: ws.phone }).lean();
+                        // Con lean() autoDestructSettings es un objeto plano (no Map),
+                        // así que accedemos directamente con notación de corchetes.
                         const secs = senderUser && senderUser.autoDestructSettings
-                            ? (senderUser.autoDestructSettings[conversationId] || senderUser.autoDestructSettings.get?.(conversationId))
+                            ? (senderUser.autoDestructSettings[conversationId] ?? null)
                             : null;
                         if (secs) expiresAt = new Date(Date.now() + secs * 1000);
                     } catch(_) {}
@@ -1061,7 +1089,7 @@ wss.on('connection', (ws) => {
             ────────────────────────────────────── */
             case 'read': {
                 if (!data.id) break;
-
+                try {
                 await Message.updateOne(
                     { id: data.id },
                     { read: true }
@@ -1095,6 +1123,7 @@ wss.on('connection', (ws) => {
                         }
                     }
                 }
+                } catch(e) { console.error('read error:', e.message); }
                 break;
             }
 
@@ -1395,6 +1424,8 @@ wss.on('connection', (ws) => {
                                 avatar:   ws.avatar || null,
                                 username: ws.username
                             }));
+                            // Actualizar lista de conectados para ambos ahora que son contactos
+                            broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
                         }
                     }
                 } catch(e) {
@@ -1527,6 +1558,19 @@ wss.on('connection', (ws) => {
                 }
 
                 const gmId = crypto.randomUUID();
+                // Calcular expiresAt para autodestrucción en grupos
+                let gmExpiresAt = null;
+                if (ws.phone) {
+                    try {
+                        const gmSenderUser = await User.findOne({ phone: ws.phone }).lean();
+                        const gmConvId = 'group_' + data.groupId;
+                        const gmSecs = gmSenderUser && gmSenderUser.autoDestructSettings
+                            ? (gmSenderUser.autoDestructSettings[gmConvId] ?? null)
+                            : null;
+                        if (gmSecs) gmExpiresAt = new Date(Date.now() + gmSecs * 1000);
+                    } catch(_) {}
+                }
+
                 const gmMessage = new Message({
                     id:             gmId,
                     conversationId: 'group_' + data.groupId,
@@ -1538,7 +1582,8 @@ wss.on('connection', (ws) => {
                     avatar:         ws.avatar,
                     delivered:      true,
                     read:           false,
-                    mentions:       gmMentions
+                    mentions:       gmMentions,
+                    expiresAt:      gmExpiresAt
                 });
                 await gmMessage.save();
 
@@ -1782,12 +1827,11 @@ wss.on('connection', (ws) => {
                Actualiza lastPing y limpia isAway.
             ────────────────────────────────────── */
             case 'kvs_ping': {
-                const wasAway = ws.isAway;
                 ws.lastPing = Date.now();
                 ws.isAlive  = true;
                 if (ws.isAway) {
                     ws.isAway = false;
-                    broadcastUsers(); // avisar a todos que volvió
+                    broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message)); // avisar a todos que volvió
                 }
                 // Responder con pong para que el cliente sepa que el servidor está vivo
                 try { ws.send(JSON.stringify({ type: 'kvs_pong' })); } catch(_) {}
@@ -1911,7 +1955,7 @@ wss.on('connection', (ws) => {
                 } else {
                     ws.lastPing = Date.now(); // volvió al foreground → resetear timer
                 }
-                broadcastUsers();
+                broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
                 break;
             }
 
@@ -2035,7 +2079,6 @@ wss.on('connection', (ws) => {
                         { ownerPhone: data.fromPhone, contactPhone: ws.phone, customName: ws.username },
                         { upsert: true, new: true }
                     );
-                    const acceptorUser = await User.findOne({ phone: ws.phone }).lean();
                     const fromWs = [...users.values()].find(u => u.phone === data.fromPhone);
                     if (fromWs && fromWs.readyState === WebSocket.OPEN) {
                         fromWs.send(JSON.stringify({
@@ -2052,6 +2095,8 @@ wss.on('connection', (ws) => {
                             byUsername:  ws.username,
                             byAvatar:    ws.avatar || null
                         }));
+                        // Actualizar lista de conectados para ambos ahora que son contactos
+                        broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
                     }
                 } catch(e) {
                     console.error('respondContactRequest error:', e.message);
@@ -2261,11 +2306,43 @@ wss.on('connection', (ws) => {
 
                     if (groupId) {
                         const grp = await Group.findOne({ groupId });
-                        if (!grp) break;
+                        if (!grp) {
+                            // Revertir: borrar el mensaje guardado (grupo no encontrado)
+                            try { await Message.deleteOne({ id: newId }); } catch(_) {}
+                            break;
+                        }
+                        // Comprobar que el remitente es miembro del grupo
+                        if (!grp.members.includes(ws.phone)) {
+                            // Revertir: borrar el mensaje guardado (no es miembro)
+                            try { await Message.deleteOne({ id: newId }); } catch(_) {}
+                            break;
+                        }
                         const gmPayload = JSON.stringify({ type: 'groupMessage', ...fwdMsg._doc, groupId, groupName: grp.name });
+                        const fwdPreviewText = fwdMsg.imageData ? '📷 Imagen'
+                            : fwdMsg.audioData ? '🎙️ Audio'
+                            : (fwdMsg.message || '').slice(0, 80);
                         grp.members.forEach(mp => {
                             const mws = [...users.values()].find(u => u.phone === mp);
-                            if (mws && mws.readyState === WebSocket.OPEN) mws.send(gmPayload);
+                            if (mws && mws.readyState === WebSocket.OPEN) {
+                                mws.send(gmPayload);
+                                if (mws.isAway && mp !== ws.phone) {
+                                    enviarPushConConteo(mp, 'group_' + groupId, {
+                                        title: `👥 ${grp.name}`,
+                                        body:  `${ws.username}: ${fwdPreviewText || '…'}`,
+                                        icon:  '/icon-192.png', badge: '/icon-192.png',
+                                        tag:   'grp_' + groupId, renotify: true,
+                                        data:  { groupId, chatKey: 'group_' + groupId }
+                                    });
+                                }
+                            } else if (mp !== ws.phone) {
+                                enviarPushConConteo(mp, 'group_' + groupId, {
+                                    title: `👥 ${grp.name}`,
+                                    body:  `${ws.username}: ${fwdPreviewText || '…'}`,
+                                    icon:  '/icon-192.png', badge: '/icon-192.png',
+                                    tag:   'grp_' + groupId, renotify: true,
+                                    data:  { groupId, chatKey: 'group_' + groupId }
+                                });
+                            }
                         });
                     } else {
                         sendMessage(fwdMsg);
@@ -2337,11 +2414,43 @@ wss.on('connection', (ws) => {
 
                     if (groupId) {
                         const grp = await Group.findOne({ groupId });
-                        if (!grp || !grp.members.includes(ws.phone)) break;
+                        if (!grp || !grp.members.includes(ws.phone)) {
+                            // Revertir: borrar el mensaje guardado (el usuario no es miembro del grupo)
+                            try { await Message.deleteOne({ id: newId }); } catch(_) {}
+                            break;
+                        }
                         const gmPayload = JSON.stringify({ type: 'groupMessage', ...replyMsg._doc, groupId, groupName: grp.name });
+                        const replyPreviewText = replyMsg.imageData ? '📷 Imagen'
+                            : replyMsg.audioData ? '🎙️ Audio'
+                            : (replyMsg.message || '').slice(0, 80);
                         grp.members.forEach(mp => {
                             const mws = [...users.values()].find(u => u.phone === mp);
-                            if (mws && mws.readyState === WebSocket.OPEN) mws.send(gmPayload);
+                            if (mws && mws.readyState === WebSocket.OPEN) {
+                                mws.send(gmPayload);
+                                // Push si está en background y no es el remitente
+                                if (mws.isAway && mp !== ws.phone) {
+                                    enviarPushConConteo(mp, 'group_' + groupId, {
+                                        title: `👥 ${grp.name}`,
+                                        body:  `${ws.username}: ${replyPreviewText || '…'}`,
+                                        icon:  '/icon-192.png',
+                                        badge: '/icon-192.png',
+                                        tag:   'grp_' + groupId,
+                                        renotify: true,
+                                        data:  { groupId, chatKey: 'group_' + groupId }
+                                    });
+                                }
+                            } else if (mp !== ws.phone) {
+                                // Offline: push con conteo
+                                enviarPushConConteo(mp, 'group_' + groupId, {
+                                    title: `👥 ${grp.name}`,
+                                    body:  `${ws.username}: ${replyPreviewText || '…'}`,
+                                    icon:  '/icon-192.png',
+                                    badge: '/icon-192.png',
+                                    tag:   'grp_' + groupId,
+                                    renotify: true,
+                                    data:  { groupId, chatKey: 'group_' + groupId }
+                                });
+                            }
                         });
                     } else {
                         sendMessage(replyMsg);
@@ -2360,6 +2469,24 @@ wss.on('connection', (ws) => {
                 try {
                     const root = await Message.findOne({ id: data.threadId });
                     if (!root || root.deletedAt) break;
+
+                    // Verificar que el usuario tiene acceso a esta conversación
+                    if (root.conversationId && root.conversationId.startsWith('group_')) {
+                        const tGrpId = root.conversationId.replace('group_', '');
+                        const tGrp = await Group.findOne({ groupId: tGrpId }).lean();
+                        if (!tGrp || !tGrp.members.includes(ws.phone)) break;
+                    } else {
+                        // 1:1: verificar que el usuario es participante de la conversación.
+                        // No usamos split('_') porque los usernames pueden contener '_'.
+                        // En su lugar, reconstruimos los posibles conversationIds y comparamos.
+                        const convId = root.conversationId || '';
+                        // El convId es [usernameA, usernameB].sort().join('_')
+                        // Si from y to son conocidos, verificamos directamente:
+                        const isParticipant = convId === [ws.username, root.from].sort().join('_') ||
+                            convId === [ws.username, root.to].sort().join('_')  ||
+                            root.from === ws.username || root.to === ws.username;
+                        if (!isParticipant) break;
+                    }
 
                     const newId = crypto.randomUUID();
                     const threadMsg = new Message({
@@ -2524,20 +2651,25 @@ wss.on('connection', (ws) => {
             // Actualizar lastSeen al desconectarse
             if (ws.phone) {
                 const lastSeenNow = new Date();
-                User.updateOne({ phone: ws.phone }, { lastSeen: lastSeenNow }).exec();
-                // Notificar a los contactos que tengan este chat abierto
-                broadcast({ type: 'user_last_seen', username: ws.username, lastSeen: lastSeenNow.toISOString() });
+                const disconnectedPhone = ws.phone;
+                const disconnectedUsername = ws.username;
+                User.updateOne({ phone: disconnectedPhone }, { lastSeen: lastSeenNow }).exec().catch(e => console.error('[lastSeen] update error:', e.message));
+                // Notificar lastSeen solo a quienes tienen a este usuario en contactos (o al admin)
+                broadcastInfoFiltered(
+                    { type: 'user_last_seen', username: disconnectedUsername, lastSeen: lastSeenNow.toISOString() },
+                    disconnectedPhone
+                ).catch(e => console.error("[broadcastInfoFiltered]", e.message));
             }
-            broadcastUsers();
-            broadcast({
+            broadcastUsers().catch(e => console.error("[broadcastUsers]", e.message));
+            broadcastInfoFiltered({
                 type:    'info',
                 message: `${ws.username} salió del chat`
-            });
+            }, ws.phone).catch(e => console.error("[broadcastInfoFiltered]", e.message));
         }
     });
 
     ws.on('error', (err) => {
-        console.error(`Error WebSocket (${ws.username}):`, err.message);
+        console.error(`Error WebSocket (${ws.username || 'sin-identificar'}):`, err.message);
     });
 });
 
@@ -2564,7 +2696,7 @@ function sendMessage(message) {
     if (targetWs && targetWs.readyState === WebSocket.OPEN && targetWs !== senderWs) {
         targetWs.send(inboxPayload);
         // Marcar como entregado
-        Message.updateOne({ id: message.id }, { delivered: true }).exec();
+        Message.updateOne({ id: message.id }, { delivered: true }).exec().catch(e => console.error('[delivered] update error:', e.message));
         if (senderWs && senderWs.readyState === WebSocket.OPEN) {
             senderWs.send(JSON.stringify({ type: 'delivered', id: message.id }));
         }
@@ -2604,7 +2736,7 @@ function sendMessage(message) {
     }
 }
 
-function broadcastUsers() {
+async function broadcastUsers() {
     // Filtrar sockets que aún no han enviado 'join' (username vacío o nulo)
     const onlineWithAvatars = [...users.entries()]
         .filter(([name]) => name && typeof name === 'string' && name.trim() !== '')
@@ -2614,14 +2746,40 @@ function broadcastUsers() {
             phone:    ws.phone || null,
             isAway:   ws.isAway || false
         }));
-    // Enviar a cada usuario la lista SIN él mismo incluido
-    users.forEach((ws) => {
-        if (ws.readyState !== 1 /* OPEN */) return;
-        const listForThisUser = onlineWithAvatars.filter(u => u.username !== ws.username);
+
+    // Enviar a cada usuario la lista filtrada por sus contactos.
+    // El admin (ADMIN_PHONE) ve a todos; el resto solo ven a sus contactos.
+    for (const [, ws] of users) {
+        if (ws.readyState !== 1 /* OPEN */) continue;
+
+        let listForThisUser;
+        try {
+            if (isAdmin(ws.phone)) {
+                // El admin ve a todos excepto a sí mismo
+                listForThisUser = onlineWithAvatars.filter(u => u.username !== ws.username);
+            } else if (ws.phone) {
+                // Usuario normal: obtener sus contactos de BD
+                const myContacts = await Contact.find({ ownerPhone: ws.phone }).lean();
+                const contactPhones = new Set(myContacts.map(c => c.contactPhone));
+                // Solo incluir usuarios que estén en su lista de contactos (y no él mismo)
+                listForThisUser = onlineWithAvatars.filter(u =>
+                    u.username !== ws.username &&
+                    u.phone &&
+                    contactPhones.has(u.phone)
+                );
+            } else {
+                // Sin teléfono: lista vacía (sesión legacy)
+                listForThisUser = [];
+            }
+        } catch(_) {
+            // En caso de error de BD, enviar lista vacía para no exponer datos
+            listForThisUser = [];
+        }
+
         try {
             ws.send(JSON.stringify({ type: 'users', online: listForThisUser }));
         } catch(_) {}
-    });
+    }
 }
 
 function broadcast(data) {
@@ -2631,6 +2789,28 @@ function broadcast(data) {
             ws.send(payload);
         }
     });
+}
+
+// Versión de broadcast para mensajes de tipo 'info' (entrada/salida de usuarios).
+// Solo envía el aviso a quienes tienen al usuario afectado en sus contactos (o al admin).
+// Para cualquier otro tipo de mensaje usa broadcast() directamente.
+async function broadcastInfoFiltered(data, affectedPhone) {
+    const payload = JSON.stringify(data);
+    for (const [, ws] of users) {
+        if (ws.readyState !== WebSocket.OPEN) continue;
+        try {
+            // El admin siempre recibe todos los avisos
+            if (isAdmin(ws.phone)) {
+                ws.send(payload);
+                continue;
+            }
+            // Usuarios normales: solo si el usuario afectado está en sus contactos
+            if (ws.phone && affectedPhone) {
+                const contact = await Contact.findOne({ ownerPhone: ws.phone, contactPhone: affectedPhone }).lean();
+                if (contact) ws.send(payload);
+            }
+        } catch(_) {}
+    }
 }
 
 // Enviar a todos los usuarios de una conversación (1:1 o grupo)

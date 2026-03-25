@@ -5358,16 +5358,23 @@ function verifyOTP() {
         fetch(`/api/user?phone=${encodeURIComponent(loginPhone)}`)
             .then(r => r.ok ? r.json() : null)
             .then(userData => {
-                if (userData && userData.avatar && userData.avatar.startsWith('data:image/')) {
-                    myAvatarDataUrl = userData.avatar;
-                    localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
-                } else if (localAvatar && localAvatar.startsWith('data:image/')) {
+                const serverAvatar = userData && userData.avatar;
+                const isValidAvatar = serverAvatar && (
+                    serverAvatar.startsWith('data:image/') || serverAvatar.startsWith('https://')
+                );
+                if (isValidAvatar) {
+                    myAvatarDataUrl = serverAvatar;
+                    // Solo guardar en localStorage si es base64 (las URLs Cloudinary no necesitan caché local)
+                    if (serverAvatar.startsWith('data:image/')) {
+                        localStorage.setItem(`kvs_avatar_${loginPhone}`, myAvatarDataUrl);
+                    }
+                } else if (localAvatar && (localAvatar.startsWith('data:image/') || localAvatar.startsWith('https://'))) {
                     myAvatarDataUrl = localAvatar;
                 }
                 finishLogin();
             })
             .catch(() => {
-                if (localAvatar && localAvatar.startsWith('data:image/')) myAvatarDataUrl = localAvatar;
+                if (localAvatar && (localAvatar.startsWith('data:image/') || localAvatar.startsWith('https://'))) myAvatarDataUrl = localAvatar;
                 finishLogin();
             });
         return;
@@ -5401,7 +5408,8 @@ function finishLogin() {
 
     // Cargar avatar guardado o usar dicebear por defecto
     const savedAvatar = localStorage.getItem(`kvs_avatar_${loginPhone}`);
-    myAvatarDataUrl = savedAvatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
+    const isValidSaved = savedAvatar && (savedAvatar.startsWith('data:image/') || savedAvatar.startsWith('https://'));
+    myAvatarDataUrl = isValidSaved ? savedAvatar : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(loginUsername)}`;
 
     // Rellenar perfil sidebar
     document.getElementById('myName').textContent = loginUsername;
@@ -5504,7 +5512,11 @@ function logout() {
     // Cancelar suscripción push antes de borrar loginPhone (necesitamos el phone para el endpoint)
     _cancelarSuscripcionPush().catch(() => {});
 
-    if (socket) { socket.close(); socket = null; }
+    // Cancelar cualquier reconexión automática pendiente
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    _pararHeartbeat();
+
+    if (socket) { socket.onclose = null; socket.onerror = null; socket.close(); socket = null; }
     localStorage.removeItem('kvs_session');
     loginPhone    = '';
     loginUsername = '';
@@ -5812,31 +5824,7 @@ async function compartirApp() {
 }
 
 // ── Toast de notificación visual ────────────────────────────────────────────
-function mostrarToast(mensaje, duracion = 2500) {
-    // Reutilizar toast existente si lo hay, si no crearlo
-    let toast = document.getElementById('kvsToast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'kvsToast';
-        toast.style.cssText = `
-            position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
-            background:rgba(30,27,75,0.92); color:#fff; border-radius:22px; padding:11px 22px;
-            font-size:14px; font-weight:600; font-family:'DM Sans',sans-serif;
-            box-shadow:0 6px 28px rgba(0,0,0,0.28); z-index:99999;
-            opacity:0; transition:opacity .22s, transform .22s; white-space:nowrap;
-            max-width:90vw; text-align:center; pointer-events:none;
-        `;
-        document.body.appendChild(toast);
-    }
-    toast.textContent = mensaje;
-    toast.style.opacity = '1';
-    toast.style.transform = 'translateX(-50%) translateY(0)';
-    clearTimeout(toast._hideTimer);
-    toast._hideTimer = setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-50%) translateY(20px)';
-    }, duracion);
-}
+// mostrarToast definida más abajo (implementación única)
 let socket;
 let currentChat = null;
 let username;
@@ -5981,7 +5969,13 @@ function conectarWS() {
     };
 
     socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch(e) {
+            console.warn('[WS] Mensaje JSON inválido:', e.message);
+            return;
+        }
         handleMessage(data);
     };
 
@@ -6579,7 +6573,7 @@ function handleMessage(data) {
                     const estadoEl = bubble ? bubble.querySelector(`#estado_${oldLocalId}`) : null;
                     if (estadoEl) estadoEl.id = `estado_${data.id}`;
                     // Actualizar el id en todos los arrays de conversations
-                    for (const arr of Object.values(conversations)) {
+                    for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
                         if (!Array.isArray(arr)) continue;
                         const localIdx = arr.findIndex(m => m.id === oldLocalId);
                         if (localIdx >= 0) {
@@ -6617,7 +6611,7 @@ function handleMessage(data) {
                         }
                         const rowStill = document.querySelector(`[data-msgid="${data.id}"]`);
                         if (rowStill) rowStill.remove();
-                        Object.values(conversations).forEach(arr => {
+                        Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
                             if (!Array.isArray(arr)) return;
                             const idx = arr.findIndex(m => m.id === data.id);
                             if (idx >= 0) arr.splice(idx, 1);
@@ -6708,7 +6702,7 @@ function handleMessage(data) {
     if (data.type === 'delivered') {
         updateEstado(data.id, '✔✔');
         // Actualizar en caché — buscar también en mensajes aún con id local_
-        for (const arr of Object.values(conversations)) {
+        for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
             if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === data.id);
             if (m) { m.delivered = true; }
@@ -6718,7 +6712,7 @@ function handleMessage(data) {
     if (data.type === 'read') {
         updateEstado(data.id, '✔✔ leído');
         // Actualizar en caché — ya lo hace updateEstado pero dejamos esto para seguridad
-        for (const arr of Object.values(conversations)) {
+        for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
             if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === data.id);
             if (m) { m.read = true; m.delivered = true; }
@@ -6861,7 +6855,7 @@ function handleMessage(data) {
             }
         }
         // Actualizar en conversations[]
-        for (const arr of Object.values(conversations)) {
+        for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === data.id);
             if (m) { if (!m.audioReadBy) m.audioReadBy = []; if (!m.audioReadBy.includes(data.by)) m.audioReadBy.push(data.by); break; }
         }
@@ -6878,8 +6872,13 @@ function handleMessage(data) {
         return;
     }
     if (data.type === 'contactError') {
-        document.getElementById('addContactError').textContent = 'Error: ' + data.message;
-        document.getElementById('btnGuardarContacto').disabled = false;
+        // Puede ser error de addContact o de renameContact: reactivar ambos botones
+        const addErrEl = document.getElementById('addContactError');
+        if (addErrEl) addErrEl.textContent = 'Error: ' + data.message;
+        const btnGuardar = document.getElementById('btnGuardarContacto');
+        if (btnGuardar) btnGuardar.disabled = false;
+        const btnRenombre = document.getElementById('btnGuardarRenombre');
+        if (btnRenombre) btnRenombre.disabled = false;
         return;
     }
 
@@ -7137,11 +7136,12 @@ function _limpiarEstadoChat() {
 function seleccionarUsuario(user) {
     if (!user) return;
 
-    // ── Bloquear chat con desconocidos ───────────────────────────────────
+    // ── Bloquear chat con desconocidos (el admin puede chatear con todos) ──
     const phoneOfUser = window._phoneToUsername
         ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
         : null;
-    if (phoneOfUser && !myContacts.has(phoneOfUser)) return;
+    const _isAdminUser = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
+    if (phoneOfUser && !myContacts.has(phoneOfUser) && !_isAdminUser) return;
 
     if (currentChat === user) return;
     _limpiarEstadoChat();
@@ -7383,12 +7383,13 @@ function enviar() {
     if (!text && !pendingImage) return;
     if (!currentChat) return;
 
-    // ── Bloquear envío a desconocidos en chat 1:1 ───────────────────────
+    // ── Bloquear envío a desconocidos en chat 1:1 (el admin puede enviar a todos) ──
     if (!currentChat.startsWith('group_') && !currentChat.startsWith('phone:')) {
         const chatPhone = window._phoneToUsername
             ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === currentChat)?.[0]
             : null;
-        if (chatPhone && !myContacts.has(chatPhone)) return;
+        const _isAdminSend = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
+        if (chatPhone && !myContacts.has(chatPhone) && !_isAdminSend) return;
     }
 
     // ── Mensaje de grupo ──────────────────────────────
@@ -7886,13 +7887,13 @@ function updateEstado(id, estado) {
     // Aunque el elemento no esté en el DOM (p.ej. aún es local_ o el chat no está visible),
     // actualizar la caché para que la próxima vez que se renderice muestre el estado correcto.
     if (estado === '✔✔ leído') {
-        for (const arr of Object.values(conversations)) {
+        for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
             if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === id);
             if (m) { m.read = true; m.delivered = true; }
         }
     } else if (estado === '✔✔') {
-        for (const arr of Object.values(conversations)) {
+        for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
             if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === id);
             if (m) { m.delivered = true; }
@@ -9326,7 +9327,7 @@ function abrirModalEditarGrupo(groupId) {
         if (g.avatar) {
             previewEl.innerHTML = `<img src="${g.avatar}" alt="${escapeHTML(g.name || '')}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`;
         } else {
-            previewEl.innerHTML = (g.name || '?').charAt(0).toUpperCase();
+            previewEl.textContent = (g.name || '?').charAt(0).toUpperCase();
         }
     }
     // Reset input file foto del grupo
@@ -9775,7 +9776,16 @@ function onContactAdded(contactPhone, customName, avatar, username) {
         }
     }
     const esNuevo = !myContacts.has(contactPhone);
-    myContacts.set(contactPhone, { contactPhone, customName: finalName, avatar: avatar || null, username: username || null });
+    // Preservar flags de bloqueo si el contacto ya existía
+    const _existingContact = myContacts.get(contactPhone);
+    myContacts.set(contactPhone, {
+        contactPhone,
+        customName:   finalName,
+        avatar:       avatar || null,
+        username:     username || null,
+        blocked:      _existingContact ? (_existingContact.blocked   || false) : false,
+        blockedUs:    _existingContact ? (_existingContact.blockedUs || false) : false
+    });
     // Cachear avatar para uso offline
     if (avatar) {
         if (username) userAvatars[username] = avatar;
@@ -9977,7 +9987,7 @@ function actualizarHeaderGrupo(g) {
     if (g.avatar) {
         el.innerHTML = `<img src="${g.avatar}" alt="${escapeHTML(g.name || '')}">`;
     } else {
-        el.innerHTML = (g.name || '?').charAt(0).toUpperCase();
+        el.textContent = (g.name || '?').charAt(0).toUpperCase();
     }
     // Todos los miembros pueden cambiar la foto del grupo
     el.title = 'Cambiar foto del grupo';
@@ -10450,22 +10460,29 @@ function mostrarToast(msg, esError = false) {
     if (!toast) {
         toast = document.createElement('div');
         toast.id = 'kvsToast';
-        toast.style.cssText = `
-            position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
-            background:var(--text-dark);color:var(--white);
-            padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;
-            z-index:99999;white-space:nowrap;pointer-events:none;
-            transition:opacity .25s;opacity:0;font-family:'DM Sans',sans-serif;
-            box-shadow:0 4px 16px rgba(0,0,0,0.18);
-        `;
+        toast.style.cssText = [
+            'position:fixed','bottom:28px','left:50%',
+            'transform:translateX(-50%) translateY(20px)',
+            'background:rgba(30,27,75,0.92)','color:#fff','border-radius:22px',
+            'padding:11px 22px','font-size:14px','font-weight:600',
+            "font-family:'DM Sans',sans-serif",
+            'box-shadow:0 6px 28px rgba(0,0,0,0.28)','z-index:99999',
+            'opacity:0','transition:opacity .22s, transform .22s',
+            'white-space:nowrap','max-width:90vw','text-align:center',
+            'pointer-events:none'
+        ].join(';');
         document.body.appendChild(toast);
     }
     if (esError) toast.style.background = '#ef4444';
-    else toast.style.background = 'var(--text-dark)';
+    else toast.style.background = 'rgba(30,27,75,0.92)';
     toast.textContent = msg;
     toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
     if (_toastTimer) clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+    _toastTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(20px)';
+    }, 3000);
 }
 
 // ============================================================
@@ -10624,7 +10641,7 @@ function scrollToMsg(msgId) {
 function iniciarRespuesta(msgId) {
     // Buscar el mensaje en conversations para obtener datos fiables
     let msgFrom = '', msgText = '';
-    for (const arr of Object.values(conversations)) {
+    for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
         const m = arr.find(m => m.id === msgId);
         if (m) {
             msgFrom = m.from === username ? 'Tú' : m.from;
@@ -10671,7 +10688,7 @@ function cancelarRespuesta() {
 function iniciarEdicion(msgId) {
     // Leer el texto original de conversations (fuente de verdad), no del DOM
     let currentText = '';
-    for (const arr of Object.values(conversations)) {
+    for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
         const m = arr.find(m => m.id === msgId);
         if (m && !m.deletedAt) { currentText = m.message || ''; break; }
     }
@@ -10725,7 +10742,7 @@ function guardarEdicion() {
     // y guardamos el nuevo texto para cuando llegue el id real.
     if (editId.startsWith('local_')) {
         // Actualizar texto en conversations[] (la fuente de verdad local)
-        for (const arr of Object.values(conversations)) {
+        for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
             const m = arr.find(m => m.id === editId);
             if (m) { m.message = newText; m._pendingEdit = newText; m.editedAt = new Date(); break; }
         }
@@ -10772,7 +10789,7 @@ function guardarEdicion() {
 
 function onMensajeEditado(msgId, newText, editedAt) {
     // Actualizar en conversations
-    Object.values(conversations).forEach(arr => {
+    Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
         const m = arr.find(m => m.id === msgId);
         if (m) { m.message = newText; m.editedAt = editedAt || m.editedAt || new Date(); }
     });
@@ -10984,7 +11001,7 @@ function eliminarMensaje(msgId) {
             const row = document.querySelector(`[data-msgid="${msgId}"]`);
             if (row) row.remove();
             // Quitar de conversations
-            Object.values(conversations).forEach(arr => {
+            Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
                 const idx = arr.findIndex(m => m.id === msgId);
                 if (idx >= 0) arr.splice(idx, 1);
             });
@@ -11008,7 +11025,7 @@ function ocultarMensajeParaMi(msgId) {
         const row = document.querySelector(`[data-msgid="${msgId}"]`);
         if (row) row.remove();
         // Eliminar de conversations local para que no reaparezca al recargar historial
-        Object.values(conversations).forEach(arr => {
+        Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
             const idx = arr.findIndex(m => m.id === msgId);
             if (idx >= 0) arr.splice(idx, 1);
         });
@@ -11028,7 +11045,7 @@ function ocultarMensajeParaMi(msgId) {
 
 function onMensajeEliminado(msgId) {
     // Actualizar conversations
-    Object.values(conversations).forEach(arr => {
+    Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
         const m = arr.find(m => m.id === msgId);
         if (m) { m.deletedAt = new Date(); m.message = ''; m.imageData = null; m.audioData = null; }
     });
@@ -11090,7 +11107,7 @@ function toggleReaccion(msgId, emoji) {
 
 function onReaccionActualizada(msgId, reactions) {
     // Actualizar conversations
-    Object.values(conversations).forEach(arr => {
+    Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
         const m = arr.find(m => m.id === msgId);
         if (m) m.reactions = reactions;
     });
@@ -11117,7 +11134,7 @@ function onMensajeDestacado(msgId, starred) {
         existing.remove();
     }
     // Actualizar conversations
-    Object.values(conversations).forEach(arr => {
+    Object.values(conversations).forEach(arr => { if (!Array.isArray(arr)) return;
         const m = arr.find(m => m.id === msgId);
         if (m) {
             if (!m.starredBy) m.starredBy = [];
@@ -11138,7 +11155,7 @@ function abrirModalReenviar(msgId) {
 
     // Buscar mensaje original: primero en conversations, luego en el DOM
     let origMsg = null;
-    for (const arr of Object.values(conversations)) {
+    for (const arr of Object.values(conversations)) { if (!Array.isArray(arr)) continue;
         const m = arr.find(m => m.id === msgId);
         if (m) { origMsg = { ...m }; break; }
     }
@@ -12019,9 +12036,13 @@ function cancelarEsperaSession() {
     ocultarPantallaEsperandoAprobacion();
     // Cerrar el socket en espera y volver al login
     if (socket) { socket.onclose = null; socket.onerror = null; try { socket.close(); } catch(_) {} socket = null; }
-    loginPhone = null; loginUsername = null;
+    // Limpiar sesión del localStorage para que al recargar no intente reconectar
+    localStorage.removeItem('kvs_session');
+    loginPhone = ''; loginUsername = '';
+    username = null; conectado = false;
     const loginModal = document.getElementById('loginModal');
     if (loginModal) loginModal.style.display = 'flex';
+    goToStep(1);
 }
 
 // ============================================================
