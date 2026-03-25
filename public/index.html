@@ -108,7 +108,7 @@ async function instalarPWA() {
 
 // ── Helpers de navegación móvil ─────────────────────────────────────────────
 function _esMobile() {
-    return window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+    return window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile');
 }
 
 function _pushChatState() {
@@ -141,7 +141,7 @@ function volverALista() {
 }
 
 window.addEventListener('popstate', (e) => {
-    const esMobil = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+    const esMobil = window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile');
     if (!esMobil) return;
 
     // Si hay algún modal abierto, cerrarlo primero
@@ -191,7 +191,7 @@ function toggleSidebar() {
         touchStartY = e.touches[0].clientY;
         isSwiping = false;
         const sidebar = document.getElementById('sidebar');
-        const isMobil = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+        const isMobil = window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile');
         if (!isMobil) return;
         // Swipe-open: solo desde el borde izquierdo cuando sidebar está oculto
         if (!sidebar.classList.contains('visible') && touchStartX <= EDGE_THRESHOLD) {
@@ -205,7 +205,7 @@ function toggleSidebar() {
 
     document.addEventListener('touchend', (e) => {
         if (!isSwiping) return;
-        const isMobil = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+        const isMobil = window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile');
         if (!isMobil) return;
         const dx = e.changedTouches[0].clientX - touchStartX;
         const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
@@ -1285,7 +1285,7 @@ li.has-unread .unread-badge {
 /* En móvil: ocultar botones secundarios del header y mostrar solo ⋯ */
 .btn-header-more { display: none; }
 
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 900px) {
     .btn-header-secondary { display: none !important; }
     .btn-header-more      { display: flex !important; font-size: 22px; font-weight: 700; letter-spacing: 1px; padding: 4px 8px; }
 }
@@ -1839,7 +1839,7 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 }
 
 /* En móvil: el panel de emojis se muestra como bottom-sheet */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 900px) {
     #stickerGiftPanel {
         position: fixed;
         bottom: 0 !important;
@@ -3936,7 +3936,7 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 /* ============================================================
    TABLET  (769px – 1024px)
 ============================================================ */
-@media screen and (min-width: 769px) and (max-width: 1024px) {
+@media screen and (min-width: 901px) and (max-width: 1024px) {
     :root {
         --sidebar-w: var(--sidebar-w-tablet);
     }
@@ -3973,9 +3973,9 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 }
 
 /* ============================================================
-   MÓVIL  (≤768px)
+   MÓVIL  (≤900px) — umbral unificado con detectMobile()
 ============================================================ */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 900px) {
     .app { padding: 0; }
 
     .window {
@@ -4028,7 +4028,13 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
     .chat-panel {
         grid-column: 1;
         min-height: 0;
+        overflow: hidden;
+        width: 100%;
+        max-width: 100vw;
     }
+
+    /* En móvil el window no debe recortar el sidebar deslizante */
+    .window { overflow: visible; }
 
     /* ── Header ── */
     .chat-header {
@@ -4194,6 +4200,7 @@ html.is-mobile .window {
     height: 100vh; height: 100dvh;
     border-radius: 0; grid-template-columns: 1fr;
     box-shadow: none; border: none;
+    overflow: visible;
 }
 
 html.is-mobile .sidebar {
@@ -4210,6 +4217,12 @@ html.is-mobile .sidebar {
     padding-top: env(safe-area-inset-top, 0px);
 }
 html.is-mobile .sidebar.visible { left: 0; }
+
+html.is-mobile .chat-panel {
+    overflow: hidden;
+    width: 100%;
+    max-width: 100vw;
+}
 
 html.is-mobile #hamburger       { display: flex !important; width: 44px; height: 44px; }
 html.is-mobile .bubble          { font-size: 15px; }
@@ -7255,7 +7268,7 @@ function seleccionarUsuario(user) {
     renderUsers(lastKnownUsers);
     renderContactsList();
     // Cerrar sidebar en móvil y tablet al seleccionar usuario
-    if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
+    if (window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
         _pushChatState();
@@ -7327,7 +7340,7 @@ function seleccionarContactoOffline(phone) {
     delete conversations[chatKey];
     socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
 
-    if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
+    if (window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
         _pushChatState();
@@ -8704,7 +8717,7 @@ function seleccionarGrupo(groupId) {
     renderGroupsList();
     renderContactsList();
 
-    if (window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile')) {
+    if (window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile')) {
         const sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('visible')) toggleSidebar();
         _pushChatState();
@@ -11387,7 +11400,7 @@ function toggleStickerGiftPanel(e) {
         renderSGPanel(_sgTab);
         panel.classList.add('visible');
         // Posicionar el panel dinámicamente (solo en desktop — en móvil CSS lo pone como bottom-sheet)
-        const isMob = window.innerWidth <= 768 || document.documentElement.classList.contains('is-mobile');
+        const isMob = window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile');
         if (!isMob) {
             const btn = document.getElementById('btnStickerGift');
             if (btn) {
