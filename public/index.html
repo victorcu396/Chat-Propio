@@ -668,6 +668,18 @@ html, body {
     transition: background var(--transition);
 }
 
+/* Contenedor scrollable global del sidebar — todo el contenido bajo el header */
+#sidebarScroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+}
+
 .sidebar-header {
     padding: 18px 16px 14px;
     border-bottom: 1px solid var(--border);
@@ -1046,10 +1058,9 @@ html, body {
 }
 
 #users {
-    flex: 1;
-    overflow-y: auto;
     list-style: none;
     padding: 4px 8px 10px;
+    flex-shrink: 0;
 }
 
 #users li {
@@ -3062,10 +3073,7 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 #contactsList {
     list-style: none;
     padding: 4px 8px 2px;
-    overflow-y: auto;
     flex-shrink: 0;
-    max-height: 35%;
-    min-height: 0;
 }
 
 #contactsList li {
@@ -3485,9 +3493,7 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
 
 #groupsList {
     list-style: none;
-    overflow-y: auto;
     flex-shrink: 0;
-    max-height: 30%;
 }
 
 #groupsList li {
@@ -4469,38 +4475,43 @@ html {
         </div>
       </div>
 
-      <!-- Contacts Section -->
-      <div class="users-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
-        <span>Contactos <span id="contactsHeaderBadge" style="display:none;background:var(--purple-deep);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;vertical-align:middle;margin-left:4px;"></span></span>
-        <button class="btn-add-contact" onclick="abrirModalAgregarContacto()" title="Agregar contacto">＋</button>
-      </div>
-      <div style="padding:4px 8px 2px;">
-        <input id="contactSearch" type="search" placeholder="🔍 Buscar contacto…"
-          style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
-          oninput="renderContactsList()" onsearch="renderContactsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
-      </div>
-      <ul id="contactsList"></ul>
+      <!-- Contenedor scrollable global del sidebar (todo excepto el header) -->
+      <div id="sidebarScroll">
 
-      <!-- Groups Section -->
-      <div class="groups-label">
-        <span>Grupos</span>
-        <button class="btn-add-contact" onclick="abrirModalCrearGrupo()" title="Crear grupo">＋</button>
-      </div>
-      <div style="padding:0 8px 4px;">
-        <input id="groupSearch" type="search" placeholder="🔍 Buscar grupo…"
-          style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
-          oninput="renderGroupsList()" onsearch="renderGroupsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
-      </div>
-      <ul id="groupsList"></ul>
+        <!-- Contacts Section -->
+        <div class="users-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
+          <span>Contactos <span id="contactsHeaderBadge" style="display:none;background:var(--purple-deep);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;vertical-align:middle;margin-left:4px;"></span></span>
+          <button class="btn-add-contact" onclick="abrirModalAgregarContacto()" title="Agregar contacto">＋</button>
+        </div>
+        <div style="padding:4px 8px 2px;">
+          <input id="contactSearch" type="search" placeholder="🔍 Buscar contacto…"
+            style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
+            oninput="renderContactsList()" onsearch="renderContactsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <ul id="contactsList"></ul>
 
-      <!-- Archivadas -->
-      <div class="archived-label" onclick="toggleArchivedSection()" id="archivedLabel">
-        <span>📁 Archivadas</span><span id="archivedCount" style="background:var(--border);border-radius:10px;padding:1px 7px;font-size:10px;"></span>
-      </div>
-      <ul id="archivedList"></ul>
+        <!-- Groups Section -->
+        <div class="groups-label">
+          <span>Grupos</span>
+          <button class="btn-add-contact" onclick="abrirModalCrearGrupo()" title="Crear grupo">＋</button>
+        </div>
+        <div style="padding:0 8px 4px;">
+          <input id="groupSearch" type="search" placeholder="🔍 Buscar grupo…"
+            style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-body);font-family:inherit;font-size:13px;color:var(--text-dark);outline:none;"
+            oninput="renderGroupsList()" onsearch="renderGroupsList()" onfocus="this.style.borderColor='var(--purple-deep)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <ul id="groupsList"></ul>
 
-      <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
-      <ul id="users"></ul>
+        <!-- Archivadas -->
+        <div class="archived-label" onclick="toggleArchivedSection()" id="archivedLabel">
+          <span>📁 Archivadas</span><span id="archivedCount" style="background:var(--border);border-radius:10px;padding:1px 7px;font-size:10px;"></span>
+        </div>
+        <ul id="archivedList"></ul>
+
+        <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
+        <ul id="users"></ul>
+
+      </div><!-- /sidebarScroll -->
     </aside>
 
     <!-- ===== CHAT PANEL ===== -->
