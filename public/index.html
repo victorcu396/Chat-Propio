@@ -5898,6 +5898,8 @@ function conectarWS() {
         reconnectInterval = 500; // reset
         _mostrarBannerOffline(false); // ocultar banner offline al reconectar
         window._kvsJoinTimestamp = Date.now(); // marcar el momento del join
+        // Inicializar flag de presencia según el estado actual del documento
+        window._appIsAway = (document.visibilityState === 'hidden');
 
         // Capturar si es sesión nueva ANTES de modificar el flag
         const _fueNuevaSesion = _esSesionNueva;
@@ -6090,6 +6092,7 @@ function _actualizarChatStatusPresencia() {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         // App va a background → parar heartbeat y marcar ausente
+        window._appIsAway = true;
         _pararHeartbeat();
         if (socket && socket.readyState === WebSocket.OPEN) {
             try {
@@ -6098,7 +6101,18 @@ document.addEventListener('visibilitychange', () => {
         }
     } else {
         // App vuelve al foreground
+        window._appIsAway = false;
         console.log('👀 Usuario volvió → reconexión limpia');
+
+        // Si hay un chat activo, marcar sus mensajes como leídos ahora que el usuario los ve
+        if (currentChat && socket && socket.readyState === WebSocket.OPEN) {
+            try {
+                const mkKey = currentChat.startsWith('phone:')
+                    ? (window._phoneToUsername && window._phoneToUsername[currentChat.replace('phone:', '')]) || currentChat
+                    : currentChat;
+                socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey }));
+            } catch(_) {}
+        }
 
         // 1. Cancelar timer de reconexión pendiente
         if (reconnectTimer) {
@@ -7779,8 +7793,10 @@ function addMessage(msg) {
         chat.appendChild(row);
         _attachBubbleClickMenu(row, msg.id, isMe, false, isGroup);
         if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
-        // Solo enviar read individual si es un mensaje nuevo en tiempo real (no historial)
-        if (!isMe && socket && !window._kvsLoadingHistory) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+        // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
+        if (!isMe && socket && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
+            socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+        }
         return;
     }
 
@@ -7826,8 +7842,10 @@ function addMessage(msg) {
         if (bubble) _adjuntarLinkPreview(bubble, msg.message);
     }
     if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
-    // Solo enviar read individual si es un mensaje nuevo en tiempo real (no historial)
-    if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory) socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+    // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
+    if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
+        socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+    }
 }
 
 function escapeHTML(str) {
