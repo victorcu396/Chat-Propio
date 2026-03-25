@@ -383,11 +383,7 @@ html, body {
     grid-template-rows: 1fr;
     background: var(--white);
     border-radius: 22px;
-    /* overflow:hidden eliminado — creaba stacking context que impedía que
-       position:fixed de paneles flotantes (emojis, menciones) quedase por encima.
-       El clip visual se mantiene con clip-path. */
-    overflow: visible;
-    clip-path: inset(0 round 22px);
+    overflow: hidden;
     box-shadow: 0 20px 60px rgba(79,70,229,0.20), 0 4px 20px rgba(0,0,0,0.08);
     border: 1px solid rgba(79,70,229,0.12);
     position: relative;
@@ -671,8 +667,6 @@ html, body {
     min-width: 0;
     transition: background var(--transition);
 }
-
-/* Contenedor scrollable global del sidebar — todo el contenido bajo el header */
 #sidebarScroll {
     flex: 1;
     overflow-y: auto;
@@ -1186,9 +1180,7 @@ li.has-unread .unread-badge {
     flex-direction: column;
     background: var(--bg-chat);
     position: relative;
-    /* overflow:hidden eliminado — creaba stacking context.
-       El clipping visual lo gestiona el .window con clip-path. */
-    overflow: visible;
+    overflow: hidden;
     min-width: 0;
 }
 
@@ -1782,9 +1774,8 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 .thread-input-area {
     padding: 10px 12px; border-top: 1px solid var(--border);
     display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
-    position: relative; z-index: 2;
+    position: relative; z-index: 1;
     pointer-events: auto;
-    background: var(--white);
 }
 .thread-input {
     flex: 1; min-height: 38px; max-height: 90px;
@@ -1799,11 +1790,7 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
     user-select: text;
     pointer-events: auto;
     position: relative;
-    z-index: 2;
-    cursor: text;
-    /* Nunca deshabilitar el input */
-    -webkit-appearance: none;
-    appearance: none;
+    z-index: 1;
 }
 .thread-input:focus { border-color: var(--purple-deep); }
 .thread-send-btn {
@@ -1855,7 +1842,7 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
         top: auto;
         border-radius: 20px 20px 0 0;
         max-height: 52vh;
-        z-index: 99998;
+        z-index: 99999;
         box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
@@ -1873,7 +1860,7 @@ html.is-mobile #stickerGiftPanel {
     bottom: 0; left: 0; right: 0; top: auto;
     border-radius: 20px 20px 0 0;
     max-height: 52vh;
-    z-index: 99998;
+    z-index: 99999;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -1932,21 +1919,11 @@ html.is-mobile #stickerGiftPanel {
     padding: 10px 14px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
     background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--border);
     position: relative;
     flex-shrink: 0;
-}
-/* backdrop-filter en pseudo-elemento para NO crear stacking context en el padre,
-   lo que permitiría que elementos position:fixed hijos (emoji panel, mentionList)
-   se posicionen correctamente por encima de los mensajes */
-.input-area::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    pointer-events: none;
-    z-index: 0;
 }
 
 /* ═══════════════════════════════════════════
@@ -1954,12 +1931,11 @@ html.is-mobile #stickerGiftPanel {
 ═══════════════════════════════════════════ */
 #stickerGiftPanel {
     position: fixed;
-    /* left / right / bottom se calculan por JS según el botón de emojis */
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: 16px 16px 16px 16px;
     box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-    z-index: 99998;
+    z-index: 99999;
     display: none;
     flex-direction: column;
     max-height: 360px;
@@ -2502,7 +2478,6 @@ emoji-picker.visible { display: block; }
 #mentionList {
     display: none;
     position: fixed;
-    /* left/right/bottom se calculan por JS según el textarea */
     background: var(--white);
     border: 1px solid var(--border);
     border-top: 2px solid var(--purple-light);
@@ -3969,7 +3944,6 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         max-height: none;
         grid-template-columns: var(--sidebar-w-tablet) 1fr;
         border-radius: 14px;
-        clip-path: inset(0 round 14px);
     }
 
     .sidebar-header { padding: 16px 14px 12px; }
@@ -4005,7 +3979,6 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
         height: 100dvh;
         max-height: none;
         border-radius: 0;
-        clip-path: none;
         grid-template-columns: 1fr;
         box-shadow: none;
         border: none;
@@ -4221,7 +4194,7 @@ html.is-mobile .app    { padding: 0; }
 html.is-mobile .window {
     width: 100%; max-height: none;
     height: 100vh; height: 100dvh;
-    border-radius: 0; clip-path: none; grid-template-columns: 1fr;
+    border-radius: 0; grid-template-columns: 1fr;
     box-shadow: none; border: none;
 }
 
@@ -4492,9 +4465,7 @@ html {
         </div>
       </div>
 
-      <!-- Contenedor scrollable global del sidebar (todo excepto el header) -->
       <div id="sidebarScroll">
-
         <!-- Contacts Section -->
         <div class="users-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
           <span>Contactos <span id="contactsHeaderBadge" style="display:none;background:var(--purple-deep);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;vertical-align:middle;margin-left:4px;"></span></span>
@@ -4527,7 +4498,6 @@ html {
 
         <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
         <ul id="users"></ul>
-
       </div><!-- /sidebarScroll -->
     </aside>
 
@@ -5913,7 +5883,6 @@ function conectarWS() {
         reconnectInterval = 500; // reset
         _mostrarBannerOffline(false); // ocultar banner offline al reconectar
         window._kvsJoinTimestamp = Date.now(); // marcar el momento del join
-        // Inicializar flag de presencia según el estado actual del documento
         window._appIsAway = (document.visibilityState === 'hidden');
 
         // Capturar si es sesión nueva ANTES de modificar el flag
@@ -6106,8 +6075,8 @@ function _actualizarChatStatusPresencia() {
 // Al volver al foreground: reanudar heartbeat + notificar 'active'.
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-        // App va a background → parar heartbeat y marcar ausente
         window._appIsAway = true;
+        // App va a background → parar heartbeat y marcar ausente
         _pararHeartbeat();
         if (socket && socket.readyState === WebSocket.OPEN) {
             try {
@@ -6115,11 +6084,8 @@ document.addEventListener('visibilitychange', () => {
             } catch(_) {}
         }
     } else {
-        // App vuelve al foreground
         window._appIsAway = false;
-        console.log('👀 Usuario volvió → reconexión limpia');
-
-        // Si hay un chat activo, marcar sus mensajes como leídos ahora que el usuario los ve
+        // Si hay un chat activo, marcar como leídos ahora que el usuario los ve
         if (currentChat && socket && socket.readyState === WebSocket.OPEN) {
             try {
                 const mkKey = currentChat.startsWith('phone:')
@@ -6128,6 +6094,8 @@ document.addEventListener('visibilitychange', () => {
                 socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey }));
             } catch(_) {}
         }
+        // App vuelve al foreground
+        console.log('👀 Usuario volvió → reconexión limpia');
 
         // 1. Cancelar timer de reconexión pendiente
         if (reconnectTimer) {
@@ -7148,7 +7116,7 @@ function _limpiarEstadoChat() {
     _historyHasMore  = false;
     _historyLoading  = false;
     _historyOldestId = null;
-    // Limpiar siempre el input al cambiar de chat (edición, respuesta o texto normal)
+    // Limpiar siempre el input al cambiar de chat
     _editState  = null;
     _replyState = null;
     input.value = '';
@@ -7158,9 +7126,7 @@ function _limpiarEstadoChat() {
     document.getElementById('replyBar').classList.remove('visible');
     document.getElementById('replyBarName').textContent = '';
     document.getElementById('replyBarText').textContent = '';
-    // Cerrar lista de menciones si estaba abierta
     _cerrarMentionList();
-    // Cancelar imagen pendiente si la había
     if (pendingImage) cancelarImagen();
     // Cerrar panel de emojis/favoritos
     cerrarSGPanel();
@@ -7265,8 +7231,7 @@ function seleccionarUsuario(user) {
     btnU.dataset.mode = '1to1';
     btnU.title = isOnline ? 'Llamada de voz' : 'Llamar (dejará notificación de llamada perdida)';
 
-    // Siempre pedir historial fresco al abrir un chat 1:1 para tener
-    // los estados read/delivered actualizados desde la BD.
+    // Siempre historial fresco al abrir para tener read/delivered actualizados
     delete conversations[user];
     socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
 
@@ -7340,8 +7305,7 @@ function seleccionarContactoOffline(phone) {
     renderContactsList();
     renderGroupsList();
 
-    // Siempre pedir historial fresco al abrir un chat por phone para tener
-    // los estados read/delivered actualizados desde la BD.
+    // Siempre historial fresco al abrir para tener read/delivered actualizados
     delete conversations[chatKey];
     socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
 
@@ -7755,7 +7719,7 @@ function addMessage(msg) {
         chat.appendChild(row);
         _attachBubbleClickMenu(row, msg.id, isMe, false, isGroup);
         if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
-        // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
+        // Solo enviar read si: mensaje nuevo en tiempo real + documento visible + app en primer plano
         if (!isMe && socket && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
             socket.send(JSON.stringify({ type: 'read', id: msg.id }));
         }
@@ -7804,7 +7768,7 @@ function addMessage(msg) {
         if (bubble) _adjuntarLinkPreview(bubble, msg.message);
     }
     if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
-    // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
+    // Solo enviar read si: mensaje nuevo en tiempo real + documento visible + app en primer plano
     if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
         socket.send(JSON.stringify({ type: 'read', id: msg.id }));
     }
@@ -8714,8 +8678,7 @@ function seleccionarGrupo(groupId) {
     btnU.dataset.mode = 'group';
     btnU.title = 'Llamada grupal';
 
-    // Siempre pedir historial fresco al abrir un grupo para tener
-    // los estados read/delivered actualizados desde la BD.
+    // Siempre historial fresco al abrir para tener read/delivered actualizados
     delete conversations[chatKey];
     socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
 
@@ -9158,7 +9121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const egn = document.getElementById('editGroupNameInput');
     if (egn) egn.addEventListener('keydown', (e) => { if (e.key === 'Enter') guardarEditarGrupo(); });
 
-    // Thread input: adjuntar listener unificado (Enter envía, Shift+Enter = salto de línea)
+    // Thread input: adjuntar listener unificado
     _attachThreadInputListener();
 });
 
@@ -11221,62 +11184,36 @@ function _attachThreadInputListener() {
     const threadInputEl = document.getElementById('threadInput');
     if (!threadInputEl || _threadInputListenerAttached) return;
     _threadInputListenerAttached = true;
-
     threadInputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            enviarEnHilo();
-        }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarEnHilo(); }
     });
-
     threadInputEl.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 90) + 'px';
     });
-
     threadInputEl.addEventListener('touchstart', (e) => {
-        e.stopPropagation();
-        threadInputEl.focus();
+        e.stopPropagation(); threadInputEl.focus();
     }, { passive: true });
-
-    threadInputEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
+    threadInputEl.addEventListener('click', (e) => { e.stopPropagation(); });
 }
 
 function abrirHilo(msgId) {
     _threadId = msgId;
-
-    // Mostrar el mensaje raíz en el panel
     const bubble = document.getElementById(msgId);
     const row    = bubble ? bubble.closest('.msg-row') : null;
     const from   = row ? (row.querySelector('.msg-avatar')?.alt || '') : '';
     const textEl = bubble ? bubble.querySelector('.msg-text') : null;
     const text   = textEl ? (textEl.textContent || textEl.innerText || '').trim() : '';
-
     document.getElementById('threadRootFrom').textContent = from;
     document.getElementById('threadRootText').textContent = text.slice(0, 200);
-
-    // Limpiar mensajes anteriores del hilo
     document.getElementById('threadMessages').innerHTML = '';
-
-    // Abrir el panel
     const panel = document.getElementById('threadPanel');
     panel.classList.add('open');
-
-    // Adjuntar listener (solo una vez)
     _attachThreadInputListener();
-
-    // Dar foco al input con pequeño delay para que la transición CSS termine
     setTimeout(() => {
         const threadInputEl = document.getElementById('threadInput');
-        if (threadInputEl) {
-            threadInputEl.removeAttribute('disabled');
-            threadInputEl.focus();
-        }
+        if (threadInputEl) { threadInputEl.removeAttribute('disabled'); threadInputEl.focus(); }
     }, 320);
-
-    // Pedir historial del hilo
     if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'loadThread', threadId: msgId }));
     }
@@ -11285,13 +11222,8 @@ function abrirHilo(msgId) {
 function cerrarHilo() {
     _threadId = null;
     document.getElementById('threadPanel').classList.remove('open');
-    // Limpiar el input al cerrar
     const threadInputEl = document.getElementById('threadInput');
-    if (threadInputEl) {
-        threadInputEl.value = '';
-        threadInputEl.style.height = 'auto';
-        threadInputEl.blur();
-    }
+    if (threadInputEl) { threadInputEl.value = ''; threadInputEl.style.height = 'auto'; threadInputEl.blur(); }
 }
 
 function enviarEnHilo() {
@@ -11306,7 +11238,6 @@ function enviarEnHilo() {
     socket.send(JSON.stringify({ type: 'threadMessage', threadId: _threadId, message: text }));
     threadInputEl.value = '';
     threadInputEl.style.height = 'auto';
-    // Mantener el foco para escribir más mensajes
     threadInputEl.focus();
 }
 
@@ -11386,20 +11317,12 @@ function toggleFavorito(emoji, e) {
 }
 
 function _posicionarSGPanel() {
-    // En móvil el panel ya usa bottom:0 left:0 right:0 (fijo en la hoja de estilos is-mobile)
-    if (document.documentElement.classList.contains('is-mobile') ||
-        window.innerWidth <= 768) return;
-
+    if (document.documentElement.classList.contains('is-mobile') || window.innerWidth <= 768) return;
     const panel = document.getElementById('stickerGiftPanel');
     const btn   = document.getElementById('btnStickerGift');
     if (!panel || !btn) return;
-
     const inputArea = btn.closest('.input-area') || btn.parentElement;
-    const ref = inputArea || btn;
-    const rect = ref.getBoundingClientRect();
-
-    // Alinear el panel con el borde izquierdo y derecho del input-area,
-    // su borde inferior pegado al borde superior del input-area
+    const rect = (inputArea || btn).getBoundingClientRect();
     panel.style.left   = rect.left + 'px';
     panel.style.right  = (window.innerWidth - rect.right) + 'px';
     panel.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
@@ -11809,17 +11732,12 @@ function _posicionarMentionList() {
     const list = document.getElementById('mentionList');
     const textarea = document.getElementById('mensaje');
     if (!list || !textarea) return;
-
     const inputArea = textarea.closest('.input-area') || textarea.parentElement;
-    const ref = inputArea || textarea;
-    const rect = ref.getBoundingClientRect();
-
-    // Posicionar: pegado al borde izquierdo y derecho de la input-area,
-    // su borde inferior alineado con el borde superior de la input-area.
+    const rect = (inputArea || textarea).getBoundingClientRect();
     list.style.left   = rect.left + 'px';
     list.style.right  = (window.innerWidth - rect.right) + 'px';
     list.style.bottom = (window.innerHeight - rect.top) + 'px';
-    list.style.width  = '';  // ancho lo controlan left+right
+    list.style.width  = '';
 }
 
 function _mostrarMentionList() {
@@ -11926,10 +11844,7 @@ function _mostrarMentionList() {
 
     list.innerHTML = '';
     list.appendChild(frag);
-
-    // Posicionar el mentionList justo encima del textarea, en coordenadas fixed
     _posicionarMentionList();
-
     list.className = 'visible';
 }
 
@@ -12963,7 +12878,10 @@ function _mostrarBannerOffline(visible) {
   </div><!-- /modal card -->
 </div><!-- /rgpdModal overlay -->
 
-<!-- Panel emojis/favoritos: fuera de cualquier overflow:hidden, posicionado por JS -->
+<!-- Lista de sugerencias de mención: fuera de cualquier overflow:hidden -->
+<div id="mentionList"></div>
+
+<!-- Panel emojis/favoritos: fuera de cualquier overflow:hidden -->
 <div id="stickerGiftPanel">
   <div class="sg-tabs">
     <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
@@ -12975,8 +12893,4 @@ function _mostrarBannerOffline(visible) {
   <div class="sg-content" id="sgContent" style="display:none;"></div>
 </div>
 
-<!-- Lista de sugerencias de mención: fuera de cualquier overflow:hidden -->
-<div id="mentionList"></div>
-
 </body>
-</html>
