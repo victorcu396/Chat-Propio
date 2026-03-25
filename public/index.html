@@ -2472,12 +2472,11 @@ emoji-picker.visible { display: block; }
     color: #fecaca;
 }
 
-/* Lista de sugerencias de mención — aparece justo encima del área de input */
+/* Lista de sugerencias de mención — fuera del overflow:hidden, posicionado por JS */
 #mentionList {
     display: none;
-    position: absolute;
-    bottom: 100%;
-    left: 0; right: 0;
+    position: fixed;
+    /* left/right/bottom se calculan por JS según el textarea */
     background: var(--white);
     border: 1px solid var(--border);
     border-top: 2px solid var(--purple-light);
@@ -2486,14 +2485,9 @@ emoji-picker.visible { display: block; }
     max-height: 240px;
     overflow-y: auto;
     overflow-x: hidden;
-    z-index: 800;
+    z-index: 9500;
     overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch; /* smooth scroll en iOS */
-    /* Nunca participar en el flex layout del padre */
-    flex: none;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    -webkit-overflow-scrolling: touch;
 }
 #mentionList.visible { display: block; }
 /* Título de la sección */
@@ -4695,7 +4689,6 @@ html {
 
       <!-- Input -->
       <div class="input-area">
-        <div id="mentionList"></div>
         <!-- Panel unificado: Emojis / Favoritos -->
         <!-- Está DENTRO de .input-area para que position:absolute funcione correctamente -->
         <div id="stickerGiftPanel">
@@ -11833,6 +11826,23 @@ function _onInputMention() {
     }
 }
 
+function _posicionarMentionList() {
+    const list = document.getElementById('mentionList');
+    const textarea = document.getElementById('mensaje');
+    if (!list || !textarea) return;
+
+    const inputArea = textarea.closest('.input-area') || textarea.parentElement;
+    const ref = inputArea || textarea;
+    const rect = ref.getBoundingClientRect();
+
+    // Posicionar: pegado al borde izquierdo y derecho de la input-area,
+    // su borde inferior alineado con el borde superior de la input-area.
+    list.style.left   = rect.left + 'px';
+    list.style.right  = (window.innerWidth - rect.right) + 'px';
+    list.style.bottom = (window.innerHeight - rect.top) + 'px';
+    list.style.width  = '';  // ancho lo controlan left+right
+}
+
 function _mostrarMentionList() {
     const groupId = currentChat.replace('group_', '');
     const grp = myGroups.get(groupId);
@@ -11937,6 +11947,10 @@ function _mostrarMentionList() {
 
     list.innerHTML = '';
     list.appendChild(frag);
+
+    // Posicionar el mentionList justo encima del textarea, en coordenadas fixed
+    _posicionarMentionList();
+
     list.className = 'visible';
 }
 
@@ -12969,6 +12983,9 @@ function _mostrarBannerOffline(visible) {
     </div><!-- /scroll container -->
   </div><!-- /modal card -->
 </div><!-- /rgpdModal overlay -->
+
+<!-- Lista de sugerencias de mención: fuera de cualquier overflow:hidden -->
+<div id="mentionList"></div>
 
 </body>
 </html>
