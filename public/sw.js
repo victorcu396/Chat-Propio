@@ -3,7 +3,7 @@
    Estrategia: Network-first para HTML/JS, Cache-first para assets
 ============================================================ */
 
-const CACHE_NAME = 'kivoospace-v93';
+const CACHE_NAME = 'kivoospace-v94';
 
 // Archivos que se cachean al instalar la PWA
 const PRECACHE_ASSETS = [

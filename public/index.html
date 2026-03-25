@@ -667,6 +667,8 @@ html, body {
     min-width: 0;
     transition: background var(--transition);
 }
+
+/* Contenedor scrollable global del sidebar — todo el contenido bajo el header */
 #sidebarScroll {
     flex: 1;
     overflow-y: auto;
@@ -1508,8 +1510,8 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
 
 /* Menú contextual flotante — ancla al bubble-wrap */
 .msg-ctx-menu {
-    position: absolute;
-    z-index: 99999;
+    position: fixed;
+    z-index: 100000;
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -1521,8 +1523,6 @@ html.is-mobile .btn-header-more      { display: flex !important; font-size: 22px
     animation: loginIn .15s ease;
 }
 .msg-ctx-menu.visible { display: flex; }
-.msg-row.me .bubble-wrap .msg-ctx-menu  { right: 0; top: calc(100% + 4px); }
-.msg-row:not(.me) .bubble-wrap .msg-ctx-menu { left: 0; top: calc(100% + 4px); }
 
 @keyframes ctxMenuIn {
     from { opacity: 0; transform: scale(0.92) translateY(-4px); }
@@ -1774,8 +1774,9 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 .thread-input-area {
     padding: 10px 12px; border-top: 1px solid var(--border);
     display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0;
-    position: relative; z-index: 1;
+    position: relative; z-index: 2;
     pointer-events: auto;
+    background: var(--white);
 }
 .thread-input {
     flex: 1; min-height: 38px; max-height: 90px;
@@ -1790,7 +1791,11 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
     user-select: text;
     pointer-events: auto;
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    cursor: text;
+    /* Nunca deshabilitar el input */
+    -webkit-appearance: none;
+    appearance: none;
 }
 .thread-input:focus { border-color: var(--purple-deep); }
 .thread-send-btn {
@@ -1842,7 +1847,7 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
         top: auto;
         border-radius: 20px 20px 0 0;
         max-height: 52vh;
-        z-index: 99999;
+        z-index: 650;
         box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
@@ -1860,7 +1865,7 @@ html.is-mobile #stickerGiftPanel {
     bottom: 0; left: 0; right: 0; top: auto;
     border-radius: 20px 20px 0 0;
     max-height: 52vh;
-    z-index: 99999;
+    z-index: 650;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -1930,12 +1935,14 @@ html.is-mobile #stickerGiftPanel {
    PANEL EMOJIS / FAVORITOS
 ═══════════════════════════════════════════ */
 #stickerGiftPanel {
-    position: fixed;
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0; right: 0;
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: 16px 16px 16px 16px;
     box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-    z-index: 99999;
+    z-index: 600;
     display: none;
     flex-direction: column;
     max-height: 360px;
@@ -2478,6 +2485,7 @@ emoji-picker.visible { display: block; }
 #mentionList {
     display: none;
     position: fixed;
+    /* left/right/bottom se calculan por JS según el textarea */
     background: var(--white);
     border: 1px solid var(--border);
     border-top: 2px solid var(--purple-light);
@@ -4110,18 +4118,11 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
     .login-card { padding: 28px 20px 24px; max-width: calc(100vw - 28px); }
     .login-card .logo-wrap img { width: 110px; }
 
-    /* ── Menú contextual: siempre en bottom sheet en móvil ── */
-    .msg-ctx-menu,
-    .msg-row.me .bubble-wrap .msg-ctx-menu,
-    .msg-row:not(.me) .bubble-wrap .msg-ctx-menu {
-        position: fixed;
-        bottom: max(80px, calc(80px + env(safe-area-inset-bottom)));
-        left: 10px; right: 10px;
-        top: auto;
-        width: auto;
-        max-width: none;
+    /* ── Menú contextual en móvil: mayor padding táctil ── */
+    .msg-ctx-menu {
         border-radius: 18px;
         padding: 8px;
+        max-width: calc(100vw - 20px);
     }
     .ctx-item { padding: 13px 14px; font-size: 15px; border-radius: 12px; }
 
@@ -4168,8 +4169,8 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
     #btnEnviar  { width: 42px; height: 42px; }
     #mensaje    { font-size: 16px; padding: 8px 12px; }
 
-    /* En iPhone SE el menú contextual ocupa más espacio */
-    .msg-ctx-menu { bottom: max(70px, calc(64px + env(safe-area-inset-bottom))); }
+    /* En iPhone SE: menú contextual más compacto */
+    .msg-ctx-menu { max-width: calc(100vw - 16px); }
 }
 
 /* ============================================================
@@ -4465,7 +4466,9 @@ html {
         </div>
       </div>
 
+      <!-- Contenedor scrollable global del sidebar (todo excepto el header) -->
       <div id="sidebarScroll">
+
         <!-- Contacts Section -->
         <div class="users-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
           <span>Contactos <span id="contactsHeaderBadge" style="display:none;background:var(--purple-deep);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;vertical-align:middle;margin-left:4px;"></span></span>
@@ -4498,6 +4501,7 @@ html {
 
         <div class="users-label" style="margin-top:4px;">Conectados ahora</div>
         <ul id="users"></ul>
+
       </div><!-- /sidebarScroll -->
     </aside>
 
@@ -4687,6 +4691,19 @@ html {
 
       <!-- Input -->
       <div class="input-area">
+        <!-- Panel unificado: Emojis / Favoritos -->
+        <!-- Está DENTRO de .input-area para que position:absolute funcione correctamente -->
+        <div id="stickerGiftPanel">
+          <div class="sg-tabs">
+            <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
+            <button class="sg-tab"        id="tabFavoritos" onclick="cambiarTabSG('favoritos')">⭐ Favoritos</button>
+          </div>
+          <!-- El emoji-picker vive aquí de forma permanente; se muestra/oculta con CSS -->
+          <div id="sgEmojiWrap">
+            <emoji-picker id="emojiPicker"></emoji-picker>
+          </div>
+          <div class="sg-content" id="sgContent" style="display:none;"></div>
+        </div>
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts" aria-label="Abrir emojis">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen" aria-label="Adjuntar imagen">📎</button>
         <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="seleccionarImagen(event)">
@@ -5883,6 +5900,7 @@ function conectarWS() {
         reconnectInterval = 500; // reset
         _mostrarBannerOffline(false); // ocultar banner offline al reconectar
         window._kvsJoinTimestamp = Date.now(); // marcar el momento del join
+        // Inicializar flag de presencia según el estado actual del documento
         window._appIsAway = (document.visibilityState === 'hidden');
 
         // Capturar si es sesión nueva ANTES de modificar el flag
@@ -6075,8 +6093,8 @@ function _actualizarChatStatusPresencia() {
 // Al volver al foreground: reanudar heartbeat + notificar 'active'.
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-        window._appIsAway = true;
         // App va a background → parar heartbeat y marcar ausente
+        window._appIsAway = true;
         _pararHeartbeat();
         if (socket && socket.readyState === WebSocket.OPEN) {
             try {
@@ -6084,8 +6102,11 @@ document.addEventListener('visibilitychange', () => {
             } catch(_) {}
         }
     } else {
+        // App vuelve al foreground
         window._appIsAway = false;
-        // Si hay un chat activo, marcar como leídos ahora que el usuario los ve
+        console.log('👀 Usuario volvió → reconexión limpia');
+
+        // Si hay un chat activo, marcar sus mensajes como leídos ahora que el usuario los ve
         if (currentChat && socket && socket.readyState === WebSocket.OPEN) {
             try {
                 const mkKey = currentChat.startsWith('phone:')
@@ -6094,8 +6115,6 @@ document.addEventListener('visibilitychange', () => {
                 socket.send(JSON.stringify({ type: 'markRead', chatKey: mkKey }));
             } catch(_) {}
         }
-        // App vuelve al foreground
-        console.log('👀 Usuario volvió → reconexión limpia');
 
         // 1. Cancelar timer de reconexión pendiente
         if (reconnectTimer) {
@@ -7116,18 +7135,18 @@ function _limpiarEstadoChat() {
     _historyHasMore  = false;
     _historyLoading  = false;
     _historyOldestId = null;
-    // Limpiar siempre el input al cambiar de chat
-    _editState  = null;
-    _replyState = null;
-    input.value = '';
-    input.style.height = 'auto';
-    btnEnviar.onclick = enviar;
-    btnEnviar.disabled = true;
-    document.getElementById('replyBar').classList.remove('visible');
-    document.getElementById('replyBarName').textContent = '';
-    document.getElementById('replyBarText').textContent = '';
-    _cerrarMentionList();
-    if (pendingImage) cancelarImagen();
+    // Cancelar edición o respuesta activa sin pedir confirmación
+    if (_editState || _replyState) {
+        _editState  = null;
+        _replyState = null;
+        input.value = '';
+        input.style.height = 'auto';
+        btnEnviar.onclick = enviar;
+        btnEnviar.disabled = true;
+        document.getElementById('replyBar').classList.remove('visible');
+        document.getElementById('replyBarName').textContent = '';
+        document.getElementById('replyBarText').textContent = '';
+    }
     // Cerrar panel de emojis/favoritos
     cerrarSGPanel();
     // Cerrar panel de hilo si está abierto
@@ -7231,7 +7250,8 @@ function seleccionarUsuario(user) {
     btnU.dataset.mode = '1to1';
     btnU.title = isOnline ? 'Llamada de voz' : 'Llamar (dejará notificación de llamada perdida)';
 
-    // Siempre historial fresco al abrir para tener read/delivered actualizados
+    // Siempre pedir historial fresco al abrir un chat 1:1 para tener
+    // los estados read/delivered actualizados desde la BD.
     delete conversations[user];
     socket.send(JSON.stringify({ type: 'loadConversation', with: user }));
 
@@ -7305,7 +7325,8 @@ function seleccionarContactoOffline(phone) {
     renderContactsList();
     renderGroupsList();
 
-    // Siempre historial fresco al abrir para tener read/delivered actualizados
+    // Siempre pedir historial fresco al abrir un chat por phone para tener
+    // los estados read/delivered actualizados desde la BD.
     delete conversations[chatKey];
     socket.send(JSON.stringify({ type: 'loadConversation', withPhone: phone }));
 
@@ -7719,7 +7740,7 @@ function addMessage(msg) {
         chat.appendChild(row);
         _attachBubbleClickMenu(row, msg.id, isMe, false, isGroup);
         if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
-        // Solo enviar read si: mensaje nuevo en tiempo real + documento visible + app en primer plano
+        // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
         if (!isMe && socket && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
             socket.send(JSON.stringify({ type: 'read', id: msg.id }));
         }
@@ -7768,7 +7789,7 @@ function addMessage(msg) {
         if (bubble) _adjuntarLinkPreview(bubble, msg.message);
     }
     if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
-    // Solo enviar read si: mensaje nuevo en tiempo real + documento visible + app en primer plano
+    // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
     if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
         socket.send(JSON.stringify({ type: 'read', id: msg.id }));
     }
@@ -8678,7 +8699,8 @@ function seleccionarGrupo(groupId) {
     btnU.dataset.mode = 'group';
     btnU.title = 'Llamada grupal';
 
-    // Siempre historial fresco al abrir para tener read/delivered actualizados
+    // Siempre pedir historial fresco al abrir un grupo para tener
+    // los estados read/delivered actualizados desde la BD.
     delete conversations[chatKey];
     socket.send(JSON.stringify({ type: 'loadGroupConversation', groupId }));
 
@@ -9121,7 +9143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const egn = document.getElementById('editGroupNameInput');
     if (egn) egn.addEventListener('keydown', (e) => { if (e.key === 'Enter') guardarEditarGrupo(); });
 
-    // Thread input: adjuntar listener unificado
+    // Thread input: adjuntar listener unificado (Enter envía, Shift+Enter = salto de línea)
     _attachThreadInputListener();
 });
 
@@ -10437,10 +10459,6 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
     menu.className = 'msg-ctx-menu visible';
     menu.id = 'msgCtxMenu';
     menu.dataset.formsgid = msgId;
-    
-    // --- CAMBIO CLAVE: Posicionamiento fijo para que se vea POR ENCIMA ---
-    menu.style.position = 'fixed';
-    menu.style.zIndex = '100000';
 
     // Barra de reacciones rápidas (solo si no eliminado)
     if (!isDeletedFinal) {
@@ -10481,20 +10499,35 @@ function abrirMenuMensaje(e, msgId, isMe, isDeleted, isGroup) {
         menu.appendChild(btn);
     });
 
-    // --- CAMBIO CLAVE: Añadir al BODY para evitar recortes (Z-index real) ---
+    // Añadir al BODY para evitar recortes por overflow/stacking context
     document.body.appendChild(menu);
 
-    // --- CAMBIO CLAVE: Calcular posición basada en el click ---
-    let posX = e.clientX;
-    let posY = e.clientY;
-    
-    // Ajuste simple para que no se salga de la pantalla por la derecha o abajo
-    const menuRect = menu.getBoundingClientRect();
-    if (posX + 200 > window.innerWidth) posX -= 200;
-    if (posY + 300 > window.innerHeight) posY -= 300;
+    // Calcular posición usando las dimensiones reales del menú ya renderizado
+    requestAnimationFrame(() => {
+        const menuRect = menu.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const margin = 8; // margen mínimo respecto al borde de la ventana
 
-    menu.style.left = posX + 'px';
-    menu.style.top = posY + 'px';
+        // Intentar abrir a la derecha/abajo del click; ajustar si se sale
+        let posX = e.clientX;
+        let posY = e.clientY;
+
+        // Evitar desbordamiento horizontal
+        if (posX + menuRect.width + margin > vw) {
+            posX = vw - menuRect.width - margin;
+        }
+        if (posX < margin) posX = margin;
+
+        // Evitar desbordamiento vertical (preferir abrir hacia abajo; si no cabe, hacia arriba)
+        if (posY + menuRect.height + margin > vh) {
+            posY = e.clientY - menuRect.height;
+        }
+        if (posY < margin) posY = margin;
+
+        menu.style.left = posX + 'px';
+        menu.style.top  = posY + 'px';
+    });
 
     // Cerrar al pulsar fuera (Mantenemos tu lógica de 300ms)
     const openedAt = Date.now();
@@ -11184,36 +11217,62 @@ function _attachThreadInputListener() {
     const threadInputEl = document.getElementById('threadInput');
     if (!threadInputEl || _threadInputListenerAttached) return;
     _threadInputListenerAttached = true;
+
     threadInputEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarEnHilo(); }
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            enviarEnHilo();
+        }
     });
+
     threadInputEl.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 90) + 'px';
     });
+
     threadInputEl.addEventListener('touchstart', (e) => {
-        e.stopPropagation(); threadInputEl.focus();
+        e.stopPropagation();
+        threadInputEl.focus();
     }, { passive: true });
-    threadInputEl.addEventListener('click', (e) => { e.stopPropagation(); });
+
+    threadInputEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 }
 
 function abrirHilo(msgId) {
     _threadId = msgId;
+
+    // Mostrar el mensaje raíz en el panel
     const bubble = document.getElementById(msgId);
     const row    = bubble ? bubble.closest('.msg-row') : null;
     const from   = row ? (row.querySelector('.msg-avatar')?.alt || '') : '';
     const textEl = bubble ? bubble.querySelector('.msg-text') : null;
     const text   = textEl ? (textEl.textContent || textEl.innerText || '').trim() : '';
+
     document.getElementById('threadRootFrom').textContent = from;
     document.getElementById('threadRootText').textContent = text.slice(0, 200);
+
+    // Limpiar mensajes anteriores del hilo
     document.getElementById('threadMessages').innerHTML = '';
+
+    // Abrir el panel
     const panel = document.getElementById('threadPanel');
     panel.classList.add('open');
+
+    // Adjuntar listener (solo una vez)
     _attachThreadInputListener();
+
+    // Dar foco al input con pequeño delay para que la transición CSS termine
     setTimeout(() => {
         const threadInputEl = document.getElementById('threadInput');
-        if (threadInputEl) { threadInputEl.removeAttribute('disabled'); threadInputEl.focus(); }
+        if (threadInputEl) {
+            threadInputEl.removeAttribute('disabled');
+            threadInputEl.focus();
+        }
     }, 320);
+
+    // Pedir historial del hilo
     if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'loadThread', threadId: msgId }));
     }
@@ -11222,8 +11281,13 @@ function abrirHilo(msgId) {
 function cerrarHilo() {
     _threadId = null;
     document.getElementById('threadPanel').classList.remove('open');
+    // Limpiar el input al cerrar
     const threadInputEl = document.getElementById('threadInput');
-    if (threadInputEl) { threadInputEl.value = ''; threadInputEl.style.height = 'auto'; threadInputEl.blur(); }
+    if (threadInputEl) {
+        threadInputEl.value = '';
+        threadInputEl.style.height = 'auto';
+        threadInputEl.blur();
+    }
 }
 
 function enviarEnHilo() {
@@ -11238,6 +11302,7 @@ function enviarEnHilo() {
     socket.send(JSON.stringify({ type: 'threadMessage', threadId: _threadId, message: text }));
     threadInputEl.value = '';
     threadInputEl.style.height = 'auto';
+    // Mantener el foco para escribir más mensajes
     threadInputEl.focus();
 }
 
@@ -11316,27 +11381,12 @@ function toggleFavorito(emoji, e) {
     if (_sgTab === 'favoritos') renderSGPanel('favoritos');
 }
 
-function _posicionarSGPanel() {
-    if (document.documentElement.classList.contains('is-mobile') || window.innerWidth <= 768) return;
-    const panel = document.getElementById('stickerGiftPanel');
-    const btn   = document.getElementById('btnStickerGift');
-    if (!panel || !btn) return;
-    const inputArea = btn.closest('.input-area') || btn.parentElement;
-    const rect = (inputArea || btn).getBoundingClientRect();
-    panel.style.left   = rect.left + 'px';
-    panel.style.right  = (window.innerWidth - rect.right) + 'px';
-    panel.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
-    panel.style.top    = '';
-    panel.style.width  = '';
-}
-
 function toggleStickerGiftPanel(e) {
     if (e) e.stopPropagation();
     const panel = document.getElementById('stickerGiftPanel');
     _sgOpen = !_sgOpen;
     if (_sgOpen) {
         renderSGPanel(_sgTab);
-        _posicionarSGPanel();
         panel.classList.add('visible');
     } else {
         panel.classList.remove('visible');
@@ -11732,12 +11782,17 @@ function _posicionarMentionList() {
     const list = document.getElementById('mentionList');
     const textarea = document.getElementById('mensaje');
     if (!list || !textarea) return;
+
     const inputArea = textarea.closest('.input-area') || textarea.parentElement;
-    const rect = (inputArea || textarea).getBoundingClientRect();
+    const ref = inputArea || textarea;
+    const rect = ref.getBoundingClientRect();
+
+    // Posicionar: pegado al borde izquierdo y derecho de la input-area,
+    // su borde inferior alineado con el borde superior de la input-area.
     list.style.left   = rect.left + 'px';
     list.style.right  = (window.innerWidth - rect.right) + 'px';
     list.style.bottom = (window.innerHeight - rect.top) + 'px';
-    list.style.width  = '';
+    list.style.width  = '';  // ancho lo controlan left+right
 }
 
 function _mostrarMentionList() {
@@ -11844,7 +11899,10 @@ function _mostrarMentionList() {
 
     list.innerHTML = '';
     list.appendChild(frag);
+
+    // Posicionar el mentionList justo encima del textarea, en coordenadas fixed
     _posicionarMentionList();
+
     list.className = 'visible';
 }
 
@@ -12881,16 +12939,5 @@ function _mostrarBannerOffline(visible) {
 <!-- Lista de sugerencias de mención: fuera de cualquier overflow:hidden -->
 <div id="mentionList"></div>
 
-<!-- Panel emojis/favoritos: fuera de cualquier overflow:hidden -->
-<div id="stickerGiftPanel">
-  <div class="sg-tabs">
-    <button class="sg-tab active" id="tabEmojis"    onclick="cambiarTabSG('emojis')">😊 Emojis</button>
-    <button class="sg-tab"        id="tabFavoritos" onclick="cambiarTabSG('favoritos')">⭐ Favoritos</button>
-  </div>
-  <div id="sgEmojiWrap">
-    <emoji-picker id="emojiPicker"></emoji-picker>
-  </div>
-  <div class="sg-content" id="sgContent" style="display:none;"></div>
-</div>
-
 </body>
+</html>
