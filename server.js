@@ -2507,11 +2507,9 @@ wss.on('connection', (ws) => {
                         if (!tGrp || !tGrp.members.includes(ws.phone)) break;
                     } else {
                         // 1:1: verificar que el usuario es participante.
-                        // El convId es [usernameA, usernameB].sort().join('_')
-                        const convId = root.conversationId || '';
+                        // Comparamos directamente con from/to del mensaje raíz,
+                        // sin depender del formato del conversationId.
                         const isParticipant =
-                            convId === [ws.username, root.from].sort().join('_') ||
-                            convId === [ws.username, root.to].sort().join('_')   ||
                             root.from === ws.username ||
                             root.to   === ws.username;
                         if (!isParticipant) break;
@@ -2519,15 +2517,17 @@ wss.on('connection', (ws) => {
 
                     const newId = crypto.randomUUID();
 
-                    // En 1:1, el 'to' del mensaje de hilo debe ser el otro participante,
-                    // no necesariamente root.to (que es el destinatario del mensaje raíz).
-                    // Derivarlo del conversationId: los dos usernames del convId son los participantes.
+                    // En 1:1, el 'to' del hilo es el otro participante de la conversación.
+                    // Usamos root.from y root.to directamente — son los usernames reales
+                    // y nunca dependen del formato del conversationId (que usa _ como separador
+                    // y fallaría si los usernames contienen _).
                     let threadTo = root.to;
                     if (!isGroup) {
-                        const parts = (root.conversationId || '').split('_');
-                        // convId = [usernameA, usernameB].sort().join('_')
-                        if (parts.length === 2) {
-                            threadTo = parts.find(p => p !== ws.username) || root.to;
+                        // El otro participante es quien no somos nosotros
+                        if (root.from === ws.username) {
+                            threadTo = root.to;
+                        } else {
+                            threadTo = root.from;
                         }
                     }
 
