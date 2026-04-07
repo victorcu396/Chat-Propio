@@ -1771,8 +1771,17 @@ html.dark #selectionBar { background: var(--white); border-top-color: var(--bord
 }
 .thread-msg-item {
     display: flex; gap: 8px; align-items: flex-start;
-    padding: 6px 4px;
+    padding: 6px 4px; position: relative; cursor: pointer;
+    border-radius: 8px; transition: background .15s;
 }
+.thread-msg-item:hover { background: var(--bg-sidebar); }
+.thread-msg-item.me { flex-direction: row-reverse; }
+.thread-msg-item.me .thread-msg-from { text-align: right; color: var(--purple-deep); }
+.thread-msg-item.me .thread-msg-body { align-items: flex-end; display: flex; flex-direction: column; }
+.thread-msg-item.me .thread-msg-text { background: var(--bubble-me); color: #fff; border-radius: 14px 4px 14px 14px; padding: 5px 10px; }
+.thread-msg-item:not(.me) .thread-msg-text { background: var(--bg-sidebar); border-radius: 4px 14px 14px 14px; padding: 5px 10px; }
+.thread-msg-text.deleted { color: var(--text-muted); font-style: italic; }
+.thread-msg-edited { font-size: 9px; color: var(--text-muted); margin-left: 4px; }
 .thread-msg-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .thread-msg-body { flex: 1; min-width: 0; }
 .thread-msg-from { font-size: 11px; font-weight: 600; color: var(--purple-deep); margin-bottom: 2px; }
@@ -6771,16 +6780,23 @@ function handleMessage(data) {
     // ── Acciones sobre mensajes ──────────────────────────────────────────
     if (data.type === 'message_edited') {
         onMensajeEditado(data.id, data.newText, data.editedAt);
+        // También actualizar en el panel del hilo si está abierto
+        _onThreadMsgEditado(data.id, data.newText);
         return;
     }
     if (data.type === 'message_deleted') {
         onMensajeEliminado(data.id);
+        // También actualizar en el panel del hilo si está abierto
+        _onThreadMsgEliminado(data.id);
         return;
     }
     // Borrado en batch (deleteMessages optimizado)
     if (data.type === 'messages_deleted') {
         if (Array.isArray(data.ids)) {
-            data.ids.forEach(id => onMensajeEliminado(id));
+            data.ids.forEach(id => {
+                onMensajeEliminado(id);
+                _onThreadMsgEliminado(id);
+            });
         }
         return;
     }
@@ -11279,6 +11295,11 @@ function _attachThreadInputListener() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             enviarEnHilo();
+        } else if (e.key === 'Escape') {
+            if (_threadEditState) {
+                e.preventDefault();
+                _cancelarEdicionHilo();
+            }
         }
     });
 
@@ -11343,12 +11364,16 @@ function abrirHilo(msgId) {
 
 function cerrarHilo() {
     _threadId = null;
+    _cerrarMenuHilo();
+    _cancelarEdicionHilo();
     document.getElementById('threadPanel').classList.remove('open');
     // Limpiar el input al cerrar
     const threadInputEl = document.getElementById('threadInput');
     if (threadInputEl) {
         threadInputEl.value = '';
         threadInputEl.style.height = 'auto';
+        threadInputEl.style.borderColor = '';
+        threadInputEl.placeholder = 'Responder en el hilo…';
         threadInputEl.blur();
     }
 }
@@ -11362,28 +11387,213 @@ function enviarEnHilo() {
         mostrarToast('Sin conexión. Inténtalo de nuevo.', true);
         return;
     }
+
+    // ── Modo edición ────────────────────────────────────────────
+    if (_threadEditState) {
+        const editId = _threadEditState.id;
+        socket.send(JSON.stringify({ type: 'editMessage', id: editId, newText: text }));
+        _onThreadMsgEditado(editId, text);
+        _cancelarEdicionHilo();
+        return;
+    }
+
+    // ── Envío normal con renderizado optimista ───────────────────
+    const localId = 'local_thread_' + Date.now();
+    const localMsg = {
+        id:       localId,
+        from:     username,
+        message:  text,
+        avatar:   myAvatarDataUrl,
+        time:     new Date(),
+        threadId: _threadId,
+        self:     true
+    };
+
+    // Mostrar inmediatamente en el panel del hilo
+    const ul = document.getElementById('threadMessages');
+    if (ul) {
+        ul.appendChild(_renderThreadMsg(localMsg));
+        ul.scrollTop = ul.scrollHeight;
+    }
+
+    // Enviar al servidor
     socket.send(JSON.stringify({ type: 'threadMessage', threadId: _threadId, message: text }));
+
     threadInputEl.value = '';
     threadInputEl.style.height = 'auto';
-    // Mantener el foco para escribir más mensajes
     threadInputEl.focus();
 }
 
 // El listener del threadInput se registra en DOMContentLoaded (ver más abajo)
 
 function _renderThreadMsg(msg) {
+    const isMe      = msg.from === username || msg.self === true;
+    const isDeleted = !!msg.deletedAt;
+    const isEdited  = !!msg.editedAt && !isDeleted;
     const avatarSrc = msg.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(msg.from)}`;
+
     const li = document.createElement('li');
-    li.className = 'thread-msg-item';
+    li.className = 'thread-msg-item' + (isMe ? ' me' : '');
     li.id = 'thread_item_' + msg.id;
+    li.dataset.msgid = msg.id;
+
+    const textContent = isDeleted
+        ? '🗑 Mensaje eliminado'
+        : escapeHTML(msg.message || '');
+    const editedBadge = isEdited ? '<span class="thread-msg-edited">(editado)</span>' : '';
+    const timeStr     = horaActual(msg.time);
+
     li.innerHTML = `
         <img class="thread-msg-avatar" src="${avatarSrc}" alt="${escapeHTML(msg.from)}">
         <div class="thread-msg-body">
             <div class="thread-msg-from">${escapeHTML(msg.from)}</div>
-            <div class="thread-msg-text">${escapeHTML(msg.message)}</div>
-            <div class="thread-msg-time">${horaActual(msg.time)}</div>
+            <div class="thread-msg-text${isDeleted ? ' deleted' : ''}">${textContent}${editedBadge}</div>
+            <div class="thread-msg-time">${timeStr}</div>
         </div>`;
+
+    // Menú contextual al hacer click (solo si no está eliminado o es el autor)
+    if (!isDeleted || isMe) {
+        li.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _abrirMenuHilo(e, msg.id, isMe, isDeleted);
+        });
+    }
+
     return li;
+}
+
+/* ── Menú contextual dentro del hilo ─────────────────────── */
+let _openThreadMenu = null;
+
+function _cerrarMenuHilo() {
+    if (_openThreadMenu) {
+        _openThreadMenu.remove();
+        _openThreadMenu = null;
+    }
+}
+
+function _abrirMenuHilo(e, msgId, isMe, isDeleted) {
+    _cerrarMenuHilo();
+
+    const menu = document.createElement('div');
+    menu.className = 'msg-ctx-menu visible';
+    menu.id = 'threadCtxMenu';
+    menu.style.cssText = 'position:fixed;z-index:9999;min-width:160px;';
+    _openThreadMenu = menu;
+
+    const ops = [];
+    if (!isDeleted) ops.push({ icon: '✏️', label: 'Editar',   fn: () => _editarEnHilo(msgId),   show: isMe });
+    if (!isDeleted) ops.push({ icon: '🗑',  label: 'Eliminar', fn: () => _eliminarEnHilo(msgId), show: isMe, danger: true });
+    if (!isDeleted) ops.push({ icon: '👁',  label: 'Ocultar para mí', fn: () => _ocultarEnHilo(msgId), show: true, danger: true });
+
+    const visibleOps = ops.filter(o => o.show);
+    if (visibleOps.length === 0) return;
+
+    visibleOps.forEach((op, i) => {
+        if (op.danger && i > 0) {
+            const sep = document.createElement('div');
+            sep.className = 'ctx-sep';
+            menu.appendChild(sep);
+        }
+        const btn = document.createElement('button');
+        btn.className = 'ctx-item' + (op.danger ? ' danger' : '');
+        btn.innerHTML = `<span>${op.icon}</span><span>${op.label}</span>`;
+        btn.onclick = (ev) => { ev.stopPropagation(); _cerrarMenuHilo(); op.fn(); };
+        menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+
+    // Posicionar
+    const rect = e.currentTarget ? e.currentTarget.getBoundingClientRect() : { bottom: e.clientY, left: e.clientX };
+    let top = rect.bottom + 4;
+    let left = isMe ? rect.right - menu.offsetWidth : rect.left;
+    if (top + menu.offsetHeight > window.innerHeight - 10) top = rect.top - menu.offsetHeight - 4;
+    if (left < 4) left = 4;
+    if (left + menu.offsetWidth > window.innerWidth - 4) left = window.innerWidth - menu.offsetWidth - 4;
+    menu.style.top  = top  + 'px';
+    menu.style.left = left + 'px';
+
+    // Cerrar al hacer click fuera
+    setTimeout(() => {
+        document.addEventListener('click', _cerrarMenuHilo, { once: true });
+    }, 0);
+}
+
+/* ── Editar mensaje dentro del hilo ────────────────────────── */
+let _threadEditState = null;
+
+function _editarEnHilo(msgId) {
+    // Obtener texto actual del DOM del hilo
+    const li     = document.getElementById('thread_item_' + msgId);
+    const textEl = li ? li.querySelector('.thread-msg-text') : null;
+    const current = textEl ? (textEl.textContent || '').replace('(editado)', '').trim() : '';
+
+    _threadEditState = { id: msgId };
+
+    const threadInputEl = document.getElementById('threadInput');
+    if (threadInputEl) {
+        threadInputEl.value = current;
+        threadInputEl.style.height = 'auto';
+        threadInputEl.style.height = Math.min(threadInputEl.scrollHeight, 90) + 'px';
+        threadInputEl.focus();
+        threadInputEl.selectionStart = threadInputEl.selectionEnd = threadInputEl.value.length;
+        threadInputEl.style.borderColor = '#f59e0b'; // naranja = modo edición
+        threadInputEl.placeholder = '✏️ Editando mensaje del hilo…';
+    }
+}
+
+function _cancelarEdicionHilo() {
+    _threadEditState = null;
+    const threadInputEl = document.getElementById('threadInput');
+    if (threadInputEl) {
+        threadInputEl.value = '';
+        threadInputEl.style.height = 'auto';
+        threadInputEl.style.borderColor = '';
+        threadInputEl.placeholder = 'Responder en el hilo…';
+    }
+}
+
+/* ── Eliminar mensaje dentro del hilo ──────────────────────── */
+function _eliminarEnHilo(msgId) {
+    if (!confirm('¿Eliminar este mensaje del hilo?')) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        mostrarToast('Sin conexión', true); return;
+    }
+    socket.send(JSON.stringify({ type: 'deleteMessage', id: msgId }));
+    // Actualización optimista
+    _onThreadMsgEliminado(msgId);
+}
+
+function _ocultarEnHilo(msgId) {
+    try {
+        const hidden = JSON.parse(localStorage.getItem('kvs_hidden_msgs') || '[]');
+        if (!hidden.includes(msgId)) { hidden.push(msgId); localStorage.setItem('kvs_hidden_msgs', JSON.stringify(hidden)); }
+    } catch(_) {}
+    const li = document.getElementById('thread_item_' + msgId);
+    if (li) li.remove();
+    mostrarToast('Mensaje ocultado para ti');
+}
+
+function _onThreadMsgEliminado(msgId) {
+    const li     = document.getElementById('thread_item_' + msgId);
+    const textEl = li ? li.querySelector('.thread-msg-text') : null;
+    if (textEl) {
+        textEl.textContent = '🗑 Mensaje eliminado';
+        textEl.classList.add('deleted');
+        // Quitar badge (editado) si lo había
+        const badge = li.querySelector('.thread-msg-edited');
+        if (badge) badge.remove();
+    }
+    if (li) li.removeEventListener('click', li._menuHandler);
+}
+
+function _onThreadMsgEditado(msgId, newText) {
+    const li     = document.getElementById('thread_item_' + msgId);
+    const textEl = li ? li.querySelector('.thread-msg-text') : null;
+    if (textEl) {
+        textEl.innerHTML = escapeHTML(newText) + '<span class="thread-msg-edited">(editado)</span>';
+    }
 }
 
 function onHistorialHilo(data) {
@@ -11402,17 +11612,48 @@ function onHistorialHilo(data) {
 }
 
 function onMensajeHilo(data) {
-    // Actualizar threadCount en el botón del mensaje raíz
+    // Actualizar threadCount en el botón del mensaje raíz en el chat principal
     const threadDiv = document.getElementById('thread_' + data.threadId);
     if (threadDiv) {
         const count = data.threadCount;
         threadDiv.innerHTML = `<button class="thread-btn" onclick="abrirHilo('${data.threadId}')">🧵 ${count} respuesta${count > 1 ? 's' : ''}</button>`;
     }
-    // Si el panel está abierto para este hilo, añadir el mensaje
+
+    // Si el panel está abierto para este hilo
     if (_threadId === data.threadId) {
         const ul = document.getElementById('threadMessages');
-        ul.appendChild(_renderThreadMsg(data.msg));
-        ul.scrollTop = ul.scrollHeight;
+        if (!ul) return;
+
+        const incoming = data.msg;
+        const isMyMsg  = incoming.from === username;
+
+        if (isMyMsg) {
+            // Es confirmación del servidor de nuestro mensaje optimista:
+            // buscar el li local_ más reciente del mismo texto y reemplazarlo
+            const localItems = ul.querySelectorAll('[id^="thread_item_local_thread_"]');
+            let replaced = false;
+            localItems.forEach(li => {
+                if (!replaced) {
+                    const textEl = li.querySelector('.thread-msg-text');
+                    if (textEl && textEl.textContent.trim() === (incoming.message || '').trim()) {
+                        const newLi = _renderThreadMsg(incoming);
+                        li.replaceWith(newLi);
+                        replaced = true;
+                    }
+                }
+            });
+            // Si no encontramos el optimista (p.ej. llegó muy rápido), evitar duplicado
+            if (!replaced && !ul.querySelector('#thread_item_' + incoming.id)) {
+                ul.appendChild(_renderThreadMsg(incoming));
+                ul.scrollTop = ul.scrollHeight;
+            }
+        } else {
+            // Mensaje del otro usuario: añadir si no existe ya
+            if (!ul.querySelector('#thread_item_' + incoming.id)) {
+                ul.appendChild(_renderThreadMsg(incoming));
+                ul.scrollTop = ul.scrollHeight;
+            }
+        }
     }
 }
 

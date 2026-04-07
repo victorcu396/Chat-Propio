@@ -2539,10 +2539,12 @@ wss.on('connection', (ws) => {
                             }
                         });
                     } else {
-                        // 1:1: enviar a ambos participantes usando los usernames del convId
-                        const parts = (root.conversationId || '').split('_');
-                        const participants = parts.length === 2 ? parts : [root.from, root.to].filter(Boolean);
-                        participants.forEach(uname => {
+                        // 1:1: enviar a ambos participantes.
+                        // Usamos root.from y threadTo (calculado más arriba) que son los
+                        // usernames reales de los dos participantes, independientemente
+                        // de cuántos '_' tengan sus nombres.
+                        const participantes = new Set([root.from, threadTo, ws.username].filter(Boolean));
+                        participantes.forEach(uname => {
                             const uWs = users.get(uname);
                             if (uWs && uWs.readyState === WebSocket.OPEN) {
                                 try { uWs.send(payload); } catch(_) {}
@@ -2878,8 +2880,10 @@ async function broadcastToConversationAsync(conversationId, payload, msgFrom, ms
             });
         } catch(_) {}
     } else {
-        // 1:1: enviar a from y to (ambos pueden estar online)
-        [msgFrom, msgTo].filter(Boolean).forEach(uname => {
+        // 1:1: enviar a from y to (ambos pueden estar online).
+        // Usar un Set para evitar enviar dos veces si from === to.
+        const targets = new Set([msgFrom, msgTo].filter(Boolean));
+        targets.forEach(uname => {
             const uWs = users.get(uname);
             if (uWs && uWs.readyState === WebSocket.OPEN) {
                 try { uWs.send(payload); } catch(_) {}
