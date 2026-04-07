@@ -6909,6 +6909,13 @@ function handleMessage(data) {
         if (btnGuardar) btnGuardar.disabled = false;
         const btnRenombre = document.getElementById('btnGuardarRenombre');
         if (btnRenombre) btnRenombre.disabled = false;
+        // Revertir contactos optimistas si los hay (para que vuelvan a "Conectados ahora")
+        myContacts.forEach((c, phone) => {
+            if (c._optimistic) myContacts.delete(phone);
+        });
+        renderContactsList();
+        renderUsers(lastKnownUsers);
+        mostrarToast('⚠ ' + (data.message || 'Error al agregar contacto'), true);
         return;
     }
 
@@ -9718,7 +9725,7 @@ function onContactAdded(contactPhone, customName, avatar, username) {
             }));
         }
     }
-    const esNuevo = !myContacts.has(contactPhone);
+    const esNuevo = !myContacts.has(contactPhone) || myContacts.get(contactPhone)?._optimistic;
     // Preservar flags de bloqueo si el contacto ya existía
     const _existingContact = myContacts.get(contactPhone);
     myContacts.set(contactPhone, {
@@ -9728,6 +9735,7 @@ function onContactAdded(contactPhone, customName, avatar, username) {
         username:     username || null,
         blocked:      _existingContact ? (_existingContact.blocked   || false) : false,
         blockedUs:    _existingContact ? (_existingContact.blockedUs || false) : false
+        // _optimistic se elimina al sobrescribir (contacto confirmado por servidor)
     });
     // Cachear avatar para uso offline
     if (avatar) {
@@ -10384,6 +10392,30 @@ document.getElementById('contactRequestModal').addEventListener('click', (e) => 
     que la entrega inmediatamente; si la otra persona la acepta, ambos se agregan) */
 function aceptarDesconocidoDirecto(phone, uname) {
     if (!phone || !socket) return;
+
+    // ── Actualización optimista inmediata ────────────────────────────────
+    // 1) Añadir a myContacts provisionalmente para que renderUsers lo filtre
+    if (!myContacts.has(phone)) {
+        const avatarUrl = userAvatars[uname]
+            || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(uname)}`;
+        myContacts.set(phone, {
+            contactPhone: phone,
+            customName:   uname,
+            avatar:       avatarUrl,
+            username:     uname,
+            blocked:      false,
+            blockedUs:    false,
+            _optimistic:  true   // marcador: el servidor aún no confirmó
+        });
+    }
+
+    // 2) Quitar de "Conectados ahora" de inmediato
+    renderUsers(lastKnownUsers);
+
+    // 3) Mostrar en lista de contactos de inmediato
+    renderContactsList();
+
+    // ── Enviar al servidor ───────────────────────────────────────────────
     // Usar addContact directo: el servidor agrega a ambos lados de forma inmediata
     // y recíproca. El nombre por defecto es el username del otro usuario (editable después).
     socket.send(JSON.stringify({
