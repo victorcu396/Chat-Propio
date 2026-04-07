@@ -1,0 +1,405 @@
+/* ============================================================
+   GRUPOS
+============================================================ */
+.groups-label {
+    padding: 14px 16px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 10px;
+}
+
+#groupsList {
+    list-style: none;
+    flex-shrink: 0;
+}
+
+#groupsList li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    margin: 0 6px 2px;
+    transition: background var(--transition), transform .12s;
+    position: relative;
+    min-width: 0;
+}
+
+#groupsList li:hover { background: var(--purple-pale); transform: translateX(2px); }
+#groupsList li.active { background: var(--purple-pale); }
+#groupsList li:hover .contact-actions { display: flex; }
+@media (hover: none) and (pointer: coarse) { #groupsList li .contact-actions { display: flex; } }
+
+.group-avatar-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    color: white;
+    font-weight: 700;
+    overflow: hidden;
+    cursor: default;
+    box-shadow: 0 2px 8px rgba(79,70,229,0.25);
+}
+.group-avatar-circle img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
+}
+
+/* Botón llamada grupal en el header */
+/* Botón llamada unificado — visible siempre en el header */
+
+/* Avatar de grupo en el header — reutiliza .group-avatar-circle pero más grande */
+#chatGroupAvatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    display: none; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0; color: white; font-weight: 700;
+    overflow: hidden; cursor: pointer; transition: opacity var(--transition);
+}
+#chatGroupAvatar:hover { opacity: 0.8; }
+#chatGroupAvatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+#chatGroupAvatar.visible { display: flex; }
+
+/* Input oculto para foto de grupo */
+#groupAvatarFileInput { display: none; }
+
+/* ── Sección de avatar dentro del modal Editar Grupo ──────── */
+.edit-group-avatar-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.edit-group-avatar-wrap {
+    position: relative;
+    width: 86px;
+    height: 86px;
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.edit-group-avatar-circle {
+    width: 86px !important;
+    height: 86px !important;
+    font-size: 32px !important;
+    border: 3px solid var(--border);
+    transition: opacity var(--transition);
+}
+.edit-group-avatar-wrap:hover .edit-group-avatar-circle { opacity: 0.75; }
+.edit-group-avatar-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(79,70,229,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    opacity: 0;
+    transition: opacity var(--transition);
+    pointer-events: none;
+}
+.edit-group-avatar-wrap:hover .edit-group-avatar-overlay { opacity: 1; }
+.edit-group-avatar-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Overlay llamada grupal — mini panel flotante */
+#groupCallOverlay {
+    display: none; position: fixed;
+    bottom: 80px; right: 16px;
+    z-index: 9800;
+    background: linear-gradient(145deg, #1e1b4b, #312e81);
+    border-radius: 20px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+    padding: 14px 16px 12px;
+    width: 260px;
+    flex-direction: column; align-items: center; gap: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+#groupCallOverlay.visible { display: flex; }
+/* Barra de arrastre visual */
+#groupCallOverlay::before {
+    content: ''; display: block; width: 32px; height: 4px;
+    background: rgba(255,255,255,0.2); border-radius: 2px; margin-bottom: 2px;
+}
+.group-call-title {
+    font-size: 14px; font-weight: 700; color: white; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;
+}
+.group-call-subtitle {
+    font-size: 11px; color: rgba(255,255,255,0.55); text-align: center; margin-top: -4px;
+}
+.group-call-avatars {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 230px;
+}
+.group-call-participant {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.group-call-participant img {
+    width: 38px; height: 38px; border-radius: 50%; object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.2);
+}
+.group-call-participant.connected img { border-color: #10b981; }
+.group-call-participant.calling img  { border-color: #f59e0b; animation: callPulse 1s ease-in-out infinite; }
+.group-call-participant.rejected img { border-color: #ef4444; opacity: 0.5; }
+@keyframes callPulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0.5)} 50%{box-shadow:0 0 0 6px rgba(245,158,11,0)} }
+.group-call-participant-name {
+    font-size: 10px; color: rgba(255,255,255,0.75); font-weight: 600; text-align: center;
+    max-width: 50px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.group-call-timer {
+    font-size: 18px; font-weight: 700; color: white; font-family: 'DM Mono', monospace;
+    letter-spacing: 1px;
+}
+.group-call-actions {
+    display: flex; gap: 10px; margin-top: 4px;
+}
+.btn-group-call-mute {
+    width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(255,255,255,0.15); color: white; font-size: 17px;
+    display: flex; align-items: center; justify-content: center; transition: all .2s;
+}
+.btn-group-call-mute:hover { background: rgba(255,255,255,0.25); }
+.btn-group-call-mute.muted { background: rgba(239,68,68,0.5); }
+.btn-group-call-end {
+    width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+    background: #ef4444; color: white; font-size: 20px;
+    display: flex; align-items: center; justify-content: center; transition: all .2s;
+}
+.btn-group-call-end:hover { background: #dc2626; transform: scale(1.05); }
+
+/* Banner llamada grupal entrante */
+#incomingGroupCall {
+    display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 9900; background: white; border-radius: 18px; box-shadow: var(--shadow-card);
+    padding: 14px 18px; max-width: 360px; width: calc(100vw - 32px);
+}
+#incomingGroupCall.visible { display: block; }
+.incoming-group-inner {
+    display: flex; align-items: center; gap: 12px;
+}
+.incoming-group-info { flex: 1; min-width: 0; }
+.incoming-group-title { font-size: 13px; color: var(--text-muted); }
+.incoming-group-name  { font-size: 15px; font-weight: 700; color: var(--text-dark); }
+#createGroupModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+
+#createGroupModal.visible { display: flex; }
+
+.create-group-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: loginIn .25s ease;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.create-group-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.group-members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px;
+}
+
+.group-member-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition);
+    user-select: none;
+}
+
+.group-member-item:hover { background: var(--purple-pale); }
+
+.group-member-item input[type=checkbox] {
+    accent-color: var(--purple-deep);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.group-member-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.group-member-name {
+    font-size: 14px;
+    color: var(--text-dark);
+    font-weight: 500;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-actions-btn {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.btn-group-action {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+    touch-action: manipulation;
+}
+
+.btn-group-action:hover { background: rgba(79,70,229,0.1); color: var(--purple-deep); }
+.btn-group-action.danger:hover { background: rgba(239,68,68,0.1); color: #ef4444; }
+
+.group-badge-owner {
+    font-size: 10px;
+    background: var(--purple-pale);
+    color: var(--purple-deep);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+/* ── Badges de estado en listas de miembros ── */
+.member-not-contact {
+    font-size: 10px; background: #fef3c7; color: #92400e;
+    border-radius: 4px; padding: 1px 6px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+.member-is-contact {
+    font-size: 10px; background: #d1fae5; color: #065f46;
+    border-radius: 4px; padding: 1px 6px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+.member-is-me {
+    font-size: 10px; background: var(--purple-pale); color: var(--purple-deep);
+    border-radius: 4px; padding: 1px 6px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+
+/* ── Fila de miembro en modales de grupo ── */
+.group-member-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: var(--radius-sm); background: var(--bg-sidebar);
+}
+.group-member-phone {
+    font-size: 11px; color: var(--text-muted);
+    font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Modal Ver Miembros ── */
+#viewMembersModal {
+    display: none; position: fixed; inset: 0; z-index: 9500;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(15,10,40,0.7); backdrop-filter: blur(6px);
+}
+#viewMembersModal.visible { display: flex; }
+.view-members-card {
+    background: var(--white); border-radius: 20px; padding: 28px 24px 24px;
+    width: 100%; max-width: 420px; box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column; gap: 14px;
+    animation: loginIn .25s ease; max-height: 88vh; overflow-y: auto;
+}
+.view-members-card h3 { font-size: 17px; font-weight: 700; color: var(--text-dark); margin: 0; display: flex; align-items: center; gap: 8px; }
+.view-members-subtitle { font-size: 12px; color: var(--text-muted); margin-top: -6px; }
+.view-members-list {
+    display: flex; flex-direction: column; gap: 6px; max-height: 300px;
+    overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 10px;
+}
+
+/* ── Modal Editar Grupo ── */
+#editGroupModal {
+    display: none; position: fixed; inset: 0; z-index: 9500;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(15,10,40,0.7); backdrop-filter: blur(6px);
+}
+#editGroupModal.visible { display: flex; }
+.edit-group-card {
+    background: var(--white); border-radius: 20px; padding: 28px 24px 24px;
+    width: 100%; max-width: 460px; box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column; gap: 16px;
+    animation: loginIn .25s ease; max-height: 92vh; overflow-y: auto;
+}
+.edit-group-card h3 { font-size: 17px; font-weight: 700; color: var(--text-dark); margin: 0; display: flex; align-items: center; gap: 8px; }
+.edit-group-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.edit-group-members-list {
+    display: flex; flex-direction: column; gap: 6px; max-height: 220px;
+    overflow-y: auto; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 10px;
+}
+
+
+/* ── Banner offline ───────────────────────────────────────────── */
+#offlineBanner {
+    animation: fadeUp .25s ease;
+}
+#offlineBanner.visible { display: flex !important; }
+@keyframes dotsAnim {
+    0%   { opacity: 1; } 33%  { opacity: .4; }
+    66%  { opacity: 1; } 100% { opacity: .4; }
+}
+#offlineBannerDots { animation: dotsAnim 1.2s infinite; }
+
+/* ── Botón scroll al fondo ────────────────────────────────────── */
+#btnScrollBottom.visible { display: flex !important; }
+#btnScrollBottom:hover { opacity: 0.88; }
+
+/* ── Swipe-to-reply: transición suave al soltar ───────────────── */
+.bubble-wrap { transition: transform .2s cubic-bezier(.4,0,.2,1); }
+

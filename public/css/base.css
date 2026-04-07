@@ -1,0 +1,119 @@
+
+/* ============================================================
+   VARIABLES & RESET
+============================================================ */
+:root {
+    --purple-deep:   #4f46e5;
+    --purple-mid:    #7c3aed;
+    --purple-light:  #a78bfa;
+    --purple-pale:   #ede9fe;
+    --pink-accent:   #ec4899;
+    --bg-body:       #f1f0fb;
+    --bg-sidebar:    #fafaff;
+    --bg-chat:       #f0effe;
+    --white:         #ffffff;
+    --text-dark:     #1e1b4b;
+    --text-mid:      #4b5563;
+    --text-muted:    #9ca3af;
+    --border:        #e5e7f0;
+    --bubble-me:     linear-gradient(135deg, #4f46e5, #7c3aed);
+    --bubble-other:  #ffffff;
+    --online:        #10b981;
+    --offline:       #d1d5db;
+    --radius-lg:     18px;
+    --radius-md:     12px;
+    --radius-sm:     8px;
+    --shadow-soft:   0 4px 24px rgba(79,70,229,0.10);
+    --shadow-card:   0 8px 40px rgba(79,70,229,0.18);
+    --transition:    .18s cubic-bezier(.4,0,.2,1);
+
+    /* Sidebar dimensions */
+    --sidebar-w:         300px;
+    --sidebar-w-tablet:  260px;
+
+    /* Input area heights for positioning */
+    --input-area-h:      64px;
+    --input-area-h-mob:  58px;
+}
+
+/* ── MODO OSCURO ──────────────────────────────────────────────────────────
+   Se activa añadiendo class="dark" a <html>.
+   Redefine las variables CSS; los componentes no necesitan cambios.
+────────────────────────────────────────────────────────────────────────── */
+html.dark {
+    --purple-deep:   #818cf8;
+    --purple-mid:    #a78bfa;
+    --purple-light:  #6d28d9;
+    --purple-pale:   #1e1b3a;
+    --pink-accent:   #f472b6;
+    --bg-body:       #0f0e1a;
+    --bg-sidebar:    #131220;
+    --bg-chat:       #111028;
+    --white:         #1a1930;
+    --text-dark:     #e8e6ff;
+    --text-mid:      #a5a3c0;
+    --text-muted:    #6b6985;
+    --border:        #2a2840;
+    --bubble-me:     linear-gradient(135deg, #3730a3, #6d28d9);
+    --bubble-other:  #1e1b36;
+    --online:        #34d399;
+    --offline:       #374151;
+    --shadow-soft:   0 4px 24px rgba(0,0,0,0.4);
+    --shadow-card:   0 8px 40px rgba(0,0,0,0.55);
+}
+html.dark .bubble.other            { border-color: #2a2840; color: #e8e6ff; }
+html.dark .bubble.other .msg-text  { color: #e8e6ff; }
+html.dark .input-area              { background: rgba(26,25,48,0.95); border-top-color: var(--border); }
+html.dark #mensaje                 { background: #1e1b36; color: var(--text-dark); }
+html.dark #mensaje::placeholder    { color: var(--text-muted); }
+html.dark #mensaje:focus           { background: #1e1b36; box-shadow: 0 0 0 3px rgba(129,140,248,0.15); }
+html.dark .login-card              { background: #1a1930; border: 1px solid var(--border); }
+html.dark .welcome-features        { background: #1a1930; border-color: var(--border); }
+html.dark .welcome-title           { color: var(--text-dark); }
+html.dark .welcome-feature strong  { color: var(--text-dark); }
+html.dark .settings-card           { background: #1a1930; }
+html.dark #chatSearchBar           { background: var(--white); border-bottom-color: var(--border); }
+html.dark #chatSearchInput         { background: #1e1b36; color: var(--text-dark); border-color: var(--border); }
+html.dark .msg-ctx-menu            { background: #1e1b36; border-color: var(--border); }
+html.dark .ctx-item                { color: var(--text-dark); }
+html.dark .ctx-item:hover          { background: var(--purple-pale); }
+html.dark #mentionList             { background: #1a1930; border-color: var(--border); }
+html.dark .mention-header          { background: #131220; }
+html.dark .mention-item:hover,
+html.dark .mention-item.selected   { background: var(--purple-pale); }
+html.dark .reply-preview           { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
+html.dark .bubble.me .reply-preview{ background: rgba(255,255,255,0.1); }
+html.dark #autoDestructMenu        { background: #1a1930; border-color: var(--border); }
+html.dark .link-preview-card       { background: #1e1b36; border-color: var(--border); }
+html.dark .link-preview-card:hover { background: #242240; }
+html.dark .sound-option            { background: #1e1b36; border-color: var(--border); color: var(--text-dark); }
+html.dark .sound-option:hover      { background: var(--purple-pale); }
+html.dark .sound-option.active     { background: var(--purple-pale); border-color: var(--purple-deep); }
+html.dark .read-receipt-popover    { background: #1a1930; border-color: var(--border); }
+html.dark #chat::before            { opacity: 0.4; }
+html.dark .info-msg                { background: rgba(30,27,75,0.75); color: var(--text-muted); border-color: var(--border); }
+html.dark .welcome-title span      { background: linear-gradient(135deg, var(--purple-deep), var(--pink-accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+html.dark .sidebar-header::after,
+html.dark .chat-header::after      { opacity: 0.3; }
+html.dark #typing                  { background: rgba(20,18,48,0.85); border-color: var(--border); }
+html.dark .my-profile              { background: linear-gradient(135deg, rgba(129,140,248,0.12), rgba(167,139,250,0.12)); border-color: rgba(129,140,248,0.15); }
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    background: var(--bg-body);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark);
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+}
+

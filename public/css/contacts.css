@@ -1,0 +1,471 @@
+/* ============================================================
+   SCROLLBAR
+============================================================ */
+/* scrollbar defined below in polish section */
+
+/* ============================================================
+   SIDEBAR OVERLAY & HAMBURGER
+============================================================ */
+#sidebarOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 99;
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+}
+
+#sidebarOverlay.visible { display: block; }
+
+#hamburger {
+    display: none;
+    width: 42px;
+    height: 42px;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: var(--purple-pale);
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--purple-deep);
+    font-size: 20px;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background var(--transition), transform var(--transition);
+}
+
+#hamburger:hover { background: var(--purple-light); color: white; transform: scale(1.05); }
+#hamburger:active { transform: scale(0.95); }
+
+/* ============================================================
+   CONTACTS
+============================================================ */
+.btn-add-contact {
+    background: var(--bubble-me);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
+    touch-action: manipulation;
+    box-shadow: 0 2px 8px rgba(79,70,229,0.30);
+}
+
+.btn-add-contact:hover { opacity: 0.90; transform: scale(1.12) rotate(5deg); box-shadow: 0 4px 14px rgba(79,70,229,0.40); }
+.btn-add-contact:active { transform: scale(0.95); }
+
+#contactsList {
+    list-style: none;
+    padding: 4px 8px 2px;
+    flex-shrink: 0;
+}
+
+#contactsList li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition), transform .12s;
+    position: relative;
+    touch-action: manipulation;
+}
+
+#contactsList li:hover  { background: var(--purple-pale); transform: translateX(2px); }
+#contactsList li.active { background: var(--purple-pale); }
+
+.contact-actions {
+    display: none;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+#contactsList li:hover .contact-actions { display: flex; }
+
+/* En táctil, mostrar siempre los botones de editar/eliminar */
+@media (hover: none) and (pointer: coarse) {
+    .contact-actions { display: flex; }
+}
+
+.btn-contact-block {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+    touch-action: manipulation;
+}
+
+.btn-contact-block:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
+
+.status-dot.contact-offline { background: var(--offline); }
+
+/* Modal agregar contacto */
+#addContactModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+#addContactModal.visible { display: flex; }
+
+.add-contact-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: loginIn .25s ease;
+}
+
+.add-contact-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.add-contact-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.add-contact-field label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-mid);
+    text-transform: uppercase;
+}
+
+.add-contact-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    font-size: 16px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark);
+    background: var(--white);
+    transition: border-color var(--transition);
+}
+
+.add-contact-input:focus {
+    border-color: var(--purple-deep);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
+}
+
+.add-contact-phone-wrap {
+    display: flex;
+    align-items: center;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: border-color var(--transition);
+}
+
+.add-contact-phone-wrap:focus-within {
+    border-color: var(--purple-deep);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
+}
+
+.add-contact-phone-wrap .phone-prefix,
+.contact-prefix-select {
+    padding: 12px 10px 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--purple-deep);
+    background: var(--purple-pale);
+    border: none;
+    border-right: 1.5px solid var(--border);
+    white-space: nowrap;
+    user-select: none;
+    font-family: 'DM Mono', monospace;
+    flex-shrink: 0;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    /* mostrar flecha mínima para indicar que es desplegable */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234f46e5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+
+.add-contact-phone-wrap input {
+    flex: 1;
+    padding: 12px 14px;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    font-family: 'DM Mono', monospace;
+    color: var(--text-dark);
+    background: transparent;
+    min-width: 0;
+}
+
+.add-contact-error {
+    font-size: 12px;
+    color: #ef4444;
+    min-height: 18px;
+}
+
+.add-contact-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-contact-cancel {
+    flex: 1;
+    padding: 12px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-mid);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all var(--transition);
+    touch-action: manipulation;
+}
+
+.btn-contact-cancel:hover { background: var(--bg-sidebar); }
+
+.btn-contact-save {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--bubble-me);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: opacity var(--transition);
+    touch-action: manipulation;
+}
+
+.btn-contact-save:hover    { opacity: 0.88; }
+.btn-contact-save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.contacts-empty {
+    padding: 8px 18px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ── Usuarios desconocidos en "Conectados ahora" ── */
+#users li.stranger {
+    cursor: default;
+    opacity: 0.85;
+}
+#users li.stranger:hover { background: transparent; }
+
+.stranger-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-stranger-accept {
+    padding: 5px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--bubble-me);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: opacity var(--transition);
+    touch-action: manipulation;
+    white-space: nowrap;
+}
+.btn-stranger-accept:hover { opacity: 0.82; }
+
+.btn-stranger-reject {
+    padding: 5px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all var(--transition);
+    touch-action: manipulation;
+    white-space: nowrap;
+}
+.btn-stranger-reject:hover { background: rgba(239,68,68,0.08); color: #ef4444; border-color: #ef4444; }
+
+/* ── Modal solicitud de contacto entrante ── */
+#contactRequestModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9600;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+#contactRequestModal.visible { display: flex; }
+
+.contact-request-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    animation: loginIn .25s ease;
+    text-align: center;
+}
+
+.contact-request-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--purple-pale);
+}
+
+.contact-request-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+}
+
+.contact-request-card p {
+    font-size: 14px;
+    color: var(--text-mid);
+    margin: 0;
+    line-height: 1.4;
+}
+
+.contact-request-name-input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    outline: none;
+    font-size: 15px;
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark);
+    background: var(--white);
+    transition: border-color var(--transition);
+    box-sizing: border-box;
+}
+.contact-request-name-input:focus {
+    border-color: var(--purple-deep);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.10);
+}
+
+.contact-request-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+
+
+.btn-contact-edit {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    transition: background var(--transition), color var(--transition);
+    line-height: 1;
+    touch-action: manipulation;
+}
+
+.btn-contact-edit:hover { background: rgba(79,70,229,0.1); color: var(--purple-deep); }
+
+/* Modal renombrar contacto */
+#renameContactModal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15,10,40,0.7);
+    backdrop-filter: blur(6px);
+}
+
+#renameContactModal.visible { display: flex; }
+
+.rename-contact-card {
+    background: var(--white);
+    border-radius: 20px;
+    padding: 28px 24px 24px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: loginIn .25s ease;
+}
+
+.rename-contact-card h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rename-contact-card .rename-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: -8px;
+    line-height: 1.5;
+}
+

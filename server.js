@@ -94,6 +94,12 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.static('public'));
 
 /* ── Health check: Render lo usa para saber que el servidor está vivo ── */
+
+
+/* ============================================================
+   EXPRESS API ROUTES
+============================================================ */
+
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
@@ -518,6 +524,12 @@ if (SELF_URL) {
     }, 14 * 60 * 1000); // cada 14 minutos
 }
 
+
+
+/* ============================================================
+   STATE — WebSocket maps, admin config, heartbeat
+============================================================ */
+
 // Map: username → WebSocket
 const users = new Map();
 
@@ -605,6 +617,12 @@ setInterval(() => {
     });
 }, HEARTBEAT_INTERVAL);
 
+
+
+/* ============================================================
+   WEBSOCKET SERVER — connection handler
+============================================================ */
+
 wss.on('connection', (ws) => {
     ws.isAlive = true;
     ws.isAway  = false;
@@ -634,6 +652,12 @@ wss.on('connection', (ws) => {
             }
             return;
         }
+
+
+
+/* ============================================================
+   MESSAGE ROUTER — switch(data.type)
+============================================================ */
 
         switch (data.type) {
 
@@ -2722,6 +2746,12 @@ wss.on('connection', (ws) => {
         console.error(`Error WebSocket (${ws.username || 'sin-identificar'}):`, err.message);
     });
 });
+
+
+
+/* ============================================================
+   HELPERS — sendMessage, broadcastUsers, broadcastToConversation
+============================================================ */
 
 /* ──────────────────────────────────────
    HELPERS
