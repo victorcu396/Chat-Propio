@@ -755,7 +755,8 @@ wss.on('connection', (ws) => {
                 try {
                     const pending = await Message.find({
                         to:        ws.username,
-                        delivered: false
+                        delivered: false,
+                        threadId:  null   // no entregar mensajes de hilo como pendientes
                     }).sort({ time: 1 });
 
                     for (const msg of pending) {
@@ -877,7 +878,7 @@ wss.on('connection', (ws) => {
 
                 // Entregar mensajes pendientes al nuevo dispositivo
                 try {
-                    const pendingMsgs = await Message.find({ to: newUsername, delivered: false }).sort({ time: 1 });
+                    const pendingMsgs = await Message.find({ to: newUsername, delivered: false, threadId: null }).sort({ time: 1 });
                     for (const msg of pendingMsgs) {
                         newWs.send(JSON.stringify({ type: 'message', ...msg._doc, isEcho: false }));
                         await Message.updateOne({ id: msg.id }, { delivered: true });
@@ -1062,7 +1063,8 @@ wss.on('connection', (ws) => {
                 // Paginación: cargar los últimos PAGE_SIZE mensajes.
                 // Si viene beforeId, cargar la página anterior a ese mensaje.
                 const PAGE_SIZE = 50;
-                const filter = { conversationId };
+                // threadId != null → son respuestas de hilo, NO del chat principal
+                const filter = { conversationId, threadId: null };
                 if (data.beforeId) {
                     const anchor = await Message.findOne({ id: data.beforeId }).lean();
                     if (anchor) filter.time = { $lt: anchor.time };
@@ -1638,7 +1640,8 @@ wss.on('connection', (ws) => {
                 if (!grpHist || !grpHist.members.includes(ws.phone)) break;
 
                 const PAGE_SIZE = 50;
-                const grpFilter = { conversationId: 'group_' + data.groupId };
+                // threadId != null → son respuestas de hilo, NO del chat principal
+                const grpFilter = { conversationId: 'group_' + data.groupId, threadId: null };
                 if (data.beforeId) {
                     const anchor = await Message.findOne({ id: data.beforeId }).lean();
                     if (anchor) grpFilter.time = { $lt: anchor.time };
@@ -2491,11 +2494,24 @@ wss.on('connection', (ws) => {
                     }
 
                     const newId = crypto.randomUUID();
+
+                    // En 1:1, el 'to' del mensaje de hilo debe ser el otro participante,
+                    // no necesariamente root.to (que es el destinatario del mensaje raíz).
+                    // Derivarlo del conversationId: los dos usernames del convId son los participantes.
+                    let threadTo = root.to;
+                    if (!isGroup) {
+                        const parts = (root.conversationId || '').split('_');
+                        // convId = [usernameA, usernameB].sort().join('_')
+                        if (parts.length === 2) {
+                            threadTo = parts.find(p => p !== ws.username) || root.to;
+                        }
+                    }
+
                     const threadMsg = new Message({
                         id:             newId,
                         conversationId: root.conversationId,
                         from:           ws.username,
-                        to:             root.to,
+                        to:             threadTo,
                         message:        data.message,
                         avatar:         ws.avatar,
                         threadId:       data.threadId,
@@ -2523,8 +2539,15 @@ wss.on('connection', (ws) => {
                             }
                         });
                     } else {
-                        // 1:1: enviar a ambos participantes
-                        broadcastToConversation(root.conversationId, payload, root.from, root.to);
+                        // 1:1: enviar a ambos participantes usando los usernames del convId
+                        const parts = (root.conversationId || '').split('_');
+                        const participants = parts.length === 2 ? parts : [root.from, root.to].filter(Boolean);
+                        participants.forEach(uname => {
+                            const uWs = users.get(uname);
+                            if (uWs && uWs.readyState === WebSocket.OPEN) {
+                                try { uWs.send(payload); } catch(_) {}
+                            }
+                        });
                     }
                 } catch(e) { console.error('threadMessage error:', e.message); }
                 break;
@@ -2536,8 +2559,14 @@ wss.on('connection', (ws) => {
             case 'loadThread': {
                 if (!data.threadId) break;
                 try {
-                    const replies = await Message.find({ threadId: data.threadId }).sort({ time: 1 });
-                    ws.send(JSON.stringify({ type: 'thread_history', threadId: data.threadId, messages: replies }));
+                    const rootMsg = await Message.findOne({ id: data.threadId }).lean();
+                    const replies = await Message.find({ threadId: data.threadId }).sort({ time: 1 }).lean();
+                    ws.send(JSON.stringify({
+                        type:     'thread_history',
+                        threadId: data.threadId,
+                        messages: replies,
+                        rootMsg:  rootMsg || null
+                    }));
                 } catch(e) { console.error('loadThread error:', e.message); }
                 break;
             }

@@ -144,6 +144,14 @@ window.addEventListener('popstate', (e) => {
     const esMobil = window.innerWidth <= 900 || document.documentElement.classList.contains('is-mobile');
     if (!esMobil) return;
 
+    // Si el panel de hilo está abierto, cerrarlo primero
+    const threadPanel = document.getElementById('threadPanel');
+    if (threadPanel && threadPanel.classList.contains('open')) {
+        cerrarHilo();
+        history.pushState({ kvs: 'chat' }, '');
+        return;
+    }
+
     // Si hay algún modal abierto, cerrarlo primero
     const modalesAbiertos = [
         document.getElementById('avatarModal'),
@@ -6475,6 +6483,9 @@ function handleMessage(data) {
             return;
         }
 
+        // Mensajes de hilo: se gestionan por thread_message, ignorar aquí
+        if (data.threadId) return;
+
         // isEcho: true  → el servidor confirma que NOSOTROS enviamos este mensaje
         // isEcho: false → mensaje recibido DE otro usuario
         // Para compatibilidad con mensajes del historial (sin isEcho), usar from===username como fallback
@@ -7631,6 +7642,9 @@ function _buildMsgActionsBtn(msgId, isMe, isDeleted, isGroup) {
 
 function addMessage(msg) {
     const isMe = msg.self || msg.from === username;
+
+    // Mensajes de hilo: pertenecen al panel de hilo, nunca al chat principal
+    if (msg.threadId) return;
 
     // Saltar mensajes que el usuario ha ocultado localmente
     if (msg.id && !msg.id.startsWith('local_')) {
@@ -11286,15 +11300,16 @@ function _attachThreadInputListener() {
 function abrirHilo(msgId) {
     _threadId = msgId;
 
-    // Mostrar el mensaje raíz en el panel
+    // Intentar obtener el mensaje raíz del DOM (puede no estar si no está en pantalla)
     const bubble = document.getElementById(msgId);
     const row    = bubble ? bubble.closest('.msg-row') : null;
     const from   = row ? (row.querySelector('.msg-avatar')?.alt || '') : '';
     const textEl = bubble ? bubble.querySelector('.msg-text') : null;
     const text   = textEl ? (textEl.textContent || textEl.innerText || '').trim() : '';
 
-    document.getElementById('threadRootFrom').textContent = from;
-    document.getElementById('threadRootText').textContent = text.slice(0, 200);
+    // Mostrar lo que tenemos (puede actualizarse cuando llegue thread_history)
+    document.getElementById('threadRootFrom').textContent = from || '…';
+    document.getElementById('threadRootText').textContent = text ? text.slice(0, 200) : '…';
 
     // Limpiar mensajes anteriores del hilo
     document.getElementById('threadMessages').innerHTML = '';
@@ -11302,6 +11317,11 @@ function abrirHilo(msgId) {
     // Abrir el panel
     const panel = document.getElementById('threadPanel');
     panel.classList.add('open');
+
+    // En móvil: empujar estado al historial para que el botón atrás cierre el hilo
+    if (_esMobile()) {
+        history.pushState({ kvs: 'thread' }, '');
+    }
 
     // Adjuntar listener (solo una vez)
     _attachThreadInputListener();
@@ -11315,7 +11335,7 @@ function abrirHilo(msgId) {
         }
     }, 320);
 
-    // Pedir historial del hilo
+    // Pedir historial del hilo al servidor (siempre, para ambos dispositivos)
     if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'loadThread', threadId: msgId }));
     }
@@ -11368,6 +11388,13 @@ function _renderThreadMsg(msg) {
 
 function onHistorialHilo(data) {
     if (data.threadId !== _threadId) return;
+    // Actualizar el mensaje raíz con los datos del servidor (fiable en ambos dispositivos)
+    if (data.rootMsg) {
+        const root = data.rootMsg;
+        document.getElementById('threadRootFrom').textContent = root.from || '';
+        document.getElementById('threadRootText').textContent =
+            (root.deletedAt ? '🗑 Mensaje eliminado' : (root.message || '')).slice(0, 200);
+    }
     const ul = document.getElementById('threadMessages');
     ul.innerHTML = '';
     (data.messages || []).forEach(msg => ul.appendChild(_renderThreadMsg(msg)));
