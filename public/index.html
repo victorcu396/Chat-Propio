@@ -75,6 +75,10 @@ window.addEventListener('DOMContentLoaded', () => {
         // Limpiar la URL sin recargar
         history.replaceState({}, '', '/');
     }
+    // Empujar un estado base para que el botón atrás siempre tenga algo que interceptar
+    if (_esMobile()) {
+        history.pushState({ kvs: 'menu' }, '');
+    }
 });
 
 // ── Capturar evento de instalación PWA ───────────────────────
@@ -130,8 +134,6 @@ function _volverAlMenu() {
 
 // Alias para compatibilidad con botón atrás del header
 function volverALista() {
-    // En móvil: cerrar el sidebar si está abierto, de lo contrario no hace nada
-    // (el botón atrás del sistema ya maneja la navegación)
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     if (sidebar && sidebar.classList.contains('visible')) {
@@ -173,12 +175,19 @@ window.addEventListener('popstate', (e) => {
         return;
     }
 
-    // Si el sidebar está oculto → volver al menú
+    // Si el sidebar está oculto (estamos dentro de un chat) → volver al menú
     const sidebar = document.getElementById('sidebar');
     if (sidebar && !sidebar.classList.contains('visible')) {
         _volverAlMenu();
+        // Volver a empujar un estado base para que la siguiente pulsación
+        // de atrás no saque al usuario de la app
+        history.pushState({ kvs: 'menu' }, '');
         return;
     }
+
+    // Si el sidebar está visible (estamos en el menú) → empujar estado base
+    // para interceptar la siguiente pulsación y evitar salir de la app
+    history.pushState({ kvs: 'menu' }, '');
 });
 
 function toggleSidebar() {
@@ -11409,6 +11418,22 @@ function enviarEnHilo() {
         self:     true
     };
 
+    // Actualizar threadCount optimistamente en conversations[] y en el DOM
+    let newCount = 1;
+    Object.values(conversations).forEach(arr => {
+        if (!Array.isArray(arr)) return;
+        const m = arr.find(m => m.id === _threadId);
+        if (m) {
+            m.threadCount = (m.threadCount || 0) + 1;
+            newCount = m.threadCount;
+        }
+    });
+    const threadDiv = document.getElementById('thread_' + _threadId);
+    if (threadDiv) {
+        const tid = _threadId;
+        threadDiv.innerHTML = `<button class="thread-btn" onclick="abrirHilo('${tid}')">🧵 ${newCount} respuesta${newCount > 1 ? 's' : ''}</button>`;
+    }
+
     // Mostrar inmediatamente en el panel del hilo
     const ul = document.getElementById('threadMessages');
     if (ul) {
@@ -11612,7 +11637,14 @@ function onHistorialHilo(data) {
 }
 
 function onMensajeHilo(data) {
-    // Actualizar threadCount en el botón del mensaje raíz en el chat principal
+    // Actualizar threadCount en conversations[] (fuente de verdad para recargas)
+    Object.values(conversations).forEach(arr => {
+        if (!Array.isArray(arr)) return;
+        const m = arr.find(m => m.id === data.threadId);
+        if (m) m.threadCount = data.threadCount;
+    });
+
+    // Actualizar el botón "🧵 N respuestas" en el chat principal si el div está en el DOM
     const threadDiv = document.getElementById('thread_' + data.threadId);
     if (threadDiv) {
         const count = data.threadCount;
@@ -11628,8 +11660,7 @@ function onMensajeHilo(data) {
         const isMyMsg  = incoming.from === username;
 
         if (isMyMsg) {
-            // Es confirmación del servidor de nuestro mensaje optimista:
-            // buscar el li local_ más reciente del mismo texto y reemplazarlo
+            // Confirmación del servidor: reemplazar el mensaje optimista local
             const localItems = ul.querySelectorAll('[id^="thread_item_local_thread_"]');
             let replaced = false;
             localItems.forEach(li => {
@@ -11642,7 +11673,7 @@ function onMensajeHilo(data) {
                     }
                 }
             });
-            // Si no encontramos el optimista (p.ej. llegó muy rápido), evitar duplicado
+            // Si no encontramos el optimista, añadir solo si no existe ya
             if (!replaced && !ul.querySelector('#thread_item_' + incoming.id)) {
                 ul.appendChild(_renderThreadMsg(incoming));
                 ul.scrollTop = ul.scrollHeight;
