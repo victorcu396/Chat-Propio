@@ -32,6 +32,26 @@ async function cargarContactos() {
             }
         });
         renderContactsList();
+
+        // ── Volcar los usernames conocidos en _phoneToUsername ──────────────
+        // La REST /api/contacts ya nos devuelve el username actual de cada contacto
+        // registrado. Lo volcamos en _phoneToUsername para que renderUsers pueda
+        // identificar a cada contacto por su phone aunque llegue el broadcast
+        // 'users' antes de que este fetch termine.
+        window._phoneToUsername = window._phoneToUsername || {};
+        myContacts.forEach((c, phone) => {
+            if (c.username) {
+                window._phoneToUsername[phone] = c.username;
+            }
+        });
+
+        // ── Refrescar "Conectados ahora" con los contactos ya cargados ──────
+        // Es posible que el broadcast 'users' haya llegado antes que esta REST,
+        // dejando contactos visibles como desconocidos. Forzar el re-render ahora.
+        if (typeof lastKnownUsers !== 'undefined' && lastKnownUsers.length > 0) {
+            renderUsers(lastKnownUsers);
+        }
+
         // Marcar contactos como listos y abrir chat pendiente si procede
         _contactosListos = true;
         if (window._pendingOpenChat) _abrirChatPendienteDesdeNotif();
@@ -361,8 +381,7 @@ function onContactRenamed(contactPhone, newName) {
     if (contact) {
         contact.customName = newName;
         // Asegurarse de que c.username esté actualizado para que renderUsers
-        // pueda identificar a este contacto por su username actual y no lo muestre
-        // en "Conectados ahora". Si _phoneToUsername tiene el username actual, usarlo.
+        // pueda identificar a este contacto y no lo muestre en "Conectados ahora".
         if (!contact.username && window._phoneToUsername && window._phoneToUsername[contactPhone]) {
             contact.username = window._phoneToUsername[contactPhone];
         }
@@ -374,9 +393,11 @@ function onContactRenamed(contactPhone, newName) {
         document.getElementById('chatName').textContent = newName;
     }
     renderContactsList();
-    // Actualizar "Conectados ahora" para que el contacto renombrado deje de
-    // aparecer como desconocido si estaba online con su nombre anterior.
-    renderUsers(lastKnownUsers);
+    // Refrescar "Conectados ahora" para que el contacto deje de aparecer
+    // como desconocido si estaba online con su nombre anterior.
+    if (typeof lastKnownUsers !== 'undefined') {
+        renderUsers(lastKnownUsers);
+    }
     cerrarModalRenombrar();
 }
 
