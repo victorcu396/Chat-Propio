@@ -4,14 +4,20 @@
 function renderUsers(onlineList) {
     const contactPhones = new Set([...myContacts.keys()]);
 
-    // Construir también un Set de usernames de contactos para filtrado más robusto.
-    // Un usuario online se considera "contacto" si:
-    //   a) Su phone está en myContacts, O
-    //   b) Su username coincide con el campo .username de algún contacto
-    // Esto cubre el caso en que _phoneToUsername aún no tiene el phone mapeado.
+    // Construir un Set de usernames de contactos para filtrado por nombre.
+    // Usamos TODAS las fuentes disponibles para identificar a un contacto:
+    //   a) c.username guardado en myContacts (puede estar desactualizado o ser null)
+    //   b) El username actual según _phoneToUsername para cada phone en myContacts
+    // Esto garantiza que aunque el contacto cambie de nombre en el servidor,
+    // o aunque c.username sea null (contacto offline al guardarse), siga filtrándose.
     const contactUsernames = new Set();
-    myContacts.forEach(c => {
+    myContacts.forEach((c, phone) => {
+        // Fuente 1: username guardado en la entrada del contacto
         if (c.username) contactUsernames.add(c.username);
+        // Fuente 2: username actual según el mapa phone→username (más fiable, siempre actualizado)
+        if (window._phoneToUsername && window._phoneToUsername[phone]) {
+            contactUsernames.add(window._phoneToUsername[phone]);
+        }
     });
 
     // Separar en contactos-online (ya se muestran en #contactsList) y desconocidos
@@ -26,10 +32,18 @@ function renderUsers(onlineList) {
             ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === u)?.[0]
             : null;
         if (uPhone && uPhone === loginPhone) return false;
-        // Comprobar por username directo en contactos
+        // Comprobar por username directo en contactos (cubre c.username y username actual via _phoneToUsername)
         if (contactUsernames.has(u)) return false;
-        // Comprobar por phone en contactos (vía _phoneToUsername)
+        // Comprobar por phone en contactos (vía _phoneToUsername) — fuente de verdad más robusta
         if (uPhone && contactPhones.has(uPhone)) return false;
+        // Comprobar a la inversa: recorrer myContacts buscando si algún contacto tiene
+        // este username como username actual. Cubre el caso en que _phoneToUsername aún
+        // no tiene la entrada pero sí la tiene myContacts (p.ej. contacto renombrado localmente).
+        let esContacto = false;
+        myContacts.forEach(c => {
+            if (c.username === u) esContacto = true;
+        });
+        if (esContacto) return false;
         return true; // es un desconocido → mostrar en "Conectados ahora"
     });
 

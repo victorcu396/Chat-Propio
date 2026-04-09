@@ -360,6 +360,12 @@ function onContactRenamed(contactPhone, newName) {
     const contact = myContacts.get(contactPhone);
     if (contact) {
         contact.customName = newName;
+        // Asegurarse de que c.username esté actualizado para que renderUsers
+        // pueda identificar a este contacto por su username actual y no lo muestre
+        // en "Conectados ahora". Si _phoneToUsername tiene el username actual, usarlo.
+        if (!contact.username && window._phoneToUsername && window._phoneToUsername[contactPhone]) {
+            contact.username = window._phoneToUsername[contactPhone];
+        }
         myContacts.set(contactPhone, contact);
     }
     // Si el chat actual es este contacto, actualizar el header
@@ -368,6 +374,9 @@ function onContactRenamed(contactPhone, newName) {
         document.getElementById('chatName').textContent = newName;
     }
     renderContactsList();
+    // Actualizar "Conectados ahora" para que el contacto renombrado deje de
+    // aparecer como desconocido si estaba online con su nombre anterior.
+    renderUsers(lastKnownUsers);
     cerrarModalRenombrar();
 }
 
