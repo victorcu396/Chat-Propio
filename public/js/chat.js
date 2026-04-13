@@ -42,10 +42,18 @@ function seleccionarUsuario(user) {
     if (!user) return;
 
     // ── Bloquear chat con desconocidos (el admin puede chatear con todos) ──
-    const phoneOfUser = window._phoneToUsername
+    // Resolver el phone del usuario por todas las fuentes disponibles:
+    // _phoneToUsername (solo online), _allContactsPhoneToUsername (todos los registrados)
+    let phoneOfUser = window._phoneToUsername
         ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
         : null;
+    if (!phoneOfUser && window._allContactsPhoneToUsername) {
+        phoneOfUser = Object.entries(window._allContactsPhoneToUsername).find(([ph, un]) => un === user)?.[0] || null;
+    }
     const _isAdminUser = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
+    // Solo bloquear si conocemos el phone Y no está en myContacts.
+    // Si no conocemos el phone (phoneOfUser===null), permitir — puede ser un contacto recién
+    // agregado cuyo phone aún no está en ningún mapa; el servidor gestionará los permisos.
     if (phoneOfUser && !myContacts.has(phoneOfUser) && !_isAdminUser) return;
 
     if (currentChat === user) return;
@@ -73,10 +81,14 @@ function seleccionarUsuario(user) {
     _cerrarMentionList();
     chat.innerHTML = '';
 
-    // Check if this user is a contact and get custom name
-    const phone = window._phoneToUsername
+    // Check if this user is a contact and get custom name.
+    // Buscar phone en _phoneToUsername (online) y en _allContactsPhoneToUsername (todos).
+    let phone = window._phoneToUsername
         ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === user)?.[0]
         : null;
+    if (!phone && window._allContactsPhoneToUsername) {
+        phone = Object.entries(window._allContactsPhoneToUsername).find(([ph, un]) => un === user)?.[0] || null;
+    }
     const contact = phone ? myContacts.get(phone) : null;
     const displayName = contact ? contact.customName : user;
 
@@ -235,10 +247,15 @@ function enviar() {
 
     // ── Bloquear envío a desconocidos en chat 1:1 (el admin puede enviar a todos) ──
     if (!currentChat.startsWith('group_') && !currentChat.startsWith('phone:')) {
-        const chatPhone = window._phoneToUsername
+        // Resolver phone por todas las fuentes disponibles
+        let chatPhone = window._phoneToUsername
             ? Object.entries(window._phoneToUsername).find(([ph, un]) => un === currentChat)?.[0]
             : null;
+        if (!chatPhone && window._allContactsPhoneToUsername) {
+            chatPhone = Object.entries(window._allContactsPhoneToUsername).find(([ph, un]) => un === currentChat)?.[0] || null;
+        }
         const _isAdminSend = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
+        // Solo bloquear si conocemos el phone Y no está en myContacts.
         if (chatPhone && !myContacts.has(chatPhone) && !_isAdminSend) return;
     }
 
@@ -759,4 +776,4 @@ function updateEstado(id, estado) {
 }
 
 
-// ============================================================ 
+// ============================================================

@@ -33,21 +33,21 @@ async function cargarContactos() {
         });
         renderContactsList();
 
-        // ── Volcar los usernames conocidos en _phoneToUsername ──────────────
-        // La REST /api/contacts ya nos devuelve el username actual de cada contacto
-        // registrado. Lo volcamos en _phoneToUsername para que renderUsers pueda
-        // identificar a cada contacto por su phone aunque llegue el broadcast
-        // 'users' antes de que este fetch termine.
-        window._phoneToUsername = window._phoneToUsername || {};
+        // ── Poblar el mapa auxiliar phone→username de TODOS los contactos ───
+        // IMPORTANTE: NO tocar window._phoneToUsername (solo contiene usuarios ONLINE).
+        // Usamos window._allContactsPhoneToUsername para el filtrado en renderUsers,
+        // de forma que un contacto offline no aparezca con círculo verde pero sí
+        // se filtre correctamente de "Conectados ahora".
+        window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
         myContacts.forEach((c, phone) => {
             if (c.username) {
-                window._phoneToUsername[phone] = c.username;
+                window._allContactsPhoneToUsername[phone] = c.username;
             }
         });
 
-        // ── Refrescar "Conectados ahora" con los contactos ya cargados ──────
-        // Es posible que el broadcast 'users' haya llegado antes que esta REST,
-        // dejando contactos visibles como desconocidos. Forzar el re-render ahora.
+        // ── Refrescar "Conectados ahora" ahora que myContacts está poblado ──
+        // Si el broadcast 'users' llegó antes que esta REST, los contactos
+        // aparecerían como desconocidos. Forzar re-render para corregirlo.
         if (typeof lastKnownUsers !== 'undefined' && lastKnownUsers.length > 0) {
             renderUsers(lastKnownUsers);
         }
@@ -303,6 +303,13 @@ function onContactAdded(contactPhone, customName, avatar, username) {
         if (username) userAvatars[username] = avatar;
         userAvatars['__phone__' + contactPhone] = avatar;
     }
+    // Registrar el username en el mapa auxiliar para que renderUsers
+    // pueda filtrar a este contacto de "Conectados ahora" inmediatamente,
+    // sin esperar al próximo broadcast 'users'.
+    if (username) {
+        window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
+        window._allContactsPhoneToUsername[contactPhone] = username;
+    }
     renderContactsList();
     renderUsers(lastKnownUsers); // quitar al usuario de "Conectados ahora" si estaba ahí
     cerrarModalContacto();
@@ -380,10 +387,16 @@ function onContactRenamed(contactPhone, newName) {
     const contact = myContacts.get(contactPhone);
     if (contact) {
         contact.customName = newName;
-        // Asegurarse de que c.username esté actualizado para que renderUsers
-        // pueda identificar a este contacto y no lo muestre en "Conectados ahora".
-        if (!contact.username && window._phoneToUsername && window._phoneToUsername[contactPhone]) {
-            contact.username = window._phoneToUsername[contactPhone];
+        // Si c.username estaba vacío, intentar rellenarlo desde los mapas disponibles
+        if (!contact.username) {
+            const uFromOnline = window._phoneToUsername && window._phoneToUsername[contactPhone];
+            const uFromAll    = window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[contactPhone];
+            contact.username = uFromOnline || uFromAll || null;
+        }
+        // Actualizar también el mapa auxiliar si ya lo conocemos
+        if (contact.username) {
+            window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
+            window._allContactsPhoneToUsername[contactPhone] = contact.username;
         }
         myContacts.set(contactPhone, contact);
     }

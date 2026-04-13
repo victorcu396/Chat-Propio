@@ -811,8 +811,22 @@ function handleMessage(data) {
             if (typeof u === 'object') {
                 if (u.avatar && u.username) userAvatars[u.username] = u.avatar;
                 if (u.phone && u.username) {
+                    // _phoneToUsername: SOLO usuarios online (usado para indicador de presencia)
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
+                    // _allContactsPhoneToUsername: todos los contactos registrados (online o no).
+                    // Al recibir un usuario online que es nuestro contacto, lo añadimos también
+                    // al mapa auxiliar para que renderUsers pueda filtrarlo correctamente.
+                    if (typeof myContacts !== 'undefined' && myContacts.has(u.phone)) {
+                        window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
+                        window._allContactsPhoneToUsername[u.phone] = u.username;
+                        // Sincronizar c.username si estaba vacío
+                        const _c = myContacts.get(u.phone);
+                        if (_c && !_c.username) {
+                            _c.username = u.username;
+                            myContacts.set(u.phone, _c);
+                        }
+                    }
                 }
                 if (u.isAway && u.username) window._awayUsers.add(u.username);
                 return u.username || null;
@@ -1170,4 +1184,3 @@ function handleMessage(data) {
 }
 
 let lastKnownUsers = [];
-
