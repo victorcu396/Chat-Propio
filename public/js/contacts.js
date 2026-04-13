@@ -31,8 +31,6 @@ async function cargarContactos() {
                 userAvatars['__phone__' + c.contactPhone] = c.avatar;
             }
         });
-        // Poblar _allContactsPhoneToUsername ANTES de renderizar,
-        // para que renderContactsList y renderUsers tengan el mapa disponible.
         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
         myContacts.forEach((c, phone) => {
             if (c.username) window._allContactsPhoneToUsername[phone] = c.username;
@@ -40,18 +38,15 @@ async function cargarContactos() {
 
         renderContactsList();
 
-        // Si el broadcast 'users' llegó antes que esta REST, contactos online
-        // podrían aparecer en "Conectados ahora". Forzar re-render ahora.
         if (typeof lastKnownUsers !== 'undefined' && lastKnownUsers.length > 0) {
             renderUsers(lastKnownUsers);
         }
 
-        // Marcar contactos como listos y abrir chat pendiente si procede
         _contactosListos = true;
         if (window._pendingOpenChat) _abrirChatPendienteDesdeNotif();
     } catch(e) {
         console.error('Error cargando contactos:', e);
-        _contactosListos = true; // marcar igualmente para no bloquear el flujo
+        _contactosListos = true;
     }
 }
 
@@ -292,18 +287,16 @@ function onContactAdded(contactPhone, customName, avatar, username) {
         blockedUs:    _existingContact ? (_existingContact.blockedUs || false) : false
         // _optimistic se elimina al sobrescribir (contacto confirmado por servidor)
     });
-    // Cachear avatar para uso offline
     if (avatar) {
         if (username) userAvatars[username] = avatar;
         userAvatars['__phone__' + contactPhone] = avatar;
     }
-    // Registrar username en mapa auxiliar para filtrar "Conectados ahora" inmediatamente
     if (username) {
         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
         window._allContactsPhoneToUsername[contactPhone] = username;
     }
     renderContactsList();
-    renderUsers(lastKnownUsers); // quitar al usuario de "Conectados ahora" si estaba ahí
+    renderUsers(lastKnownUsers);
     cerrarModalContacto();
     // Toast solo si es un contacto nuevo (no al recibirlo como recíproco sin abrir modal)
     if (esNuevo) {
@@ -379,7 +372,6 @@ function onContactRenamed(contactPhone, newName) {
     const contact = myContacts.get(contactPhone);
     if (contact) {
         contact.customName = newName;
-        // Rellenar username si estaba vacío
         if (!contact.username) {
             contact.username =
                 (window._phoneToUsername && window._phoneToUsername[contactPhone]) ||
@@ -392,7 +384,6 @@ function onContactRenamed(contactPhone, newName) {
         }
         myContacts.set(contactPhone, contact);
     }
-    // Si el chat actual es este contacto, actualizar el header
     const onlineUsername = getOnlineUsernameByPhone(contactPhone);
     if (onlineUsername && currentChat === onlineUsername) {
         document.getElementById('chatName').textContent = newName;

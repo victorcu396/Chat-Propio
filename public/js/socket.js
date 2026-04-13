@@ -803,9 +803,6 @@ function handleMessage(data) {
 
     if (data.type === 'users') {
         // data.online es array de {username, avatar, phone, isAway}
-        // Reconstruir _phoneToUsername desde cero en cada broadcast.
-        // Así los usuarios que se desconectaron no quedan con entrada activa
-        // y no aparecen con círculo verde en la lista de contactos.
         window._phoneToUsername = {};
         window._onlinePhones    = new Set();
         window._awayUsers       = window._awayUsers || new Set();
@@ -814,18 +811,13 @@ function handleMessage(data) {
             if (typeof u === 'object') {
                 if (u.avatar && u.username) userAvatars[u.username] = u.avatar;
                 if (u.phone && u.username) {
-                    // _phoneToUsername: SOLO online (para indicador de presencia)
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
-                    // Actualizar _allContactsPhoneToUsername si es un contacto nuestro
                     if (typeof myContacts !== 'undefined' && myContacts.has(u.phone)) {
                         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
                         window._allContactsPhoneToUsername[u.phone] = u.username;
                         const _c = myContacts.get(u.phone);
-                        if (_c && !_c.username) {
-                            _c.username = u.username;
-                            myContacts.set(u.phone, _c);
-                        }
+                        if (_c && !_c.username) { _c.username = u.username; myContacts.set(u.phone, _c); }
                     }
                 }
                 if (u.isAway && u.username) window._awayUsers.add(u.username);

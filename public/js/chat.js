@@ -54,10 +54,15 @@ function seleccionarUsuario(user) {
         }
     }
     const _isAdminUser = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
-    // Solo bloquear si conocemos el phone Y no está en myContacts.
+    // Solo bloquear si conocemos el phone Y confirmamos que NO es contacto
     if (phoneOfUser && !myContacts.has(phoneOfUser) && !_isAdminUser) return;
 
-    if (currentChat === user) return;
+    // Si ya estamos en este chat, solo re-habilitar el input y salir
+    // (puede haber quedado disabled en algún estado previo)
+    if (currentChat === user) {
+        input.disabled = false;
+        return;
+    }
     _limpiarEstadoChat();
     _mostrarWelcomePanel(false);
     currentChat = user;
