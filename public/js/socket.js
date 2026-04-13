@@ -803,7 +803,10 @@ function handleMessage(data) {
 
     if (data.type === 'users') {
         // data.online es array de {username, avatar, phone, isAway}
-        window._phoneToUsername = window._phoneToUsername || {};
+        // IMPORTANTE: reconstruir _phoneToUsername desde cero con cada broadcast.
+        // No reutilizar el objeto anterior para evitar que usuarios offline queden
+        // con una entrada activa (lo que causaría que aparecieran con círculo verde).
+        window._phoneToUsername = {};
         window._onlinePhones    = new Set();
         window._awayUsers       = window._awayUsers || new Set();
         window._awayUsers.clear();
@@ -811,16 +814,16 @@ function handleMessage(data) {
             if (typeof u === 'object') {
                 if (u.avatar && u.username) userAvatars[u.username] = u.avatar;
                 if (u.phone && u.username) {
-                    // _phoneToUsername: SOLO usuarios online (usado para indicador de presencia)
+                    // Solo usuarios online en _phoneToUsername (indicador de presencia)
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
-                    // _allContactsPhoneToUsername: todos los contactos registrados (online o no).
-                    // Al recibir un usuario online que es nuestro contacto, lo añadimos también
-                    // al mapa auxiliar para que renderUsers pueda filtrarlo correctamente.
+                    // Actualizar _allContactsPhoneToUsername para contactos online:
+                    // este mapa contiene todos los contactos registrados (online o no)
+                    // y se usa por renderUsers para filtrar "Conectados ahora".
                     if (typeof myContacts !== 'undefined' && myContacts.has(u.phone)) {
                         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
                         window._allContactsPhoneToUsername[u.phone] = u.username;
-                        // Sincronizar c.username si estaba vacío
+                        // Sincronizar c.username en myContacts si estaba vacío
                         const _c = myContacts.get(u.phone);
                         if (_c && !_c.username) {
                             _c.username = u.username;

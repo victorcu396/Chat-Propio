@@ -1,4 +1,3 @@
-
 // ============================================================
 // DETECCIÓN DE MÓVIL REAL (para Xiaomi/MIUI y navegadores con viewport incorrecto)
 // Se añade clase is-mobile al <html> si el dispositivo es realmente móvil
@@ -428,7 +427,9 @@ function _limpiarEstadoGlobal() {
     // Estado global de presencia
     lastKnownUsers = [];
     window._phoneToUsername = {};
+    window._allContactsPhoneToUsername = {};
     window._awayUsers = new Set();
+    window._onlinePhones = new Set();
     window._contactLastActivity = {};
 
     // Chat abierto
@@ -514,4 +515,3 @@ function logout() {
     goToStep(1);
     document.getElementById('phoneInput').value = '';
 }
-

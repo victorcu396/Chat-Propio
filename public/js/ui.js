@@ -4,74 +4,64 @@
 function renderUsers(onlineList) {
     const contactPhones = new Set([...myContacts.keys()]);
 
-    // Construir el Set de usernames conocidos de contactos.
-    // Usamos TRES fuentes para ser lo más robustos posible:
-    //   1) c.username en myContacts (puede ser null si el contacto nunca estuvo online)
-    //   2) window._phoneToUsername[phone]: solo usuarios ONLINE (no usar para verde/offline)
-    //   3) window._allContactsPhoneToUsername[phone]: todos los contactos registrados,
-    //      online o no. Se puebla desde cargarContactos() y onContactAdded().
-    //      Es la fuente clave para filtrar sin afectar al indicador de presencia.
+    // Set de usernames de todos los contactos conocidos.
+    // Tres fuentes para máxima cobertura:
+    //   1) c.username en myContacts
+    //   2) _phoneToUsername[phone]: solo usuarios ONLINE. Se reconstruye desde cero
+    //      con cada broadcast 'users', por lo que nunca contiene usuarios offline.
+    //      No causa falsos círculos verdes.
+    //   3) _allContactsPhoneToUsername[phone]: todos los contactos registrados,
+    //      online o no. Poblado por cargarContactos() y onContactAdded().
+    //      Permite filtrar antes del primer broadcast o tras agregar un contacto.
     const contactUsernames = new Set();
     myContacts.forEach((c, phone) => {
-        // Fuente 1: username guardado en la entrada
         if (c.username) contactUsernames.add(c.username);
-        // Fuente 2: username actual del online broadcast (solo si está online ahora)
         if (window._phoneToUsername && window._phoneToUsername[phone]) {
             contactUsernames.add(window._phoneToUsername[phone]);
         }
-        // Fuente 3: mapa auxiliar de todos los contactos registrados
         if (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[phone]) {
             contactUsernames.add(window._allContactsPhoneToUsername[phone]);
         }
     });
 
-    // Mapa inverso username→phone construido desde _phoneToUsername (solo online)
-    // para la comprobación por phone de forma eficiente.
+    // Mapa inverso username→phone: primero el auxiliar (todos los registrados),
+    // luego sobreescribir con _phoneToUsername (solo online, más fiable y reciente).
     const usernameToPhone = {};
+    if (window._allContactsPhoneToUsername) {
+        Object.entries(window._allContactsPhoneToUsername).forEach(([ph, un]) => {
+            if (un) usernameToPhone[un] = ph;
+        });
+    }
     if (window._phoneToUsername) {
         Object.entries(window._phoneToUsername).forEach(([ph, un]) => {
             if (un) usernameToPhone[un] = ph;
         });
     }
-    // Completar con el mapa auxiliar (para contactos que aún no han emitido broadcast online)
-    if (window._allContactsPhoneToUsername) {
-        Object.entries(window._allContactsPhoneToUsername).forEach(([ph, un]) => {
-            if (un && !usernameToPhone[un]) usernameToPhone[un] = ph;
-        });
-    }
 
-    // Separar en contactos (ya visibles en #contactsList) y genuinos desconocidos.
-    // Un usuario online se considera contacto si su phone o username aparece en myContacts
-    // por cualquiera de las vías anteriores.
+    // Filtrar: mostrar solo genuinos desconocidos en "Conectados ahora".
     const onlineNotContact = onlineList.filter(u => {
-        // Descartar entradas inválidas
         if (!u || typeof u !== 'string' || u.trim() === '') return false;
-        // Nunca mostrar al propio usuario
-        if (u === username) return false;
+        if (u === username)      return false;
         if (u === loginUsername) return false;
 
-        // Phone de este usuario online (desde los mapas inversos)
         const uPhone = usernameToPhone[u] || null;
-
-        // Excluir si el phone coincide con el propio
         if (uPhone && uPhone === loginPhone) return false;
 
-        // Comprobación 1: username en el Set de contactos conocidos
+        // Comprobación 1: username en el Set combinado (tres fuentes)
         if (contactUsernames.has(u)) return false;
 
-        // Comprobación 2: phone está directamente en myContacts
+        // Comprobación 2: phone directamente en myContacts
         if (uPhone && contactPhones.has(uPhone)) return false;
 
-        // Comprobación 3 (red de seguridad): recorrer myContacts directamente
+        // Comprobación 3 (red de seguridad): recorrido directo de myContacts
         let esContacto = false;
         myContacts.forEach(c => {
             if (c.username && c.username === u) esContacto = true;
         });
         if (esContacto) return false;
 
-        return true; // genuino desconocido
+        return true; // genuino desconocido → mostrar en "Conectados ahora"
     });
-
     if (onlineNotContact.length === 0) {
         usersUl.innerHTML = '<li style="list-style:none;padding:8px 18px;font-size:12px;color:var(--text-muted);font-style:italic;cursor:default;">Nadie más conectado</li>';
     } else {
