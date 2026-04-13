@@ -6,12 +6,16 @@ function renderUsers(onlineList) {
     const contactUsernames = new Set();
     myContacts.forEach((c, phone) => {
         if (c.username) contactUsernames.add(c.username);
-        if (window._phoneToUsername && window._phoneToUsername[phone]) contactUsernames.add(window._phoneToUsername[phone]);
-        if (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[phone]) contactUsernames.add(window._allContactsPhoneToUsername[phone]);
+        if (window._phoneToUsername && window._phoneToUsername[phone])
+            contactUsernames.add(window._phoneToUsername[phone]);
+        if (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[phone])
+            contactUsernames.add(window._allContactsPhoneToUsername[phone]);
     });
     const usernameToPhone = {};
-    if (window._allContactsPhoneToUsername) Object.entries(window._allContactsPhoneToUsername).forEach(([ph, un]) => { if (un) usernameToPhone[un] = ph; });
-    if (window._phoneToUsername) Object.entries(window._phoneToUsername).forEach(([ph, un]) => { if (un) usernameToPhone[un] = ph; });
+    if (window._allContactsPhoneToUsername)
+        Object.entries(window._allContactsPhoneToUsername).forEach(([ph,un]) => { if(un) usernameToPhone[un]=ph; });
+    if (window._phoneToUsername)
+        Object.entries(window._phoneToUsername).forEach(([ph,un]) => { if(un) usernameToPhone[un]=ph; });
     const onlineNotContact = onlineList.filter(u => {
         if (!u || typeof u !== 'string' || u.trim() === '') return false;
         if (u === username || u === loginUsername) return false;

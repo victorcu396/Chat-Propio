@@ -286,7 +286,10 @@ function onContactAdded(contactPhone, customName, avatar, username) {
         if (username) userAvatars[username] = avatar;
         userAvatars['__phone__' + contactPhone] = avatar;
     }
-    if (username) { window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {}; window._allContactsPhoneToUsername[contactPhone] = username; }
+    if (username) {
+        window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
+        window._allContactsPhoneToUsername[contactPhone] = username;
+    }
     renderContactsList();
     renderUsers(lastKnownUsers);
     cerrarModalContacto();
@@ -364,12 +367,21 @@ function onContactRenamed(contactPhone, newName) {
     const contact = myContacts.get(contactPhone);
     if (contact) {
         contact.customName = newName;
-        if (!contact.username) contact.username = (window._phoneToUsername && window._phoneToUsername[contactPhone]) || (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[contactPhone]) || null;
-        if (contact.username) { window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {}; window._allContactsPhoneToUsername[contactPhone] = contact.username; }
+        if (!contact.username) {
+            contact.username = (window._phoneToUsername && window._phoneToUsername[contactPhone])
+                || (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[contactPhone])
+                || null;
+        }
+        if (contact.username) {
+            window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
+            window._allContactsPhoneToUsername[contactPhone] = contact.username;
+        }
         myContacts.set(contactPhone, contact);
     }
     const onlineUsername = getOnlineUsernameByPhone(contactPhone);
-    if (onlineUsername && currentChat === onlineUsername) document.getElementById('chatName').textContent = newName;
+    if (onlineUsername && currentChat === onlineUsername) {
+        document.getElementById('chatName').textContent = newName;
+    }
     renderContactsList();
     if (typeof lastKnownUsers !== 'undefined') renderUsers(lastKnownUsers);
     cerrarModalRenombrar();

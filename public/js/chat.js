@@ -56,6 +56,7 @@ function seleccionarUsuario(user) {
     const _isAdminUser = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
     if (phoneOfUser && !myContacts.has(phoneOfUser) && !_isAdminUser) return;
 
+    // Si ya estamos en este chat, solo asegurar que el input está habilitado
     if (currentChat === user) { input.disabled = false; return; }
     _limpiarEstadoChat();
     _mostrarWelcomePanel(false);
@@ -81,6 +82,7 @@ function seleccionarUsuario(user) {
     _cerrarMentionList();
     chat.innerHTML = '';
 
+    // Obtener phone/contacto para mostrar customName
     let phone = null;
     if (window._phoneToUsername) {
         for (const [ph, un] of Object.entries(window._phoneToUsername)) {
@@ -399,10 +401,6 @@ function enviar() {
 // ============================================================
 // INPUT HANDLERS
 // ============================================================
-// Activar btnEnviar también en keyup y compositionend (teclados virtuales iOS/Android)
-input.addEventListener('keyup', () => { actualizarBtnEnviar(); });
-input.addEventListener('compositionend', () => { actualizarBtnEnviar(); });
-
 input.addEventListener('input', () => {
     actualizarBtnEnviar();
     input.style.height = 'auto';
@@ -424,6 +422,11 @@ input.addEventListener('input', () => {
             socket.send(JSON.stringify({ type: 'typing', to: currentChat, status: 'stop' }));
     }, 1500);
 });
+
+// En teclados virtuales (Android/iOS) el evento 'input' a veces no se dispara.
+// keyup y compositionend cubren esos casos y mantienen el botón enviar actualizado.
+input.addEventListener('keyup', () => { actualizarBtnEnviar(); });
+input.addEventListener('compositionend', () => { actualizarBtnEnviar(); });
 
 input.addEventListener('keydown', (e) => {
     // Mention list intercepts arrow keys, Enter, Tab, Escape

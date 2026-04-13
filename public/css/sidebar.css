@@ -443,7 +443,7 @@
     height: 11px;
     border-radius: 50%;
     border: 2px solid var(--bg-sidebar);
-    background: var(--offline); /* default gris — online-pulse pone el verde */
+    background: var(--offline);
 }
 
 .status-dot.online-pulse {
