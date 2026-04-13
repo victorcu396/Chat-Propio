@@ -3,6 +3,11 @@
 // ============================================================
 function renderUsers(onlineList) {
     const contactPhones = new Set([...myContacts.keys()]);
+
+    // Construir Set de usernames de contactos desde TRES fuentes:
+    // 1) c.username en myContacts
+    // 2) _phoneToUsername[phone] — SOLO usuarios ONLINE (se resetea en cada broadcast)
+    // 3) _allContactsPhoneToUsername[phone] — todos los contactos registrados
     const contactUsernames = new Set();
     myContacts.forEach((c, phone) => {
         if (c.username) contactUsernames.add(c.username);
@@ -11,11 +16,21 @@ function renderUsers(onlineList) {
         if (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[phone])
             contactUsernames.add(window._allContactsPhoneToUsername[phone]);
     });
+
+    // Mapa inverso username→phone (auxiliar primero, online sobreescribe)
     const usernameToPhone = {};
-    if (window._allContactsPhoneToUsername)
-        Object.entries(window._allContactsPhoneToUsername).forEach(([ph,un]) => { if(un) usernameToPhone[un]=ph; });
-    if (window._phoneToUsername)
-        Object.entries(window._phoneToUsername).forEach(([ph,un]) => { if(un) usernameToPhone[un]=ph; });
+    if (window._allContactsPhoneToUsername) {
+        Object.entries(window._allContactsPhoneToUsername).forEach(([ph, un]) => {
+            if (un) usernameToPhone[un] = ph;
+        });
+    }
+    if (window._phoneToUsername) {
+        Object.entries(window._phoneToUsername).forEach(([ph, un]) => {
+            if (un) usernameToPhone[un] = ph;
+        });
+    }
+
+    // Solo mostrar en "Conectados ahora" a los genuinos desconocidos
     const onlineNotContact = onlineList.filter(u => {
         if (!u || typeof u !== 'string' || u.trim() === '') return false;
         if (u === username || u === loginUsername) return false;

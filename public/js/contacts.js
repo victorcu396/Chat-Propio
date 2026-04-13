@@ -31,12 +31,21 @@ async function cargarContactos() {
                 userAvatars['__phone__' + c.contactPhone] = c.avatar;
             }
         });
+        // Poblar mapa auxiliar para filtrar "Conectados ahora" correctamente.
+        // IMPORTANTE: hacerlo antes de renderContactsList para que el indicador
+        // de presencia use _phoneToUsername (solo online) y no este mapa auxiliar.
         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
         myContacts.forEach((c, phone) => {
             if (c.username) window._allContactsPhoneToUsername[phone] = c.username;
         });
+
         renderContactsList();
-        if (typeof lastKnownUsers !== 'undefined' && lastKnownUsers.length > 0) renderUsers(lastKnownUsers);
+
+        // Si el broadcast 'users' llegó antes que esta REST, refrescar "Conectados ahora"
+        if (typeof lastKnownUsers !== 'undefined' && lastKnownUsers.length > 0) {
+            renderUsers(lastKnownUsers);
+        }
+
         _contactosListos = true;
         if (window._pendingOpenChat) _abrirChatPendienteDesdeNotif();
     } catch(e) {
@@ -286,6 +295,7 @@ function onContactAdded(contactPhone, customName, avatar, username) {
         if (username) userAvatars[username] = avatar;
         userAvatars['__phone__' + contactPhone] = avatar;
     }
+    // Registrar en mapa auxiliar para filtrar de "Conectados ahora" inmediatamente
     if (username) {
         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
         window._allContactsPhoneToUsername[contactPhone] = username;
@@ -367,10 +377,12 @@ function onContactRenamed(contactPhone, newName) {
     const contact = myContacts.get(contactPhone);
     if (contact) {
         contact.customName = newName;
+        // Rellenar username si faltaba, para que el mapa auxiliar quede consistente
         if (!contact.username) {
-            contact.username = (window._phoneToUsername && window._phoneToUsername[contactPhone])
-                || (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[contactPhone])
-                || null;
+            contact.username =
+                (window._phoneToUsername && window._phoneToUsername[contactPhone]) ||
+                (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[contactPhone]) ||
+                null;
         }
         if (contact.username) {
             window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
@@ -383,6 +395,7 @@ function onContactRenamed(contactPhone, newName) {
         document.getElementById('chatName').textContent = newName;
     }
     renderContactsList();
+    // Refrescar "Conectados ahora" por si aparecía con el nombre antiguo
     if (typeof lastKnownUsers !== 'undefined') renderUsers(lastKnownUsers);
     cerrarModalRenombrar();
 }

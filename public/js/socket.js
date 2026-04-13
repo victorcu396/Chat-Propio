@@ -813,6 +813,7 @@ function handleMessage(data) {
                 if (u.phone && u.username) {
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
+                    // Actualizar mapa auxiliar si este usuario es un contacto nuestro
                     if (typeof myContacts !== 'undefined' && myContacts.has(u.phone)) {
                         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
                         window._allContactsPhoneToUsername[u.phone] = u.username;
