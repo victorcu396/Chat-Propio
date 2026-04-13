@@ -31,6 +31,7 @@ async function cargarContactos() {
                 userAvatars['__phone__' + c.contactPhone] = c.avatar;
             }
         });
+        // Poblar mapa auxiliar phone→username para todos los contactos registrados
         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
         myContacts.forEach((c, phone) => {
             if (c.username) window._allContactsPhoneToUsername[phone] = c.username;
@@ -38,6 +39,7 @@ async function cargarContactos() {
 
         renderContactsList();
 
+        // Si el broadcast 'users' llegó antes que esta REST, refrescar "Conectados ahora"
         if (typeof lastKnownUsers !== 'undefined' && lastKnownUsers.length > 0) {
             renderUsers(lastKnownUsers);
         }

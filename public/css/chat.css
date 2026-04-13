@@ -763,8 +763,6 @@ html.is-mobile #stickerGiftPanel {
     border-top: 1px solid var(--border);
     position: relative;
     flex-shrink: 0;
-    /* z-index superior al welcome-panel (z-index:1) para que los toques
-       en móvil lleguen siempre al input aunque el panel esté visible */
     z-index: 2;
 }
 
@@ -931,7 +929,6 @@ html.is-mobile #stickerGiftPanel {
     line-height: 1.4;
     min-width: 0;
     overscroll-behavior: contain;
-    /* Asegurar interacción táctil en iOS/Android */
     -webkit-user-select: text;
     user-select: text;
     touch-action: manipulation;
@@ -957,7 +954,11 @@ html.is-mobile #stickerGiftPanel {
     flex-shrink: 0;
     transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
     touch-action: manipulation;
+    pointer-events: auto;
+    position: relative;
+    z-index: 2;
     box-shadow: 0 2px 10px rgba(79,70,229,0.35);
+    -webkit-tap-highlight-color: transparent;
 }
 
 #btnEnviar:hover:not(:disabled) { opacity: 0.92; transform: scale(1.1); box-shadow: 0 4px 18px rgba(79,70,229,0.5); }
@@ -1624,3 +1625,41 @@ html.is-mobile .welcome-title { font-size: 19px; }
 html.is-mobile .welcome-features { padding: 12px; gap: 6px; }
 html.is-mobile .welcome-feature strong { font-size: 12px; }
 html.is-mobile .welcome-feature span { font-size: 11px; }
+
+/* ── Barra de emojis rápidos ──────────────────────────────────────────────── */
+.quick-emoji-bar {
+    display: none; /* oculta por defecto en desktop */
+    align-items: center;
+    gap: 2px;
+    padding: 4px 8px 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    flex-shrink: 0;
+    width: 100%;
+    border-bottom: 1px solid var(--border);
+    background: var(--white);
+}
+.quick-emoji-bar::-webkit-scrollbar { display: none; }
+
+.quick-emoji-btn {
+    background: none;
+    border: none;
+    font-size: 22px;
+    padding: 4px 6px;
+    cursor: pointer;
+    border-radius: 8px;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .12s;
+    line-height: 1;
+}
+.quick-emoji-btn:hover  { background: var(--purple-pale); }
+.quick-emoji-btn:active { background: var(--purple-pale); transform: scale(0.9); }
+
+/* En móvil la barra siempre visible encima del input */
+@media screen and (max-width: 900px) {
+    .quick-emoji-bar { display: flex; }
+}
+html.is-mobile .quick-emoji-bar { display: flex; }

@@ -803,7 +803,7 @@ function handleMessage(data) {
 
     if (data.type === 'users') {
         // data.online es array de {username, avatar, phone, isAway}
-        window._phoneToUsername = {};
+        window._phoneToUsername = {}; // reset limpio: usuarios offline no quedan con entrada activa
         window._onlinePhones    = new Set();
         window._awayUsers       = window._awayUsers || new Set();
         window._awayUsers.clear();
