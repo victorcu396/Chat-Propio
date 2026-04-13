@@ -42,7 +42,6 @@ function seleccionarUsuario(user) {
     if (!user) return;
 
     // ── Bloquear chat con desconocidos (el admin puede chatear con todos) ──
-    // Resolver el phone del usuario buscando en ambos mapas disponibles.
     let phoneOfUser = null;
     if (window._phoneToUsername) {
         for (const [ph, un] of Object.entries(window._phoneToUsername)) {
@@ -56,7 +55,6 @@ function seleccionarUsuario(user) {
     }
     const _isAdminUser = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
     // Solo bloquear si conocemos el phone Y no está en myContacts.
-    // Si phoneOfUser es null, permitir (puede ser contacto recién agregado sin mapa aún).
     if (phoneOfUser && !myContacts.has(phoneOfUser) && !_isAdminUser) return;
 
     if (currentChat === user) return;
@@ -84,8 +82,7 @@ function seleccionarUsuario(user) {
     _cerrarMentionList();
     chat.innerHTML = '';
 
-    // Obtener el phone del usuario para mostrar el customName del contacto.
-    // Buscar en ambos mapas: primero online, luego todos los registrados.
+    // Obtener phone para mostrar customName (buscar en ambos mapas)
     let phone = null;
     if (window._phoneToUsername) {
         for (const [ph, un] of Object.entries(window._phoneToUsername)) {
@@ -267,7 +264,6 @@ function enviar() {
             }
         }
         const _isAdminSend = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
-        // Solo bloquear si conocemos el phone Y no está en myContacts.
         if (chatPhone && !myContacts.has(chatPhone) && !_isAdminSend) return;
     }
 

@@ -763,6 +763,9 @@ html.is-mobile #stickerGiftPanel {
     border-top: 1px solid var(--border);
     position: relative;
     flex-shrink: 0;
+    /* z-index superior al welcome-panel (z-index:1) para que los toques
+       en móvil lleguen siempre al input aunque el panel esté visible */
+    z-index: 2;
 }
 
 /* ═══════════════════════════════════════════
@@ -928,6 +931,13 @@ html.is-mobile #stickerGiftPanel {
     line-height: 1.4;
     min-width: 0;
     overscroll-behavior: contain;
+    /* Asegurar interacción táctil en iOS/Android */
+    -webkit-user-select: text;
+    user-select: text;
+    touch-action: manipulation;
+    pointer-events: auto;
+    position: relative;
+    z-index: 2;
 }
 
 #mensaje:focus    { border-color: var(--purple-deep); background: white; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
@@ -1614,4 +1624,3 @@ html.is-mobile .welcome-title { font-size: 19px; }
 html.is-mobile .welcome-features { padding: 12px; gap: 6px; }
 html.is-mobile .welcome-feature strong { font-size: 12px; }
 html.is-mobile .welcome-feature span { font-size: 11px; }
-

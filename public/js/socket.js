@@ -803,9 +803,9 @@ function handleMessage(data) {
 
     if (data.type === 'users') {
         // data.online es array de {username, avatar, phone, isAway}
-        // IMPORTANTE: reconstruir _phoneToUsername desde cero con cada broadcast.
-        // No reutilizar el objeto anterior para evitar que usuarios offline queden
-        // con una entrada activa (lo que causaría que aparecieran con círculo verde).
+        // Reconstruir _phoneToUsername desde cero en cada broadcast.
+        // Así los usuarios que se desconectaron no quedan con entrada activa
+        // y no aparecen con círculo verde en la lista de contactos.
         window._phoneToUsername = {};
         window._onlinePhones    = new Set();
         window._awayUsers       = window._awayUsers || new Set();
@@ -814,16 +814,13 @@ function handleMessage(data) {
             if (typeof u === 'object') {
                 if (u.avatar && u.username) userAvatars[u.username] = u.avatar;
                 if (u.phone && u.username) {
-                    // Solo usuarios online en _phoneToUsername (indicador de presencia)
+                    // _phoneToUsername: SOLO online (para indicador de presencia)
                     window._phoneToUsername[u.phone] = u.username;
                     window._onlinePhones.add(u.phone);
-                    // Actualizar _allContactsPhoneToUsername para contactos online:
-                    // este mapa contiene todos los contactos registrados (online o no)
-                    // y se usa por renderUsers para filtrar "Conectados ahora".
+                    // Actualizar _allContactsPhoneToUsername si es un contacto nuestro
                     if (typeof myContacts !== 'undefined' && myContacts.has(u.phone)) {
                         window._allContactsPhoneToUsername = window._allContactsPhoneToUsername || {};
                         window._allContactsPhoneToUsername[u.phone] = u.username;
-                        // Sincronizar c.username en myContacts si estaba vacío
                         const _c = myContacts.get(u.phone);
                         if (_c && !_c.username) {
                             _c.username = u.username;
