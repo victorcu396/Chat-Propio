@@ -395,20 +395,20 @@
           </div>
           <div class="sg-content" id="sgContent" style="display:none;"></div>
         </div>
-        <!-- Barra de emojis rápidos (visible en móvil, hover en desktop) -->
+        <!-- Barra de emojis rápidos: posición absoluta, no afecta al layout del flex row -->
         <div id="quickEmojiBar" class="quick-emoji-bar">
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('😊');event.preventDefault()">😊</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('❤️');event.preventDefault()">❤️</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('😂');event.preventDefault()">😂</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('👍');event.preventDefault()">👍</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('🔥');event.preventDefault()">🔥</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('😍');event.preventDefault()">😍</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('😭');event.preventDefault()">😭</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('🙏');event.preventDefault()">🙏</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('😎');event.preventDefault()">😎</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('🥰');event.preventDefault()">🥰</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('✅');event.preventDefault()">✅</button>
-          <button class="quick-emoji-btn" onclick="enviarEmojiRapido('💯');event.preventDefault()">💯</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('😊');actualizarBtnEnviar()" onclick="enviarEmojiRapido('😊');actualizarBtnEnviar()">😊</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('❤️');actualizarBtnEnviar()" onclick="enviarEmojiRapido('❤️');actualizarBtnEnviar()">❤️</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('😂');actualizarBtnEnviar()" onclick="enviarEmojiRapido('😂');actualizarBtnEnviar()">😂</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('👍');actualizarBtnEnviar()" onclick="enviarEmojiRapido('👍');actualizarBtnEnviar()">👍</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('🔥');actualizarBtnEnviar()" onclick="enviarEmojiRapido('🔥');actualizarBtnEnviar()">🔥</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('😍');actualizarBtnEnviar()" onclick="enviarEmojiRapido('😍');actualizarBtnEnviar()">😍</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('😭');actualizarBtnEnviar()" onclick="enviarEmojiRapido('😭');actualizarBtnEnviar()">😭</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('🙏');actualizarBtnEnviar()" onclick="enviarEmojiRapido('🙏');actualizarBtnEnviar()">🙏</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('😎');actualizarBtnEnviar()" onclick="enviarEmojiRapido('😎');actualizarBtnEnviar()">😎</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('🥰');actualizarBtnEnviar()" onclick="enviarEmojiRapido('🥰');actualizarBtnEnviar()">🥰</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('✅');actualizarBtnEnviar()" onclick="enviarEmojiRapido('✅');actualizarBtnEnviar()">✅</button>
+          <button class="quick-emoji-btn" ontouchend="enviarEmojiRapido('💯');actualizarBtnEnviar()" onclick="enviarEmojiRapido('💯');actualizarBtnEnviar()">💯</button>
         </div>
         <button class="icon-btn" id="btnStickerGift" onclick="toggleStickerGiftPanel(event)" title="Emojis, Stickers y Gifts" aria-label="Abrir emojis">😊</button>
         <button class="icon-btn" onclick="document.getElementById('fileInput').click()" title="Adjuntar imagen" aria-label="Adjuntar imagen">📎</button>

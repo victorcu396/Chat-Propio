@@ -56,11 +56,7 @@ function seleccionarUsuario(user) {
     const _isAdminUser = loginPhone && (loginPhone === '+34693001834' || loginPhone.endsWith('693001834'));
     if (phoneOfUser && !myContacts.has(phoneOfUser) && !_isAdminUser) return;
 
-    // Si ya estamos en este chat, solo re-habilitar el input (puede haber quedado disabled)
-    if (currentChat === user) {
-        input.disabled = false;
-        return;
-    }
+    if (currentChat === user) { input.disabled = false; return; }
     _limpiarEstadoChat();
     _mostrarWelcomePanel(false);
     currentChat = user;
@@ -85,7 +81,6 @@ function seleccionarUsuario(user) {
     _cerrarMentionList();
     chat.innerHTML = '';
 
-    // Obtener phone/contacto para mostrar customName (buscar en ambos mapas)
     let phone = null;
     if (window._phoneToUsername) {
         for (const [ph, un] of Object.entries(window._phoneToUsername)) {
@@ -404,14 +399,9 @@ function enviar() {
 // ============================================================
 // INPUT HANDLERS
 // ============================================================
-// Alias para actualizar el botón en todos los eventos posibles del teclado móvil
-const _actualizarBtnYAltura = () => {
-    actualizarBtnEnviar();
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-};
-input.addEventListener('keyup',          _actualizarBtnYAltura);
-input.addEventListener('compositionend', _actualizarBtnYAltura);
+// Activar btnEnviar también en keyup y compositionend (teclados virtuales iOS/Android)
+input.addEventListener('keyup', () => { actualizarBtnEnviar(); });
+input.addEventListener('compositionend', () => { actualizarBtnEnviar(); });
 
 input.addEventListener('input', () => {
     actualizarBtnEnviar();

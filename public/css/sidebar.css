@@ -443,7 +443,7 @@
     height: 11px;
     border-radius: 50%;
     border: 2px solid var(--bg-sidebar);
-    background: var(--offline); /* default: gris. Solo online-pulse y away ponen color */
+    background: var(--offline); /* default gris — online-pulse pone el verde */
 }
 
 .status-dot.online-pulse {
