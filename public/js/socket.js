@@ -888,10 +888,22 @@ function handleMessage(data) {
 
     // ── Respuesta del bot IA ─────────────────────────────────────────────────
     if (data.type === 'bot_response') {
-        const isCurrent = data.groupId
-            ? currentChat === 'group_' + data.groupId
-            : (currentChat === data.askedBy || currentChat === data.toUsername ||
-               data.conversationId === [currentChat, data.askedBy].sort().join('_'));
+        let isCurrent = false;
+        if (data.groupId) {
+            isCurrent = currentChat === 'group_' + data.groupId;
+        } else if (data.conversationId && currentChat) {
+            if (currentChat.startsWith('phone:')) {
+                // Chat abierto por teléfono → resolver a username y calcular conversationId
+                const ph = currentChat.replace('phone:', '');
+                const resolvedUser = window._phoneToUsername && window._phoneToUsername[ph];
+                if (resolvedUser) {
+                    isCurrent = [username, resolvedUser].sort().join('_') === data.conversationId;
+                }
+            } else if (!currentChat.startsWith('group_')) {
+                // Chat abierto por username
+                isCurrent = [username, currentChat].sort().join('_') === data.conversationId;
+            }
+        }
         if (isCurrent) addBotMessage(data);
         return;
     }
