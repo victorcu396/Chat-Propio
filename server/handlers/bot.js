@@ -121,23 +121,29 @@ async function broadcastBotResponse({ query, askedBy, conversationId, toUsername
     }
 
     const botId = crypto.randomUUID();
-    try {
-        const botMsg = new Message({
-            id:             botId,
-            conversationId,
-            from:           '__bot__',
-            to:             toUsername || groupId,
-            message:        botText,
-            avatar:         'https://api.dicebear.com/7.x/bottts/svg?seed=kiVooBot',
-            delivered:      true,
-            read:           false,
-            isBot:          true,
-            botQuery:       query,
-            botAskedBy:     askedBy
-        });
-        await botMsg.save();
-    } catch (e) {
-        console.error('[Bot] Error al guardar en BD:', e.message);
+
+    // Solo persistir en BD los mensajes públicos (/bot! ).
+    // Los privados son efímeros: solo viajan por WebSocket al que preguntó
+    // y no aparecen nunca en el historial de la otra persona.
+    if (isPublic) {
+        try {
+            const botMsg = new Message({
+                id:             botId,
+                conversationId,
+                from:           '__bot__',
+                to:             toUsername || groupId,
+                message:        botText,
+                avatar:         'https://api.dicebear.com/7.x/bottts/svg?seed=kiVooBot',
+                delivered:      true,
+                read:           false,
+                isBot:          true,
+                botQuery:       query,
+                botAskedBy:     askedBy
+            });
+            await botMsg.save();
+        } catch (e) {
+            console.error('[Bot] Error al guardar en BD:', e.message);
+        }
     }
 
     const payload = JSON.stringify({
