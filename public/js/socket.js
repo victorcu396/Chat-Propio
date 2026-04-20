@@ -886,6 +886,16 @@ function handleMessage(data) {
     }
     if (data.type === 'kvs_pong')  { return; } // respuesta al heartbeat, ignorar
 
+    // ── Respuesta del bot IA ─────────────────────────────────────────────────
+    if (data.type === 'bot_response') {
+        const isCurrent = data.groupId
+            ? currentChat === 'group_' + data.groupId
+            : (currentChat === data.askedBy || currentChat === data.toUsername ||
+               data.conversationId === [currentChat, data.askedBy].sort().join('_'));
+        if (isCurrent) addBotMessage(data);
+        return;
+    }
+
     // ── Acciones sobre mensajes ──────────────────────────────────────────
     if (data.type === 'message_edited') {
         onMensajeEditado(data.id, data.newText, data.editedAt);

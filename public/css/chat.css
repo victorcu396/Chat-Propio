@@ -1662,3 +1662,91 @@ html.is-mobile .welcome-feature span { font-size: 11px; }
     .quick-emoji-bar { display: flex; }
 }
 html.is-mobile .quick-emoji-bar { display: flex; }
+/* ============================================================
+   BOT IA — estilos del mensaje de respuesta del bot
+============================================================ */
+.bot-row {
+    align-items: flex-start;
+}
+
+.bot-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+    border: 2px solid var(--purple-light);
+    background: var(--purple-pale);
+}
+
+.bot-bubble {
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8e4ff 100%);
+    border: 1.5px solid var(--purple-light);
+    border-radius: 4px 16px 16px 16px;
+    max-width: 80%;
+    padding: 10px 14px 8px;
+    box-shadow: 0 2px 10px rgba(79,70,229,0.10);
+}
+
+.bot-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid rgba(79,70,229,0.15);
+}
+
+.bot-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--purple-deep);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.bot-asked {
+    font-size: 12px;
+    color: var(--text-mid);
+    line-height: 1.4;
+}
+
+.bot-asked em {
+    font-style: italic;
+    color: var(--purple-deep);
+}
+
+.bot-text {
+    font-size: 14px;
+    color: var(--text-dark);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.bot-ellipsis {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.bot-toggle-btn {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(79,70,229,0.08);
+    border: 1px solid rgba(79,70,229,0.2);
+    border-radius: 12px;
+    color: var(--purple-deep);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: background var(--transition), transform .1s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.bot-toggle-btn:hover   { background: rgba(79,70,229,0.14); }
+.bot-toggle-btn:active  { transform: scale(0.95); }

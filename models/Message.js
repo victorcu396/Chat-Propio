@@ -138,6 +138,23 @@ const MessageSchema = new mongoose.Schema({
     mentions: {
         type: [String],
         default: []
+    },
+
+    // ── Bot ───────────────────────────────────────────────────
+    // true si el mensaje es una respuesta generada por el bot IA
+    isBot: {
+        type: Boolean,
+        default: false
+    },
+    // Pregunta que generó esta respuesta bot (solo en mensajes isBot)
+    botQuery: {
+        type: String,
+        default: null
+    },
+    // Username que hizo la pregunta al bot
+    botAskedBy: {
+        type: String,
+        default: null
     }
 
 });

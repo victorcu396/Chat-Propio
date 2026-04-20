@@ -4,6 +4,8 @@
    Mensajes — enviar, cargar, editar, borrar, responder, reenviar
 ============================================================ */
 
+const { broadcastBotResponse } = require('./bot');
+
 module.exports = async function handle_messages(data, ws, ctx) {
     const {
         users, userPhones, phoneSessions, pendingSessionRequests, pendingContactRequests,
@@ -109,6 +111,23 @@ module.exports = async function handle_messages(data, ws, ctx) {
 
                 await message.save();
                 sendMessage(message);
+
+                // ── Detectar comando /bot y lanzar respuesta IA ──
+                const botPrefix = (data.message || '').trimStart();
+                if (botPrefix.startsWith('/bot ')) {
+                    const botQuery = botPrefix.slice(5).trim();
+                    if (botQuery) {
+                        broadcastBotResponse({
+                            query:          botQuery,
+                            askedBy:        ws.username,
+                            conversationId,
+                            toUsername:     recipientUsername,
+                            groupId:        null,
+                            grpMembers:     null,
+                            ctx
+                        }).catch(e => console.error('[Bot 1:1]', e.message));
+                    }
+                }
                 break;
             }
 

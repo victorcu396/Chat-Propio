@@ -4,6 +4,8 @@
    Grupos — mensajes, historial, crear, editar, borrar
 ============================================================ */
 
+const { broadcastBotResponse } = require('./bot');
+
 module.exports = async function handle_groups(data, ws, ctx) {
     const {
         users, userPhones, phoneSessions, pendingSessionRequests, pendingContactRequests,
@@ -125,6 +127,23 @@ module.exports = async function handle_groups(data, ws, ctx) {
                         });
                     }
                 });
+
+                // ── Detectar comando /bot y lanzar respuesta IA ──
+                const gmBotPrefix = (data.message || '').trimStart();
+                if (gmBotPrefix.startsWith('/bot ')) {
+                    const gmBotQuery = gmBotPrefix.slice(5).trim();
+                    if (gmBotQuery) {
+                        broadcastBotResponse({
+                            query:          gmBotQuery,
+                            askedBy:        ws.username,
+                            conversationId: 'group_' + data.groupId,
+                            toUsername:     null,
+                            groupId:        data.groupId,
+                            grpMembers:     grpMsg.members,
+                            ctx
+                        }).catch(e => console.error('[Bot grupo]', e.message));
+                    }
+                }
                 break;
             }
 

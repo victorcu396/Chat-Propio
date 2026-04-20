@@ -526,6 +526,12 @@ function _buildMsgActionsBtn(msgId, isMe, isDeleted, isGroup) {
 }
 
 function addMessage(msg) {
+    // Mensajes del bot IA: renderizarlos con su UI especial
+    if (msg.isBot || msg.from === '__bot__') {
+        addBotMessage({ id: msg.id, message: msg.message, query: msg.botQuery, askedBy: msg.botAskedBy, time: msg.time });
+        return;
+    }
+
     const isMe = msg.self || msg.from === username;
 
     // Mensajes de hilo: pertenecen al panel de hilo, nunca al chat principal
@@ -708,6 +714,61 @@ function addMessage(msg) {
     // Solo enviar read si: mensaje nuevo en tiempo real + chat visible + documento en primer plano
     if (!isMe && socket && !isDeleted && !window._kvsLoadingHistory && !document.hidden && !window._appIsAway) {
         socket.send(JSON.stringify({ type: 'read', id: msg.id }));
+    }
+}
+
+// ============================================================
+// BOT IA — renderizar respuesta con opción minimizar/expandir
+// ============================================================
+const BOT_PREVIEW_CHARS = 350; // caracteres visibles antes de "Ver más"
+
+function addBotMessage(data) {
+    const fullText  = data.message  || '';
+    const query     = data.query    || '';
+    const askedBy   = data.askedBy  || '';
+    const msgId     = data.id       || ('bot_' + Date.now());
+    const isLong    = fullText.length > BOT_PREVIEW_CHARS;
+    const preview   = isLong ? fullText.slice(0, BOT_PREVIEW_CHARS) : fullText;
+
+    const row = document.createElement('li');
+    row.className = 'msg-row bot-row';
+    row.dataset.msgid = msgId;
+
+    row.innerHTML = `
+        <img class="msg-avatar bot-avatar"
+             src="https://api.dicebear.com/7.x/bottts/svg?seed=kiVooBot"
+             alt="Bot">
+        <div class="bubble-wrap">
+            <div class="bubble bot-bubble" id="${msgId}">
+                <div class="bot-header">
+                    <span class="bot-badge">🤖 Bot IA</span>
+                    <span class="bot-asked">Pregunta de <b>${escapeHTML(askedBy)}</b>: <em>${escapeHTML(query)}</em></span>
+                </div>
+                <div class="bot-text" id="bottext_${msgId}">${escapeHTML(preview)}${isLong ? '<span class="bot-ellipsis">…</span>' : ''}</div>
+                ${isLong ? `<button class="bot-toggle-btn" id="bottoggle_${msgId}" onclick="toggleBotMessage('${msgId}', ${JSON.stringify(fullText)})">▼ Ver más</button>` : ''}
+                <span class="meta"><span class="hora">${horaActual(data.time)}</span></span>
+            </div>
+        </div>
+    `;
+
+    chat.appendChild(row);
+    if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
+}
+
+function toggleBotMessage(msgId, fullText) {
+    const textEl   = document.getElementById('bottext_'   + msgId);
+    const toggleEl = document.getElementById('bottoggle_' + msgId);
+    if (!textEl || !toggleEl) return;
+
+    const isExpanded = toggleEl.dataset.expanded === '1';
+    if (isExpanded) {
+        textEl.innerHTML   = escapeHTML(fullText.slice(0, BOT_PREVIEW_CHARS)) + '<span class="bot-ellipsis">…</span>';
+        toggleEl.textContent = '▼ Ver más';
+        toggleEl.dataset.expanded = '0';
+    } else {
+        textEl.innerHTML   = escapeHTML(fullText);
+        toggleEl.textContent = '▲ Minimizar';
+        toggleEl.dataset.expanded = '1';
     }
 }
 

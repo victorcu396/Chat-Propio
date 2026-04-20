@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(cmd /c \"cd /d d:\\\\EvoostAI\\\\chat_kiVooSpace && npm install @anthropic-ai/sdk\")",
+      "Bash(\"/c/Users/victorcu396/AppData/Local/nvm/v22.11.0/npm\" install *)",
+      "Bash(\"/c/Users/victorcu396/AppData/Local/nvm/v22.11.0/npm\" uninstall *)"
+    ]
+  }
+}
