@@ -4,7 +4,11 @@
       "Bash(npm install *)",
       "Bash(cmd /c \"cd /d d:\\\\EvoostAI\\\\chat_kiVooSpace && npm install @anthropic-ai/sdk\")",
       "Bash(\"/c/Users/victorcu396/AppData/Local/nvm/v22.11.0/npm\" install *)",
-      "Bash(\"/c/Users/victorcu396/AppData/Local/nvm/v22.11.0/npm\" uninstall *)"
+      "Bash(\"/c/Users/victorcu396/AppData/Local/nvm/v22.11.0/npm\" uninstall *)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'SET \\(' + process.env.GROQ_API_KEY.slice\\(0,10\\) + '...\\)' : 'NOT SET'\\);\")",
+      "Read(//d d:/EvoostAI/**)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('KEY:', process.env.GROQ_API_KEY ? 'OK' : 'MISSING'\\);\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({ path: 'd:/EvoostAI/chat_kiVooSpace/.env' }\\); console.log\\('KEY:', process.env.GROQ_API_KEY ? 'OK - ' + process.env.GROQ_API_KEY.slice\\(0,12\\) : 'MISSING'\\);\")"
     ]
   }
 }
