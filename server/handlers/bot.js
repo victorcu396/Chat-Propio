@@ -1,18 +1,54 @@
 'use strict';
 /* ============================================================
    HANDLER: BOT IA
-   Detecta el prefijo /bot en mensajes, llama a la API de Groq
-   (gratuita) y emite una respuesta bot_response a todos los
-   participantes.
+   - Conoce la fecha y hora actual
+   - Lee el historial de la conversación como contexto
+   - Puede responder sobre los mensajes, resumir, etc.
 ============================================================ */
 
-const SYSTEM_PROMPT =
-    'Eres un asistente de chat útil, conciso y amigable integrado en kiVooSpace. ' +
-    'Responde siempre en el mismo idioma de la pregunta. ' +
-    'Sé directo: sin introducciones largas ni despedidas. ' +
-    'Si la respuesta puede ser larga, usa listas o párrafos cortos para facilitar la lectura.';
+const HISTORY_LIMIT = 30; // mensajes de contexto que se pasan a Groq
 
-async function callGroq(query) {
+function _buildSystemPrompt(conversationHistory, askedBy) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('es-ES', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const timeStr = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+    let prompt =
+        `Eres un asistente IA integrado en kiVooSpace, una app de mensajería privada.\n` +
+        `Fecha actual: ${dateStr}. Hora actual: ${timeStr}.\n` +
+        `El usuario que te pregunta ahora se llama "${askedBy}".\n` +
+        `Responde siempre en el mismo idioma de la pregunta. ` +
+        `Sé directo: sin introducciones largas ni despedidas. ` +
+        `Si la respuesta puede ser larga, usa listas o párrafos cortos para facilitar la lectura.`;
+
+    if (conversationHistory && conversationHistory.length > 0) {
+        const lines = conversationHistory.map(m => {
+            if (m.deletedAt) return null;
+            if (m.from === '__bot__') {
+                return `🤖 Bot IA: ${m.message || ''}`;
+            }
+            if (m.imageData) return `${m.from}: [imagen adjunta]`;
+            if (m.audioData) return `${m.from}: [audio adjunto]`;
+            if (m.message)   return `${m.from}: ${m.message}`;
+            return null;
+        }).filter(Boolean);
+
+        if (lines.length > 0) {
+            prompt +=
+                `\n\nHistorial reciente de la conversación (para que puedas hacer referencia a ` +
+                `mensajes anteriores, resumirlos o responder preguntas sobre ellos):\n` +
+                lines.join('\n');
+        }
+    }
+
+    return prompt;
+}
+
+async function callGroq(query, conversationHistory, askedBy) {
+    const systemPrompt = _buildSystemPrompt(conversationHistory, askedBy);
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -22,13 +58,14 @@ async function callGroq(query) {
         body: JSON.stringify({
             model:       'llama-3.1-8b-instant',
             messages:    [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: systemPrompt },
                 { role: 'user',   content: query }
             ],
             max_tokens:  1024,
             temperature: 0.7
         })
     });
+
     if (!response.ok) {
         const err = await response.text().catch(() => '');
         throw new Error(`Groq ${response.status}: ${err}`);
@@ -39,16 +76,7 @@ async function callGroq(query) {
 
 /* ──────────────────────────────────────────────────────────────────────────
    broadcastBotResponse
-   Llama a Groq, guarda el mensaje bot en BD y lo emite a los participantes.
-
-   Parámetros:
-     query          — texto de la pregunta (sin "/bot ")
-     askedBy        — username de quien preguntó
-     conversationId — ID de la conversación (1:1 o group_XXX)
-     toUsername     — destinatario en 1:1 (null para grupos)
-     groupId        — ID de grupo (null para 1:1)
-     grpMembers     — array de phones de miembros (solo grupos)
-     ctx            — contexto del servidor (Message, crypto, users, WebSocket, etc.)
+   Carga historial, llama a Groq y emite bot_response a los participantes.
 ────────────────────────────────────────────────────────────────────────── */
 async function broadcastBotResponse({ query, askedBy, conversationId, toUsername, groupId, grpMembers, ctx }) {
     const { Message, crypto, users, WebSocket } = ctx;
@@ -68,9 +96,25 @@ async function broadcastBotResponse({ query, askedBy, conversationId, toUsername
         return;
     }
 
+    // Cargar historial reciente para dar contexto al modelo
+    let conversationHistory = [];
+    try {
+        const recentMsgs = await Message.find({
+            conversationId,
+            threadId: null,
+            deletedAt: null
+        })
+        .sort({ time: -1 })
+        .limit(HISTORY_LIMIT)
+        .lean();
+        conversationHistory = recentMsgs.reverse();
+    } catch (e) {
+        console.warn('[Bot] No se pudo obtener historial:', e.message);
+    }
+
     let botText;
     try {
-        botText = await callGroq(query);
+        botText = await callGroq(query, conversationHistory, askedBy);
     } catch (e) {
         console.error('[Bot] Error al llamar a Groq:', e.message);
         botText = '⚠️ El bot no pudo responder en este momento. Inténtalo de nuevo.';
