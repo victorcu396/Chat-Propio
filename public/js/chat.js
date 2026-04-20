@@ -248,6 +248,7 @@ function enviar() {
     const text = input.value.trim();
     if (!text && !pendingImage) return;
     if (!currentChat) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
     // ── Bloquear envío a desconocidos en chat 1:1 (el admin puede enviar a todos) ──
     if (!currentChat.startsWith('group_') && !currentChat.startsWith('phone:')) {
