@@ -324,7 +324,7 @@ const emojiPicker = document.getElementById('emojiPicker');
 const imgPreviewContainer = document.getElementById('imgPreviewContainer');
 const imgPreviewEl = document.getElementById('imgPreview');
 
-// Inicializar onclick del botón enviar
-btnEnviar.onclick = enviar;
+// Inicializar onclick del botón enviar (lazy para que se resuelva tras cargar chat.js)
+btnEnviar.onclick = () => enviar();
 
 // ============================================================
