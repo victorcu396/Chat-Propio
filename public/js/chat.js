@@ -772,8 +772,8 @@ function addBotMessage(data) {
 
     // Listeners con closure — evita problemas con caracteres especiales en atributos onclick
     if (isLong) {
-        const toggleBtn = document.getElementById('bottoggle_' + msgId);
-        const textEl    = document.getElementById('bottext_'   + msgId);
+        const toggleBtn = row.querySelector('.bot-toggle-btn');
+        const textEl    = row.querySelector('.bot-text');
         if (toggleBtn && textEl) {
             toggleBtn.addEventListener('click', () => {
                 const expanded = toggleBtn.dataset.expanded === '1';
