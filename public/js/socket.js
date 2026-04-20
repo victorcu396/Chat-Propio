@@ -894,8 +894,11 @@ function handleMessage(data) {
         } else if (data.conversationId && currentChat) {
             if (currentChat.startsWith('phone:')) {
                 // Chat abierto por teléfono → resolver a username y calcular conversationId
+                // Intentar en orden: usuarios online → todos los contactos registrados → myContacts
                 const ph = currentChat.replace('phone:', '');
-                const resolvedUser = window._phoneToUsername && window._phoneToUsername[ph];
+                const resolvedUser = (window._phoneToUsername && window._phoneToUsername[ph])
+                    || (window._allContactsPhoneToUsername && window._allContactsPhoneToUsername[ph])
+                    || (typeof myContacts !== 'undefined' && myContacts.get(ph) && myContacts.get(ph).username);
                 if (resolvedUser) {
                     isCurrent = [username, resolvedUser].sort().join('_') === data.conversationId;
                 }
