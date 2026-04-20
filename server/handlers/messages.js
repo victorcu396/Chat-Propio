@@ -94,6 +94,27 @@ module.exports = async function handle_messages(data, ws, ctx) {
                     } catch(_) {}
                 }
 
+                // ── Detectar comando /bot ANTES de guardar — el prompt nunca se almacena ni se emite ──
+                const botPrefix = (data.message || '').trimStart();
+                const isBotPublic = botPrefix.startsWith('/bot! ');
+                const isBotCmd    = isBotPublic || botPrefix.startsWith('/bot ');
+                if (isBotCmd && !imageData && !audioData) {
+                    const botQuery = botPrefix.slice(isBotPublic ? 6 : 5).trim();
+                    if (botQuery) {
+                        broadcastBotResponse({
+                            query:          botQuery,
+                            askedBy:        ws.username,
+                            conversationId,
+                            toUsername:     recipientUsername,
+                            groupId:        null,
+                            grpMembers:     null,
+                            isPublic:       isBotPublic,
+                            ctx
+                        }).catch(e => console.error('[Bot 1:1]', e.message));
+                    }
+                    break; // no guardar, no broadcast del comando
+                }
+
                 const message = new Message({
                     id,
                     conversationId,
@@ -111,23 +132,6 @@ module.exports = async function handle_messages(data, ws, ctx) {
 
                 await message.save();
                 sendMessage(message);
-
-                // ── Detectar comando /bot y lanzar respuesta IA ──
-                const botPrefix = (data.message || '').trimStart();
-                if (botPrefix.startsWith('/bot ')) {
-                    const botQuery = botPrefix.slice(5).trim();
-                    if (botQuery) {
-                        broadcastBotResponse({
-                            query:          botQuery,
-                            askedBy:        ws.username,
-                            conversationId,
-                            toUsername:     recipientUsername,
-                            groupId:        null,
-                            grpMembers:     null,
-                            ctx
-                        }).catch(e => console.error('[Bot 1:1]', e.message));
-                    }
-                }
                 break;
             }
 

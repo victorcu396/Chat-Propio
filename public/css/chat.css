@@ -1750,3 +1750,23 @@ html.is-mobile .quick-emoji-bar { display: flex; }
 
 .bot-toggle-btn:hover   { background: rgba(79,70,229,0.14); }
 .bot-toggle-btn:active  { transform: scale(0.95); }
+
+.bot-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.bot-use-btn {
+    background: rgba(79,70,229,0.10);
+    border: 1px solid rgba(79,70,229,0.25);
+    border-radius: 8px;
+    color: #6366f1;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+}
+.bot-use-btn:hover  { background: rgba(79,70,229,0.18); }
+.bot-use-btn:active { transform: scale(0.95); }

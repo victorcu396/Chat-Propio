@@ -267,6 +267,22 @@ function enviar() {
         if (chatPhone && !myContacts.has(chatPhone) && !_isAdminSend) return;
     }
 
+    // ── Comando /bot: enviar al servidor sin renderizar localmente ──
+    if (/^\/bot!?\s+\S/.test(text) && !pendingImage) {
+        if (currentChat.startsWith('group_')) {
+            socket.send(JSON.stringify({ type: 'groupMessage', groupId: currentChat.replace('group_', ''), message: text }));
+        } else if (currentChat.startsWith('phone:')) {
+            socket.send(JSON.stringify({ type: 'message', toPhone: currentChat.replace('phone:', ''), message: text }));
+        } else {
+            socket.send(JSON.stringify({ type: 'message', to: currentChat, message: text }));
+        }
+        input.value = '';
+        input.style.height = 'auto';
+        btnEnviar.disabled = true;
+        cerrarSGPanel();
+        return;
+    }
+
     // ── Mensaje de grupo ──────────────────────────────
     if (currentChat.startsWith('group_')) {
         const groupId = currentChat.replace('group_', '');
@@ -745,31 +761,48 @@ function addBotMessage(data) {
                     <span class="bot-asked">Pregunta de <b>${escapeHTML(askedBy)}</b>: <em>${escapeHTML(query)}</em></span>
                 </div>
                 <div class="bot-text" id="bottext_${msgId}">${escapeHTML(preview)}${isLong ? '<span class="bot-ellipsis">…</span>' : ''}</div>
-                ${isLong ? `<button class="bot-toggle-btn" id="bottoggle_${msgId}" onclick="toggleBotMessage('${msgId}', ${JSON.stringify(fullText)})">▼ Ver más</button>` : ''}
+                ${isLong ? `<button class="bot-toggle-btn" id="bottoggle_${msgId}">▼ Ver más</button>` : ''}
+                <div class="bot-actions">
+                    <button class="bot-use-btn">📤 Usar como mensaje</button>
+                </div>
                 <span class="meta"><span class="hora">${horaActual(data.time)}</span></span>
             </div>
         </div>
     `;
 
+    // Listeners con closure — evita problemas con caracteres especiales en atributos onclick
+    if (isLong) {
+        const toggleBtn = document.getElementById('bottoggle_' + msgId);
+        const textEl    = document.getElementById('bottext_'   + msgId);
+        if (toggleBtn && textEl) {
+            toggleBtn.addEventListener('click', () => {
+                const expanded = toggleBtn.dataset.expanded === '1';
+                if (expanded) {
+                    textEl.innerHTML     = escapeHTML(fullText.slice(0, BOT_PREVIEW_CHARS)) + '<span class="bot-ellipsis">…</span>';
+                    toggleBtn.textContent = '▼ Ver más';
+                    toggleBtn.dataset.expanded = '0';
+                } else {
+                    textEl.innerHTML     = escapeHTML(fullText);
+                    toggleBtn.textContent = '▲ Minimizar';
+                    toggleBtn.dataset.expanded = '1';
+                }
+            });
+        }
+    }
+
+    const useBtn = row.querySelector('.bot-use-btn');
+    if (useBtn) useBtn.addEventListener('click', () => usarRespuestaBot(fullText));
+
     chat.appendChild(row);
     if (autoScroll) { scrollChat(); } else if (window._scrollBtnNewMsg && !window._kvsLoadingHistory) { window._scrollBtnNewMsg(); }
 }
 
-function toggleBotMessage(msgId, fullText) {
-    const textEl   = document.getElementById('bottext_'   + msgId);
-    const toggleEl = document.getElementById('bottoggle_' + msgId);
-    if (!textEl || !toggleEl) return;
-
-    const isExpanded = toggleEl.dataset.expanded === '1';
-    if (isExpanded) {
-        textEl.innerHTML   = escapeHTML(fullText.slice(0, BOT_PREVIEW_CHARS)) + '<span class="bot-ellipsis">…</span>';
-        toggleEl.textContent = '▼ Ver más';
-        toggleEl.dataset.expanded = '0';
-    } else {
-        textEl.innerHTML   = escapeHTML(fullText);
-        toggleEl.textContent = '▲ Minimizar';
-        toggleEl.dataset.expanded = '1';
-    }
+function usarRespuestaBot(text) {
+    input.value = text;
+    input.focus();
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    actualizarBtnEnviar();
 }
 
 function escapeHTML(str) {

@@ -78,7 +78,7 @@ async function callGroq(query, conversationHistory, askedBy) {
    broadcastBotResponse
    Carga historial, llama a Groq y emite bot_response a los participantes.
 ────────────────────────────────────────────────────────────────────────── */
-async function broadcastBotResponse({ query, askedBy, conversationId, toUsername, groupId, grpMembers, ctx }) {
+async function broadcastBotResponse({ query, askedBy, conversationId, toUsername, groupId, grpMembers, isPublic, ctx }) {
     const { Message, crypto, users, WebSocket } = ctx;
 
     if (!process.env.GROQ_API_KEY) {
@@ -92,7 +92,7 @@ async function broadcastBotResponse({ query, askedBy, conversationId, toUsername
             groupId:       groupId || undefined,
             time:          new Date()
         });
-        _emitToParticipants(errPayload, conversationId, toUsername, askedBy, groupId, grpMembers, users, WebSocket);
+        _emitToParticipants(errPayload, conversationId, toUsername, askedBy, groupId, grpMembers, users, WebSocket, isPublic);
         return;
     }
 
@@ -151,10 +151,19 @@ async function broadcastBotResponse({ query, askedBy, conversationId, toUsername
         time:          new Date()
     });
 
-    _emitToParticipants(payload, conversationId, toUsername, askedBy, groupId, grpMembers, users, WebSocket);
+    _emitToParticipants(payload, conversationId, toUsername, askedBy, groupId, grpMembers, users, WebSocket, isPublic);
 }
 
-function _emitToParticipants(payload, conversationId, toUsername, askedBy, groupId, grpMembers, users, WebSocket) {
+function _emitToParticipants(payload, conversationId, toUsername, askedBy, groupId, grpMembers, users, WebSocket, isPublic) {
+    if (!isPublic) {
+        // Privado (por defecto): solo al que preguntó
+        const uws = users.get(askedBy);
+        if (uws && uws.readyState === WebSocket.OPEN) {
+            try { uws.send(payload); } catch (_) {}
+        }
+        return;
+    }
+    // Público (/bot! ): emitir a todos los participantes
     if (groupId && grpMembers) {
         grpMembers.forEach(memberPhone => {
             const mws = [...users.values()].find(u => u.phone === memberPhone);

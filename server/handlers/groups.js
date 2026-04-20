@@ -58,6 +58,27 @@ module.exports = async function handle_groups(data, ws, ctx) {
                     ])];
                 }
 
+                // ── Detectar comando /bot ANTES de guardar — el prompt no se almacena ni emite ──
+                const gmBotPrefix = (data.message || '').trimStart();
+                const gmBotPublic = gmBotPrefix.startsWith('/bot! ');
+                const gmIsBotCmd  = gmBotPublic || gmBotPrefix.startsWith('/bot ');
+                if (gmIsBotCmd && !imageData && !audioData) {
+                    const gmBotQuery = gmBotPrefix.slice(gmBotPublic ? 6 : 5).trim();
+                    if (gmBotQuery) {
+                        broadcastBotResponse({
+                            query:          gmBotQuery,
+                            askedBy:        ws.username,
+                            conversationId: 'group_' + data.groupId,
+                            toUsername:     null,
+                            groupId:        data.groupId,
+                            grpMembers:     grpMsg.members,
+                            isPublic:       gmBotPublic,
+                            ctx
+                        }).catch(e => console.error('[Bot grupo]', e.message));
+                    }
+                    break; // no guardar, no broadcast del comando
+                }
+
                 const gmId = crypto.randomUUID();
                 // Calcular expiresAt para autodestrucción en grupos
                 let gmExpiresAt = null;
@@ -102,7 +123,6 @@ module.exports = async function handle_groups(data, ws, ctx) {
                     const memberWs = [...users.values()].find(u => u.phone === memberPhone);
                     if (memberWs && memberWs.readyState === WebSocket.OPEN) {
                         memberWs.send(gmPayload);
-                        // Si está en background (y no es el remitente), también push con conteo
                         if (memberWs.isAway && memberPhone !== ws.phone) {
                             enviarPushConConteo(memberPhone, 'group_' + data.groupId, {
                                 title: `👥 ${grpMsg.name}`,
@@ -115,7 +135,6 @@ module.exports = async function handle_groups(data, ws, ctx) {
                             });
                         }
                     } else if (memberPhone !== ws.phone) {
-                        // Offline (y no es el remitente): enviar push con conteo
                         enviarPushConConteo(memberPhone, 'group_' + data.groupId, {
                             title: `👥 ${grpMsg.name}`,
                             body:  `${ws.username}: ${grpPreviewText || '…'}`,
@@ -127,23 +146,6 @@ module.exports = async function handle_groups(data, ws, ctx) {
                         });
                     }
                 });
-
-                // ── Detectar comando /bot y lanzar respuesta IA ──
-                const gmBotPrefix = (data.message || '').trimStart();
-                if (gmBotPrefix.startsWith('/bot ')) {
-                    const gmBotQuery = gmBotPrefix.slice(5).trim();
-                    if (gmBotQuery) {
-                        broadcastBotResponse({
-                            query:          gmBotQuery,
-                            askedBy:        ws.username,
-                            conversationId: 'group_' + data.groupId,
-                            toUsername:     null,
-                            groupId:        data.groupId,
-                            grpMembers:     grpMsg.members,
-                            ctx
-                        }).catch(e => console.error('[Bot grupo]', e.message));
-                    }
-                }
                 break;
             }
 
